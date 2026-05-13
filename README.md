@@ -47,23 +47,25 @@ On the RP4:
 
 ```bash
 ssh rp4
-git clone https://github.com/your-github/portfolio-platform.git ~/portfolio-platform
-cd ~/portfolio-platform
+git clone https://github.com/your-github/portfolio-platform.git ~/homepage
+cd ~/homepage
 cp .env.example .env
 ```
 
-Edit `.env`, then deploy:
+Edit `.env`, then deploy from the clone directory:
 
 ```bash
 chmod +x infra/scripts/deploy.sh infra/scripts/backup.sh
 ./infra/scripts/deploy.sh
 ```
 
+`./infra/scripts/deploy.sh` resolves the repository root from its own location, so it works from any clone directory name. Set `REPO_DIR=/path/to/repo` only when you intentionally want to override that behavior.
+
 For later updates:
 
 ```bash
 ssh rp4
-cd ~/portfolio-platform
+cd ~/homepage
 ./infra/scripts/deploy.sh
 ```
 
@@ -134,3 +136,4 @@ Recommended additions:
 - Caddy does not get HTTPS: confirm DDNS, router forwarding, and ISP port restrictions.
 - Admin cannot commit: verify GitHub OAuth and repository permissions.
 - Draft appears missing: confirm `draft: false`; drafts are intentionally excluded from public routes.
+- `trap: ERR: bad trap`: run the latest script directly as `./infra/scripts/deploy.sh` after `chmod +x`; it uses bash because `ERR` traps are not POSIX `sh` compatible.

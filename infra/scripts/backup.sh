@@ -1,7 +1,9 @@
-#!/usr/bin/env sh
-set -eu
+#!/usr/bin/env bash
+set -Eeuo pipefail
 
-REPO_DIR="${REPO_DIR:-$HOME/portfolio-platform}"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+DEFAULT_REPO_DIR="$(cd -- "$SCRIPT_DIR/../.." && pwd)"
+REPO_DIR="${REPO_DIR:-$DEFAULT_REPO_DIR}"
 BACKUP_DIR="${BACKUP_DIR:-$HOME/backups/portfolio-platform}"
 STAMP="$(date +%Y%m%d-%H%M%S)"
 DEST="$BACKUP_DIR/$STAMP"

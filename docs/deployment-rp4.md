@@ -35,8 +35,8 @@ docker compose version
 Clone the repository:
 
 ```bash
-git clone https://github.com/your-github/portfolio-platform.git ~/portfolio-platform
-cd ~/portfolio-platform
+git clone https://github.com/your-github/portfolio-platform.git ~/homepage
+cd ~/homepage
 ```
 
 Create the production environment file:
@@ -73,7 +73,7 @@ chmod +x infra/scripts/deploy.sh infra/scripts/backup.sh
 ./infra/scripts/deploy.sh
 ```
 
-The deploy script validates Compose config, fetches the latest `main`, builds the image, recreates the service, prints container status, and shows recent logs.
+The deploy script resolves the repository root from its own location, so it works from any clone directory name. It validates Compose config, fetches the latest `main`, builds the image, recreates the service, prints container status, and shows recent logs. Set `REPO_DIR=/path/to/repo` only when you intentionally want to override the auto-detected root.
 
 Verify locally on the Pi:
 
@@ -96,14 +96,14 @@ From your local machine, push approved changes to GitHub. On the Pi:
 
 ```bash
 ssh rp4
-cd ~/portfolio-platform
+cd ~/homepage
 ./infra/scripts/deploy.sh
 ```
 
 ## Logs and Service Control
 
 ```bash
-cd ~/portfolio-platform
+cd ~/homepage
 docker compose ps
 docker compose logs -f portfolio-web
 docker compose restart portfolio-web
@@ -116,7 +116,7 @@ docker compose up -d
 Run:
 
 ```bash
-cd ~/portfolio-platform
+cd ~/homepage
 ./infra/scripts/backup.sh
 ```
 
@@ -127,7 +127,7 @@ The backup script writes a timestamped tarball under `$HOME/backups/portfolio-pl
 Check logs:
 
 ```bash
-cd ~/portfolio-platform
+cd ~/homepage
 docker compose logs --tail=200 portfolio-web
 ```
 
@@ -148,6 +148,23 @@ git checkout main
 git pull --ff-only origin main
 ./infra/scripts/deploy.sh
 ```
+
+## Troubleshooting
+
+If deployment fails with:
+
+```text
+trap: ERR: bad trap
+```
+
+the script was executed by POSIX `sh`, which does not support bash `ERR` traps. Update to the latest script, ensure it is executable, and run it directly:
+
+```bash
+chmod +x infra/scripts/deploy.sh
+./infra/scripts/deploy.sh
+```
+
+Do not run it as `sh infra/scripts/deploy.sh`.
 
 ## Caddy Behavior
 
