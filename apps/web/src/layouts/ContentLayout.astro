@@ -33,6 +33,18 @@ const tags = normalizeTags(entry.data.tags as string[]);
             <dd class="mt-1">{entry.data.reviewed ? "Reviewed" : "Needs review"}</dd>
           </div>
         )}
+        {entry.data.contentType && (
+          <div>
+            <dt class="font-mono text-xs uppercase tracking-[0.18em] text-slate-500">Type</dt>
+            <dd class="mt-1">{entry.data.contentType}</dd>
+          </div>
+        )}
+        {entry.data.reviewStatus && entry.data.reviewStatus !== "reviewed" && (
+          <div>
+            <dt class="font-mono text-xs uppercase tracking-[0.18em] text-slate-500">Review</dt>
+            <dd class="mt-1">{entry.data.reviewStatus}</dd>
+          </div>
+        )}
         {entry.data.generatedAt && (
           <div>
             <dt class="font-mono text-xs uppercase tracking-[0.18em] text-slate-500">Generated At</dt>
@@ -45,6 +57,18 @@ const tags = normalizeTags(entry.data.tags as string[]);
             <dd class="mt-1">
               {entry.data.sourceUrl ? <a class="text-signal hover:text-white" href={entry.data.sourceUrl}>{entry.data.source}</a> : entry.data.source}
             </dd>
+          </div>
+        )}
+        {entry.data.sourceKind && (
+          <div>
+            <dt class="font-mono text-xs uppercase tracking-[0.18em] text-slate-500">Source Kind</dt>
+            <dd class="mt-1">{entry.data.sourceKind}</dd>
+          </div>
+        )}
+        {entry.data.sensitivity && entry.data.sensitivity !== "public" && (
+          <div>
+            <dt class="font-mono text-xs uppercase tracking-[0.18em] text-slate-500">Sensitivity</dt>
+            <dd class="mt-1">{entry.data.sensitivity}</dd>
           </div>
         )}
       </dl>

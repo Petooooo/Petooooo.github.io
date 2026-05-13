@@ -10,3 +10,4 @@ Focus on:
 - Follow-up tasks.
 
 Never publish automatically. The output must use `draft: true`.
+Avoid release-note polish unless the source actually contains a release. Treat the draft as an engineering log that still needs review.

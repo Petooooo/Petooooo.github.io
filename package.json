@@ -2,13 +2,14 @@
   "name": "portfolio-platform",
   "version": "0.1.0",
   "private": true,
-  "description": "Self-hosted AI-powered engineering knowledge platform.",
+  "description": "Git-based engineering and research lab notebook.",
   "scripts": {
     "dev": "npm --prefix apps/web run dev",
     "build": "npm --prefix apps/web run build",
     "preview": "npm --prefix apps/web run preview",
     "check": "npm --prefix apps/web run check",
-    "lint": "npm --prefix apps/web run lint"
+    "lint": "npm --prefix apps/web run lint",
+    "draft:from-note": "node automation/scripts/generate-draft.mjs"
   },
   "engines": {
     "node": ">=20.11.0"

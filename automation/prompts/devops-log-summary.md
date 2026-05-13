@@ -11,3 +11,5 @@ Include:
 - Lessons or monitoring improvements.
 
 Remove sensitive paths, IPs, hostnames, tokens, and user data unless explicitly approved.
+
+The output is a draft note, not a status update or blog post. Keep the writing factual: symptom, action, result, verification, rollback, and follow-up.

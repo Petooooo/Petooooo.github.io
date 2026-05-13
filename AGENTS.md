@@ -4,7 +4,7 @@ This file is the authoritative operational manual for future Codex sessions work
 
 ## Project Goal
 
-Build and maintain a self-hosted AI-powered engineering knowledge platform: portfolio, technical notes, research archive, DevOps journal, manual CMS, and automation-ready draft archive.
+Build and maintain a personal engineering and research lab notebook: projects, technical notes, research archive, DevOps journal, manual CMS, and automation-ready draft archive.
 
 The platform should demonstrate real ownership of modern web engineering, deployment, operations, and automation on a Raspberry Pi 4 server.
 
@@ -12,10 +12,10 @@ The platform should demonstrate real ownership of modern web engineering, deploy
 
 This project is intended to evolve into:
 
-- An intelligent engineering knowledge archive.
-- A self-hosted technical portfolio.
+- A practical engineering knowledge archive.
+- A self-hosted technical lab notebook.
 - A DevOps and research documentation platform.
-- An AI-assisted content organization system.
+- An automation-assisted content organization system.
 - A credible proof that the owner can build, deploy, operate, and automate a production-quality platform independently.
 
 Do not optimize only for a short-lived demo. Maintainability, clear architecture, and operational reliability matter.
@@ -58,9 +58,9 @@ Use Node.js 20+ for local development and builds. Astro 5 requires a modern Node
 
 The platform is static-first, Git-first, and content-first.
 
-Astro is used because it produces fast static sites, supports MDX, keeps JavaScript payloads low by default, and fits a portfolio and knowledge archive better than a heavy full-stack framework. Prefer Astro server-side or client-side features only when the product genuinely needs them.
+Astro is used because it produces fast static sites, supports MDX, keeps JavaScript payloads low by default, and fits a technical notebook and knowledge archive better than a heavy full-stack framework. Prefer Astro server-side or client-side features only when the product genuinely needs them.
 
-Markdown and MDX are used because technical writing, research notes, runbooks, and portfolio case studies should be version-controlled, diffable, portable, and easy to edit outside any specific CMS.
+Markdown and MDX are used because technical writing, research notes, runbooks, and implementation records should be version-controlled, diffable, portable, and easy to edit outside any specific CMS.
 
 GitHub is the source of truth. Code, content, generated drafts, infrastructure files, and documentation should be reviewable through Git history. Avoid workflows that create important state only inside a running service.
 
