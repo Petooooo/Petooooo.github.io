@@ -2,22 +2,20 @@
 import BaseLayout from "@/layouts/BaseLayout.astro";
 import SectionHeader from "@/components/SectionHeader.astro";
 ---
-<BaseLayout title="About" description="Resume and engineering profile.">
+<BaseLayout title="About" description="About this personal engineering lab.">
   <section class="grid gap-10 py-14 lg:grid-cols-[0.8fr_1.2fr]">
     <div>
-      <p class="font-mono text-sm uppercase tracking-[0.18em] text-signal">About / Resume</p>
-      <h1 class="mt-4 text-4xl font-semibold text-white md:text-5xl">Your Name</h1>
-      <p class="mt-5 text-lg leading-8 text-slate-300">Replace this with your concise professional summary: systems engineer, DevOps builder, research-minded developer, and operator of self-hosted infrastructure.</p>
+      <p class="font-mono text-sm uppercase tracking-[0.18em] text-signal">About</p>
+      <h1 class="mt-4 text-4xl font-semibold text-white md:text-5xl">Peto</h1>
+      <p class="mt-5 text-lg leading-8 text-slate-300">I use this site to keep a public record of platform work: static web architecture, deployment notes, self-hosting experiments, and research-style technical writing. Personal details stay intentionally minimal here.</p>
       <div class="mt-6 flex flex-wrap gap-3 text-sm text-slate-300">
-        <a class="rounded-md border border-white/15 px-3 py-2" href="mailto:your.email@example.com">Email</a>
         <a class="rounded-md border border-white/15 px-3 py-2" href="https://github.com/Petooooo">GitHub</a>
-        <a class="rounded-md border border-white/15 px-3 py-2" href="https://www.linkedin.com/in/your-profile">LinkedIn</a>
       </div>
     </div>
     <div class="space-y-10">
-      <SectionHeader title="Skills" description="Astro, TypeScript, Docker, Caddy, Linux, GitHub workflows, Kubernetes, CI/CD, monitoring, Python, automation, and technical writing." />
-      <SectionHeader title="Experience" description="Add roles, labs, projects, internships, freelance work, or self-hosting operation history here. Keep evidence close to outcomes." />
-      <SectionHeader title="Education" description="Add degree, school, coursework, certificates, or research affiliations. Placeholder text avoids inventing sensitive personal details." />
+      <SectionHeader title="Working Areas" description="Astro, TypeScript, Markdown/MDX publishing, Docker Compose, Caddy, Linux operations, GitHub-based workflows, lightweight automation, and technical documentation." />
+      <SectionHeader title="Current Focus" description="Turning this repository into a credible engineering archive: useful notes, repeatable deployment docs, clean public content, and automation that creates reviewable drafts instead of publishing unchecked output." />
+      <SectionHeader title="Boundaries" description="The public site avoids private infrastructure details, credentials, personal contact filler, and invented resume claims. Evidence should come from the repository and the writing itself." />
     </div>
   </section>
 </BaseLayout>

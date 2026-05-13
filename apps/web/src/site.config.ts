@@ -1,8 +1,8 @@
 export const siteConfig = {
-  title: "Self-Hosted Engineering Knowledge Platform",
+  title: "Peto Engineering Lab",
   description:
-    "A personal portfolio, technical archive, DevOps journal, and automation-ready knowledge platform operated on a Raspberry Pi 4.",
-  author: "Your Name",
+    "A personal engineering lab for self-hosting notes, DevOps runbooks, research drafts, and small automation experiments.",
+  author: "Peto",
   ogImage: "/og-default.svg",
   githubUrl: "https://github.com/Petooooo/Petooooo.github.io",
   resumeUrl: "/about",

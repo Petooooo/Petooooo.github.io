@@ -1,6 +1,6 @@
 ---
-title: "Automation Architecture Overview"
-description: "The reviewed publication model for future AI-generated drafts in the self-hosted knowledge platform."
+title: "Automation Draft Review Model"
+description: "The review path for future generated notes: collect source material, create a draft, check it, and publish only when it is worth keeping."
 date: "2026-05-08"
 tags: ["automation", "drafts", "knowledge-archive"]
 category: "automation"
@@ -15,7 +15,7 @@ techStack: ["n8n", "GitHub", "MDX"]
 
 ## Publication Model
 
-Generated content is useful only when the workflow preserves trust. This archive is designed around a draft-first model:
+Generated content is useful only if the workflow preserves trust. This archive uses a draft-first model:
 
 1. Collect source data.
 2. Summarize and classify.
@@ -31,3 +31,10 @@ Generated content is useful only when the workflow preserves trust. This archive
 - Check commands and dates.
 - Add context that automation could not infer.
 - Publish only when the note is worth keeping.
+
+## What Should Stay Unpublished
+
+- Routine activity summaries with no decision or lesson.
+- Logs that expose private systems.
+- Drafts where the source cannot be checked.
+- Confident explanations for changes that were not actually inspected.

@@ -8,7 +8,7 @@ const entries = (await getCollection("research")).filter(isPublishedEntry).sort(
 ---
 <BaseLayout title="Research" description="Research and computational study notes.">
   <section class="py-14">
-    <SectionHeader eyebrow="Research notebook" title="Research" description="Physics, computation, math-heavy notes, figures, and reproducible thinking captured in MDX." />
+    <SectionHeader eyebrow="Research" title="Research Notes" description="Structured notes for computational questions, assumptions, small experiments, and reproducibility details." />
     <div class="grid gap-5 md:grid-cols-2">{entries.map((entry) => <ContentCard entry={entry} href={getCollectionUrl(entry)} label="research" />)}</div>
   </section>
 </BaseLayout>

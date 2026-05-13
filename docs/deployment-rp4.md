@@ -53,7 +53,7 @@ Set these values:
 - `SITE_URL`: full public URL, for example `https://your-name.iptime.org`.
 - `SITE_DOMAIN`: hostname only, for example `your-name.iptime.org`.
 - `CADDY_EMAIL`: email for Let's Encrypt account notices.
-- `PUBLIC_GITHUB_URL`, `PUBLIC_RESUME_URL`: public profile placeholders.
+- `PUBLIC_GITHUB_URL`, `PUBLIC_RESUME_URL`: optional public profile URLs used by the site shell.
 
 Do not commit `.env`.
 

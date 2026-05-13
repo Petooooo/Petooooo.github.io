@@ -24,27 +24,27 @@ const recentPosts = posts.slice(0, 4);
 <BaseLayout>
   <section class="grid gap-10 py-16 md:grid-cols-[1.25fr_0.75fr] md:items-center md:py-24">
     <div>
-      <p class="font-mono text-sm uppercase tracking-[0.2em] text-signal">RP4 self-hosted platform</p>
+      <p class="font-mono text-sm uppercase tracking-[0.2em] text-signal">Personal engineering lab</p>
       <h1 class="mt-5 text-5xl font-semibold leading-[1.05] text-white md:text-7xl">
-        AI-powered engineering knowledge, operated from my own server.
+        A working notebook for self-hosting, deployment, and research notes.
       </h1>
       <p class="mt-6 max-w-2xl text-lg leading-8 text-slate-300">
-        A portfolio, technical archive, DevOps journal, research notebook, and automation-ready publishing system built with Astro, MDX, Docker, Caddy, GitHub, and a Raspberry Pi 4.
+        This site is the public edge of a small engineering archive: Astro pages, MDX notes, Docker/Caddy deployment work, and draft automation experiments that stay reviewable in Git.
       </p>
       <div class="mt-8 flex flex-wrap gap-3">
         <a class="rounded-md bg-white px-4 py-2.5 text-sm font-semibold text-ink" href={withBase("/projects")}>View Projects</a>
         <a class="rounded-md border border-white/15 px-4 py-2.5 text-sm font-semibold text-white hover:border-signal hover:text-signal" href={siteConfig.githubUrl}>GitHub</a>
-        <a class="rounded-md border border-white/15 px-4 py-2.5 text-sm font-semibold text-white hover:border-signal hover:text-signal" href={withBase("/about")}>Resume</a>
+        <a class="rounded-md border border-white/15 px-4 py-2.5 text-sm font-semibold text-white hover:border-signal hover:text-signal" href={withBase("/about")}>About</a>
       </div>
     </div>
     <aside class="rounded-lg border border-white/10 bg-white/[0.04] p-5 shadow-glow">
-      <p class="font-mono text-xs uppercase tracking-[0.18em] text-slate-400">Platform signals</p>
+      <p class="font-mono text-xs uppercase tracking-[0.18em] text-slate-400">Current shape</p>
       <dl class="mt-6 grid gap-4">
         {[
-          ["Runtime", "Static Astro output behind Caddy"],
-          ["Source", "GitHub-managed MDX content"],
-          ["Operations", "RP4 pull, build, deploy workflow"],
-          ["Automation", "n8n-ready draft generation pipeline"]
+          ["Runtime", "Static Astro build for GitHub Pages"],
+          ["Content", "MDX collections with Decap CMS wiring"],
+          ["Ops notes", "RP4, Docker, and Caddy deployment trail"],
+          ["Automation", "Draft-first archive lane, not auto-publishing"]
         ].map(([label, value]) => (
           <div class="rounded-md border border-white/10 bg-black/20 p-4">
             <dt class="text-sm text-slate-400">{label}</dt>
@@ -56,21 +56,21 @@ const recentPosts = posts.slice(0, 4);
   </section>
 
   <section class="py-12">
-    <SectionHeader eyebrow="Selected systems" title="Featured Projects" description="Portfolio pieces that show platform thinking, infrastructure ownership, automation design, and clear engineering tradeoffs." />
+    <SectionHeader eyebrow="Build log" title="Projects" description="Small systems and platform work, documented with decisions, constraints, and what is still unfinished." />
     <div class="grid gap-5 md:grid-cols-3">
       {featuredProjects.map((project) => <ProjectCard project={project} />)}
     </div>
   </section>
 
   <section class="py-12">
-    <SectionHeader eyebrow="Recent writing" title="Engineering Archive" description="Notes, research, and operation logs are written as version-controlled Markdown or MDX and can be edited manually through Decap CMS." />
+    <SectionHeader eyebrow="Recent notes" title="Archive" description="Technical notes and runbooks written for later reuse, with drafts kept out of the public feed until reviewed." />
     <div class="grid gap-5 md:grid-cols-2">
       {recentPosts.map((entry) => <ContentCard entry={entry} href={getCollectionUrl(entry)} label={entry.collection} />)}
     </div>
   </section>
 
   <section class="py-12">
-    <SectionHeader eyebrow="Stack" title="Designed to be owned" description="The first version is deliberately static, observable, and portable. Automation writes drafts into Git; humans keep publishing control." />
+    <SectionHeader eyebrow="Stack" title="Boring on purpose" description="The site favors static output, plain files, and simple deployment steps over runtime services that would be fragile on small hardware." />
     <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
       {["Astro", "TypeScript", "Tailwind CSS", "MDX", "Decap CMS", "Docker Compose", "Caddy", "Raspberry Pi 4"].map((tech) => (
         <div class="rounded-md border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-slate-200">{tech}</div>

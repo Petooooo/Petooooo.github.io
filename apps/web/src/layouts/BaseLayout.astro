@@ -41,7 +41,7 @@ const ogImage = new URL(withBase(image), Astro.site ?? "http://localhost:4321");
     <div class="mx-auto flex min-h-screen w-full max-w-7xl flex-col px-5 sm:px-8">
       <header class="sticky top-0 z-40 border-b border-white/10 bg-ink/80 py-4 backdrop-blur-xl">
         <nav class="flex items-center justify-between gap-6" aria-label="Primary navigation">
-          <a href={withBase("/")} class="font-mono text-sm font-semibold text-white">selfhost.ai</a>
+          <a href={withBase("/")} class="font-mono text-sm font-semibold text-white">peto.lab</a>
           <div class="hidden items-center gap-5 text-sm text-slate-300 md:flex">
             {siteConfig.nav.map((item) => <a class="transition hover:text-white" href={withBase(item.href)}>{item.label}</a>)}
           </div>
@@ -53,7 +53,7 @@ const ogImage = new URL(withBase(image), Astro.site ?? "http://localhost:4321");
       </main>
       <footer class="border-t border-white/10 py-8 text-sm text-slate-400">
         <div class="flex flex-col justify-between gap-4 md:flex-row">
-          <p>Built, versioned, and operated as a self-hosted engineering platform.</p>
+          <p>Personal engineering notes, kept in Git and built as a static Astro site.</p>
           <div class="flex gap-4">
             <a href={siteConfig.githubUrl}>GitHub</a>
             <a href={withBase("/rss.xml")}>RSS</a>

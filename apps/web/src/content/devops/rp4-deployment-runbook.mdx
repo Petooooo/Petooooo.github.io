@@ -1,6 +1,6 @@
 ---
 title: "Raspberry Pi 4 Deployment Runbook"
-description: "A practical operations log for pulling the latest GitHub repository, rebuilding the Astro site, and serving it through Caddy."
+description: "A draft runbook for the Raspberry Pi hosting path: pull from Git, rebuild the static site, restart Caddy, and verify without exposing private network details."
 date: "2026-05-11"
 tags: ["raspberry-pi", "caddy", "docker-compose", "runbook"]
 category: "operations"
@@ -12,21 +12,27 @@ techStack: ["Docker Compose", "Caddy", "Linux", "Git"]
 
 ## Routine Deployment
 
-Connect to the server and run the deploy script from the repository root:
+The exact hostnames and paths are intentionally omitted from the public note. The intended shape is:
 
 ```bash
-ssh rp4
-cd ~/portfolio-platform
+ssh <rp4-host>
+cd <repo-path>
 ./infra/scripts/deploy.sh
 ```
 
 ## Checks
 
-- Confirm the container is healthy.
-- Confirm Caddy is listening on ports `80` and `443`.
-- Confirm DDNS points to the home network.
-- Confirm router port forwarding targets the Raspberry Pi.
+- Confirm the repository pulled the expected commit.
+- Confirm the Astro build completed.
+- Confirm the container or Caddy service restarted cleanly.
+- Confirm the public site serves the new build.
+- Keep DDNS and router details out of public notes unless intentionally sanitized.
 
 ## Rollback
 
 Use Git history as the rollback mechanism. Check out a known-good commit and rerun the deploy script.
+
+## Open Items
+
+- Finish the production Caddyfile once the final domain/DDNS setup is stable.
+- Add a backup note for repository clones, content assets, and any mounted runtime data.

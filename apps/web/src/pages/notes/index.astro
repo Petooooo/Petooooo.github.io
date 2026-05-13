@@ -6,9 +6,9 @@ import SectionHeader from "@/components/SectionHeader.astro";
 import { byDateDesc, getCollectionUrl, isPublishedEntry } from "@/lib/content";
 const entries = (await getCollection("notes")).filter(isPublishedEntry).sort(byDateDesc);
 ---
-<BaseLayout title="Notes" description="Technical notes and study archive.">
+<BaseLayout title="Notes" description="Technical notes and reusable references.">
   <section class="py-14">
-    <SectionHeader eyebrow="Knowledge base" title="Notes" description="General engineering notes, study records, and durable references written for future reuse." />
+    <SectionHeader eyebrow="Notebook" title="Notes" description="Short references for commands, decisions, and concepts that are likely to be useful again." />
     <div class="grid gap-5 md:grid-cols-2">{entries.map((entry) => <ContentCard entry={entry} href={getCollectionUrl(entry)} label="note" />)}</div>
   </section>
 </BaseLayout>

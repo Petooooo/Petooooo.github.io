@@ -1,6 +1,6 @@
 ---
 title: "Docker and CI/CD Workflow Notes"
-description: "A durable reference for building small static platforms with Docker, GitHub, and reproducible deployment scripts."
+description: "Working notes for keeping a small static site buildable in CI and deployable through a simple Docker/Caddy path."
 date: "2026-05-10"
 tags: ["docker", "ci-cd", "deployment"]
 category: "engineering"
@@ -12,13 +12,19 @@ techStack: ["Docker", "GitHub", "Astro"]
 
 ## Build Strategy
 
-For static platforms, a multi-stage Docker build keeps the runtime image small while preserving a repeatable build process.
+For this site, the clean path is to build Astro once and serve static files. A multi-stage Dockerfile can keep Node out of the runtime image while still making the build repeatable.
 
 ```bash
 docker compose build
 docker compose up -d
 ```
 
+## Checks To Keep
+
+- `npm run check --prefix apps/web` should catch content schema and Astro type issues.
+- `npm run build --prefix apps/web` should produce the same static output used by GitHub Pages.
+- Docker builds should not require files outside the repository, except environment variables documented in `.env.example`.
+
 ## Deployment Principle
 
-The Raspberry Pi should be able to rebuild from Git with no hidden local state besides environment variables and mounted backups.
+The Raspberry Pi path should be boring: pull from Git, rebuild, restart, and verify. Any state that cannot be recreated from Git should be documented as an external dependency.
