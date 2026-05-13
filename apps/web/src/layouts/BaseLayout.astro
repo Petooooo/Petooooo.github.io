@@ -1,6 +1,7 @@
 ---
 import "../styles/global.css";
 import { siteConfig } from "@/site.config";
+import { withBase } from "@/lib/urls";
 
 interface Props {
   title?: string;
@@ -12,7 +13,7 @@ interface Props {
 const { title, description = siteConfig.description, image = siteConfig.ogImage, type = "website" } = Astro.props;
 const pageTitle = title ? `${title} | ${siteConfig.title}` : siteConfig.title;
 const canonical = new URL(Astro.url.pathname, Astro.site ?? "http://localhost:4321");
-const ogImage = new URL(image, Astro.site ?? "http://localhost:4321");
+const ogImage = new URL(withBase(image), Astro.site ?? "http://localhost:4321");
 ---
 
 <!doctype html>
@@ -34,17 +35,17 @@ const ogImage = new URL(image, Astro.site ?? "http://localhost:4321");
     <meta name="twitter:title" content={pageTitle} />
     <meta name="twitter:description" content={description} />
     <meta name="twitter:image" content={ogImage} />
-    <link rel="alternate" type="application/rss+xml" title="RSS" href="/rss.xml" />
+    <link rel="alternate" type="application/rss+xml" title="RSS" href={withBase("/rss.xml")} />
   </head>
   <body>
     <div class="mx-auto flex min-h-screen w-full max-w-7xl flex-col px-5 sm:px-8">
       <header class="sticky top-0 z-40 border-b border-white/10 bg-ink/80 py-4 backdrop-blur-xl">
         <nav class="flex items-center justify-between gap-6" aria-label="Primary navigation">
-          <a href="/" class="font-mono text-sm font-semibold text-white">selfhost.ai</a>
+          <a href={withBase("/")} class="font-mono text-sm font-semibold text-white">selfhost.ai</a>
           <div class="hidden items-center gap-5 text-sm text-slate-300 md:flex">
-            {siteConfig.nav.map((item) => <a class="transition hover:text-white" href={item.href}>{item.label}</a>)}
+            {siteConfig.nav.map((item) => <a class="transition hover:text-white" href={withBase(item.href)}>{item.label}</a>)}
           </div>
-          <a class="rounded-md border border-white/15 px-3 py-2 text-sm text-white transition hover:border-signal hover:text-signal" href="/admin/">Admin</a>
+          <a class="rounded-md border border-white/15 px-3 py-2 text-sm text-white transition hover:border-signal hover:text-signal" href={withBase("/admin/")}>Admin</a>
         </nav>
       </header>
       <main class="flex-1">
@@ -55,8 +56,8 @@ const ogImage = new URL(image, Astro.site ?? "http://localhost:4321");
           <p>Built, versioned, and operated as a self-hosted engineering platform.</p>
           <div class="flex gap-4">
             <a href={siteConfig.githubUrl}>GitHub</a>
-            <a href="/rss.xml">RSS</a>
-            <a href="/about">Resume</a>
+            <a href={withBase("/rss.xml")}>RSS</a>
+            <a href={withBase("/about")}>Resume</a>
           </div>
         </div>
       </footer>

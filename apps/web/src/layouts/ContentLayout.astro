@@ -1,10 +1,11 @@
 ---
 import BaseLayout from "./BaseLayout.astro";
 import { formatDate, normalizeTags } from "@/lib/content";
+import { withBase } from "@/lib/urls";
 
 const { entry } = Astro.props;
 const { Content } = await entry.render();
-const parentHref = `/${entry.collection}`;
+const parentHref = withBase(`/${entry.collection}`);
 const tags = normalizeTags(entry.data.tags as string[]);
 ---
 

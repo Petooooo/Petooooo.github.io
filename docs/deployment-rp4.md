@@ -1,5 +1,7 @@
 # Raspberry Pi 4 Deployment
 
+Raspberry Pi 4 deployment is an optional self-hosted mode. GitHub Pages is the primary public hosting target, but the Pi can still run the same static Astro site through Docker Compose and Caddy.
+
 The Raspberry Pi 4 runs one Docker Compose service: a multi-stage image that builds the Astro app from `apps/web` and serves the static output with Caddy.
 
 ## First-Time Setup
@@ -35,7 +37,7 @@ docker compose version
 Clone the repository:
 
 ```bash
-git clone https://github.com/your-github/portfolio-platform.git ~/homepage
+git clone https://github.com/Petooooo/homepage.git ~/homepage
 cd ~/homepage
 ```
 
@@ -170,4 +172,4 @@ Do not run it as `sh infra/scripts/deploy.sh`.
 
 Caddy serves `/srv`, which is copied from `apps/web/dist` during the Docker build. It enables `zstd` and `gzip`, applies conservative security headers, caches immutable Astro/static assets aggressively, and falls back to `/404.html` for missing static routes.
 
-`SITE_URL` is used at build time by Astro for canonical URLs, RSS, Open Graph metadata, and sitemap output. `SITE_DOMAIN` is used at runtime by Caddy to decide which hostname to serve.
+`SITE_URL` is used at build time by Astro for canonical URLs, RSS, Open Graph metadata, and sitemap output. For RP4 hosting, set it to the Pi's public URL. `SITE_DOMAIN` is used at runtime by Caddy to decide which hostname to serve.

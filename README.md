@@ -1,6 +1,6 @@
 # Self-Hosted AI-Powered Engineering Knowledge Platform
 
-This repository is a personal portfolio, technical blog, research archive, DevOps operation journal, and automation-ready content platform designed to run on a Raspberry Pi 4.
+This repository is a personal portfolio, technical blog, research archive, DevOps operation journal, and automation-ready content platform. GitHub Pages is the primary public hosting target, while the Raspberry Pi 4 Docker/Caddy setup remains available as an optional self-hosted deployment mode.
 
 ## Architecture
 
@@ -41,13 +41,34 @@ docker compose up -d
 
 The container builds `apps/web` with Astro and serves the static output from Caddy. Set `SITE_URL`, `SITE_DOMAIN`, and `CADDY_EMAIL` before production builds so canonical URLs, RSS, sitemap, and HTTPS behavior are correct.
 
-## Raspberry Pi 4 Deployment
+## Deployment Modes
+
+### GitHub Pages Production
+
+GitHub Pages is the primary production hosting mode for `Petooooo/homepage`.
+
+The workflow at `.github/workflows/deploy-pages.yml` builds `apps/web` with Node 20 and deploys `apps/web/dist` to Pages using:
+
+```bash
+SITE_URL=https://petooooo.github.io/homepage/
+```
+
+Configure the repository:
+
+1. Open GitHub repository settings for `Petooooo/homepage`.
+2. Go to **Pages**.
+3. Set **Build and deployment** source to **GitHub Actions**.
+4. Push to `main` or run the `Deploy GitHub Pages` workflow manually.
+
+See `docs/deployment-github-pages.md` for verification steps.
+
+### Raspberry Pi 4 Optional Self-Hosting
 
 On the RP4:
 
 ```bash
 ssh rp4
-git clone https://github.com/your-github/portfolio-platform.git ~/homepage
+git clone https://github.com/Petooooo/homepage.git ~/homepage
 cd ~/homepage
 cp .env.example .env
 ```

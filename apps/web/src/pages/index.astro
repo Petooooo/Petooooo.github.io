@@ -6,6 +6,7 @@ import ProjectCard from "@/components/ProjectCard.astro";
 import SectionHeader from "@/components/SectionHeader.astro";
 import { siteConfig } from "@/site.config";
 import { byDateDesc, getCollectionUrl, isPublishedEntry } from "@/lib/content";
+import { withBase } from "@/lib/urls";
 
 const projects = (await getCollection("projects")).filter(isPublishedEntry);
 const posts = [
@@ -31,9 +32,9 @@ const recentPosts = posts.slice(0, 4);
         A portfolio, technical archive, DevOps journal, research notebook, and automation-ready publishing system built with Astro, MDX, Docker, Caddy, GitHub, and a Raspberry Pi 4.
       </p>
       <div class="mt-8 flex flex-wrap gap-3">
-        <a class="rounded-md bg-white px-4 py-2.5 text-sm font-semibold text-ink" href="/projects">View Projects</a>
+        <a class="rounded-md bg-white px-4 py-2.5 text-sm font-semibold text-ink" href={withBase("/projects")}>View Projects</a>
         <a class="rounded-md border border-white/15 px-4 py-2.5 text-sm font-semibold text-white hover:border-signal hover:text-signal" href={siteConfig.githubUrl}>GitHub</a>
-        <a class="rounded-md border border-white/15 px-4 py-2.5 text-sm font-semibold text-white hover:border-signal hover:text-signal" href="/about">Resume</a>
+        <a class="rounded-md border border-white/15 px-4 py-2.5 text-sm font-semibold text-white hover:border-signal hover:text-signal" href={withBase("/about")}>Resume</a>
       </div>
     </div>
     <aside class="rounded-lg border border-white/10 bg-white/[0.04] p-5 shadow-glow">

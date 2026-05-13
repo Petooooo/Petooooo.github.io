@@ -1,4 +1,5 @@
 import type { CollectionEntry, CollectionKey } from "astro:content";
+import { withBase } from "@/lib/urls";
 
 type Entry = CollectionEntry<CollectionKey>;
 
@@ -11,6 +12,10 @@ export function byDateDesc(a: Entry, b: Entry) {
 }
 
 export function getCollectionUrl(entry: Entry) {
+  return withBase(`/${entry.collection}/${entry.slug}/`);
+}
+
+export function getCollectionPath(entry: Entry) {
   return `/${entry.collection}/${entry.slug}/`;
 }
 
