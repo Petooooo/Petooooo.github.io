@@ -4,7 +4,7 @@ export const siteConfig = {
     "A personal portfolio, technical archive, DevOps journal, and automation-ready knowledge platform operated on a Raspberry Pi 4.",
   author: "Your Name",
   ogImage: "/og-default.svg",
-  githubUrl: "https://github.com/Petooooo/homepage",
+  githubUrl: "https://github.com/Petooooo/Petooooo.github.io",
   resumeUrl: "/about",
   nav: [
     { label: "Projects", href: "/projects" },

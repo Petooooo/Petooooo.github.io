@@ -36,7 +36,7 @@ jobs:
       - name: Build
         run: npm run build --prefix apps/web
         env:
-          SITE_URL: https://petooooo.github.io/homepage/
+          SITE_URL: https://petooooo.github.io/
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3

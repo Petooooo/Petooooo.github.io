@@ -1,6 +1,6 @@
 backend:
   name: github
-  repo: your-github/portfolio-platform
+  repo: Petooooo/Petooooo.github.io
   branch: main
 
 local_backend: true

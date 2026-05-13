@@ -45,17 +45,17 @@ The container builds `apps/web` with Astro and serves the static output from Cad
 
 ### GitHub Pages Production
 
-GitHub Pages is the primary production hosting mode for `Petooooo/homepage`.
+GitHub Pages is the primary production hosting mode for `Petooooo/Petooooo.github.io`.
 
 The workflow at `.github/workflows/deploy-pages.yml` builds `apps/web` with Node 20 and deploys `apps/web/dist` to Pages using:
 
 ```bash
-SITE_URL=https://petooooo.github.io/homepage/
+SITE_URL=https://petooooo.github.io/
 ```
 
 Configure the repository:
 
-1. Open GitHub repository settings for `Petooooo/homepage`.
+1. Open GitHub repository settings for `Petooooo/Petooooo.github.io`.
 2. Go to **Pages**.
 3. Set **Build and deployment** source to **GitHub Actions**.
 4. Push to `main` or run the `Deploy GitHub Pages` workflow manually.
@@ -68,8 +68,8 @@ On the RP4:
 
 ```bash
 ssh rp4
-git clone https://github.com/Petooooo/homepage.git ~/homepage
-cd ~/homepage
+git clone https://github.com/Petooooo/Petooooo.github.io.git ~/Petooooo.github.io
+cd ~/Petooooo.github.io
 cp .env.example .env
 ```
 
@@ -86,7 +86,7 @@ For later updates:
 
 ```bash
 ssh rp4
-cd ~/homepage
+cd ~/Petooooo.github.io
 ./infra/scripts/deploy.sh
 ```
 
@@ -106,7 +106,7 @@ The admin interface lives at `/admin`.
 
 Before production use, edit `apps/web/public/admin/config.yml`:
 
-- Replace `your-github/portfolio-platform`.
+- Replace `Petooooo/Petooooo.github.io`.
 - Configure the GitHub OAuth backend appropriate for Decap CMS.
 - Keep `publish_mode: editorial_workflow` if you want draft review.
 

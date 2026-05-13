@@ -7,20 +7,20 @@ GitHub Pages is the primary public hosting target for this repository. The Astro
 The expected Pages URL is:
 
 ```text
-https://petooooo.github.io/homepage/
+https://petooooo.github.io/
 ```
 
 The GitHub Actions workflow sets:
 
 ```bash
-SITE_URL=https://petooooo.github.io/homepage/
+SITE_URL=https://petooooo.github.io/
 ```
 
-Astro derives the `/homepage` base path from `SITE_URL`, so canonical URLs, Open Graph image URLs, RSS links, sitemap entries, and internal navigation are generated for the GitHub Pages project path.
+Astro builds at the domain root for this user-pages repository, so canonical URLs, Open Graph image URLs, RSS links, sitemap entries, and internal navigation are generated without a project subpath.
 
 ## Repository Settings
 
-In GitHub, open `Petooooo/homepage` and configure:
+In GitHub, open `Petooooo/Petooooo.github.io` and configure:
 
 1. Go to **Settings**.
 2. Go to **Pages**.
@@ -46,12 +46,12 @@ It does the following:
 After the workflow succeeds, verify:
 
 ```bash
-curl -I https://petooooo.github.io/homepage/
-curl -I https://petooooo.github.io/homepage/rss.xml
-curl https://petooooo.github.io/homepage/sitemap-index.xml
+curl -I https://petooooo.github.io/
+curl -I https://petooooo.github.io/rss.xml
+curl https://petooooo.github.io/sitemap-index.xml
 ```
 
-Inspect page source and confirm canonical, Open Graph, RSS, and sitemap URLs include `/homepage/`.
+Inspect page source and confirm canonical, Open Graph, RSS, and sitemap URLs use `https://petooooo.github.io/` with no project subpath.
 
 ## Optional RP4 Hosting
 

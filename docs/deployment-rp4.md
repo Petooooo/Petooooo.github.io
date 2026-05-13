@@ -37,8 +37,8 @@ docker compose version
 Clone the repository:
 
 ```bash
-git clone https://github.com/Petooooo/homepage.git ~/homepage
-cd ~/homepage
+git clone https://github.com/Petooooo/Petooooo.github.io.git ~/Petooooo.github.io
+cd ~/Petooooo.github.io
 ```
 
 Create the production environment file:
@@ -98,14 +98,14 @@ From your local machine, push approved changes to GitHub. On the Pi:
 
 ```bash
 ssh rp4
-cd ~/homepage
+cd ~/Petooooo.github.io
 ./infra/scripts/deploy.sh
 ```
 
 ## Logs and Service Control
 
 ```bash
-cd ~/homepage
+cd ~/Petooooo.github.io
 docker compose ps
 docker compose logs -f portfolio-web
 docker compose restart portfolio-web
@@ -118,7 +118,7 @@ docker compose up -d
 Run:
 
 ```bash
-cd ~/homepage
+cd ~/Petooooo.github.io
 ./infra/scripts/backup.sh
 ```
 
@@ -129,7 +129,7 @@ The backup script writes a timestamped tarball under `$HOME/backups/portfolio-pl
 Check logs:
 
 ```bash
-cd ~/homepage
+cd ~/Petooooo.github.io
 docker compose logs --tail=200 portfolio-web
 ```
 
