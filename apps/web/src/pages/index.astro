@@ -1,0 +1,79 @@
+---
+import { getCollection } from "astro:content";
+import BaseLayout from "@/layouts/BaseLayout.astro";
+import ContentCard from "@/components/ContentCard.astro";
+import ProjectCard from "@/components/ProjectCard.astro";
+import SectionHeader from "@/components/SectionHeader.astro";
+import { siteConfig } from "@/site.config";
+import { byDateDesc, getCollectionUrl, isPublishedEntry } from "@/lib/content";
+
+const projects = (await getCollection("projects")).filter(isPublishedEntry);
+const posts = [
+  ...(await getCollection("notes")),
+  ...(await getCollection("devops")),
+  ...(await getCollection("research")),
+  ...(await getCollection("auto-archive"))
+]
+  .filter(isPublishedEntry)
+  .sort(byDateDesc);
+const featuredProjects = projects.filter((p) => p.data.featured).slice(0, 3);
+const recentPosts = posts.slice(0, 4);
+---
+
+<BaseLayout>
+  <section class="grid gap-10 py-16 md:grid-cols-[1.25fr_0.75fr] md:items-center md:py-24">
+    <div>
+      <p class="font-mono text-sm uppercase tracking-[0.2em] text-signal">RP4 self-hosted platform</p>
+      <h1 class="mt-5 text-5xl font-semibold leading-[1.05] text-white md:text-7xl">
+        AI-powered engineering knowledge, operated from my own server.
+      </h1>
+      <p class="mt-6 max-w-2xl text-lg leading-8 text-slate-300">
+        A portfolio, technical archive, DevOps journal, research notebook, and automation-ready publishing system built with Astro, MDX, Docker, Caddy, GitHub, and a Raspberry Pi 4.
+      </p>
+      <div class="mt-8 flex flex-wrap gap-3">
+        <a class="rounded-md bg-white px-4 py-2.5 text-sm font-semibold text-ink" href="/projects">View Projects</a>
+        <a class="rounded-md border border-white/15 px-4 py-2.5 text-sm font-semibold text-white hover:border-signal hover:text-signal" href={siteConfig.githubUrl}>GitHub</a>
+        <a class="rounded-md border border-white/15 px-4 py-2.5 text-sm font-semibold text-white hover:border-signal hover:text-signal" href="/about">Resume</a>
+      </div>
+    </div>
+    <aside class="rounded-lg border border-white/10 bg-white/[0.04] p-5 shadow-glow">
+      <p class="font-mono text-xs uppercase tracking-[0.18em] text-slate-400">Platform signals</p>
+      <dl class="mt-6 grid gap-4">
+        {[
+          ["Runtime", "Static Astro output behind Caddy"],
+          ["Source", "GitHub-managed MDX content"],
+          ["Operations", "RP4 pull, build, deploy workflow"],
+          ["Automation", "n8n-ready draft generation pipeline"]
+        ].map(([label, value]) => (
+          <div class="rounded-md border border-white/10 bg-black/20 p-4">
+            <dt class="text-sm text-slate-400">{label}</dt>
+            <dd class="mt-1 font-medium text-white">{value}</dd>
+          </div>
+        ))}
+      </dl>
+    </aside>
+  </section>
+
+  <section class="py-12">
+    <SectionHeader eyebrow="Selected systems" title="Featured Projects" description="Portfolio pieces that show platform thinking, infrastructure ownership, automation design, and clear engineering tradeoffs." />
+    <div class="grid gap-5 md:grid-cols-3">
+      {featuredProjects.map((project) => <ProjectCard project={project} />)}
+    </div>
+  </section>
+
+  <section class="py-12">
+    <SectionHeader eyebrow="Recent writing" title="Engineering Archive" description="Notes, research, and operation logs are written as version-controlled Markdown or MDX and can be edited manually through Decap CMS." />
+    <div class="grid gap-5 md:grid-cols-2">
+      {recentPosts.map((entry) => <ContentCard entry={entry} href={getCollectionUrl(entry)} label={entry.collection} />)}
+    </div>
+  </section>
+
+  <section class="py-12">
+    <SectionHeader eyebrow="Stack" title="Designed to be owned" description="The first version is deliberately static, observable, and portable. Automation writes drafts into Git; humans keep publishing control." />
+    <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      {["Astro", "TypeScript", "Tailwind CSS", "MDX", "Decap CMS", "Docker Compose", "Caddy", "Raspberry Pi 4"].map((tech) => (
+        <div class="rounded-md border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-slate-200">{tech}</div>
+      ))}
+    </div>
+  </section>
+</BaseLayout>

@@ -1,0 +1,24 @@
+---
+import { getCollectionUrl } from "@/lib/content";
+
+const { project } = Astro.props;
+const techStack = project.data.techStack as string[];
+---
+
+<a href={getCollectionUrl(project)} class="group overflow-hidden rounded-lg border border-white/10 bg-panel shadow-glow transition hover:-translate-y-1 hover:border-signal/50">
+  <div class="aspect-[16/9] border-b border-white/10 bg-gradient-to-br from-slate-800 via-cyan-950 to-emerald-950 p-5">
+    <div class="flex h-full flex-col justify-between">
+      <span class="w-fit rounded-md border border-white/15 bg-black/20 px-2 py-1 font-mono text-xs uppercase tracking-[0.18em] text-slate-200">{project.data.status}</span>
+      <div>
+        <p class="font-mono text-xs text-signal">{project.data.period}</p>
+        <h3 class="mt-2 text-2xl font-semibold text-white">{project.data.title}</h3>
+      </div>
+    </div>
+  </div>
+  <div class="p-5">
+    <p class="text-sm leading-6 text-slate-300">{project.data.description}</p>
+    <div class="mt-5 flex flex-wrap gap-2">
+      {techStack.slice(0, 5).map((tech) => <span class="rounded-md bg-white/[0.06] px-2 py-1 text-xs text-slate-300">{tech}</span>)}
+    </div>
+  </div>
+</a>

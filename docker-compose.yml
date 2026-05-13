@@ -1,0 +1,25 @@
+services:
+  portfolio-web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SITE_URL: ${SITE_URL:?Set SITE_URL in .env, for example https://your-name.iptime.org}
+    image: portfolio-platform-web:latest
+    container_name: portfolio-platform-web
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      SITE_DOMAIN: ${SITE_DOMAIN:?Set SITE_DOMAIN in .env, for example your-name.iptime.org}
+      CADDY_EMAIL: ${CADDY_EMAIL:-your-email@example.com}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  caddy_data:
+  caddy_config:

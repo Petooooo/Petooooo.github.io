@@ -1,0 +1,16 @@
+{
+  "name": "portfolio-platform",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Self-hosted AI-powered engineering knowledge platform.",
+  "scripts": {
+    "dev": "npm --prefix apps/web run dev",
+    "build": "npm --prefix apps/web run build",
+    "preview": "npm --prefix apps/web run preview",
+    "check": "npm --prefix apps/web run check",
+    "lint": "npm --prefix apps/web run lint"
+  },
+  "engines": {
+    "node": ">=20.11.0"
+  }
+}
