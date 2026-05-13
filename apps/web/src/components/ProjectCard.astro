@@ -5,20 +5,19 @@ const { project } = Astro.props;
 const techStack = project.data.techStack as string[];
 ---
 
-<a href={getCollectionUrl(project)} class="group overflow-hidden rounded-lg border border-white/10 bg-panel shadow-glow transition hover:-translate-y-1 hover:border-signal/50">
-  <div class="aspect-[16/9] border-b border-white/10 bg-gradient-to-br from-slate-800 via-cyan-950 to-emerald-950 p-5">
-    <div class="flex h-full flex-col justify-between">
-      <span class="w-fit rounded-md border border-white/15 bg-black/20 px-2 py-1 font-mono text-xs uppercase tracking-[0.18em] text-slate-200">{project.data.status}</span>
-      <div>
-        <p class="font-mono text-xs text-signal">{project.data.period}</p>
-        <h3 class="mt-2 text-2xl font-semibold text-white">{project.data.title}</h3>
-      </div>
+<a href={getCollectionUrl(project)} class="group block rounded-md border border-white/10 bg-white/[0.035] p-5 transition hover:border-signal/50 hover:bg-white/[0.055]">
+  <div class="flex items-start justify-between gap-4">
+    <div>
+      <p class="font-mono text-xs uppercase tracking-[0.18em] text-slate-500">{project.data.period}</p>
+      <h3 class="mt-3 text-xl font-semibold leading-tight text-white">{project.data.title}</h3>
     </div>
+    <span class="shrink-0 rounded border border-white/15 px-2 py-1 font-mono text-[0.68rem] uppercase tracking-[0.16em] text-slate-300">{project.data.status}</span>
   </div>
-  <div class="p-5">
-    <p class="text-sm leading-6 text-slate-300">{project.data.description}</p>
-    <div class="mt-5 flex flex-wrap gap-2">
-      {techStack.slice(0, 5).map((tech) => <span class="rounded-md bg-white/[0.06] px-2 py-1 text-xs text-slate-300">{tech}</span>)}
+  <p class="mt-4 text-sm leading-6 text-slate-300">{project.data.description}</p>
+  <div class="mt-5 border-t border-white/10 pt-4">
+    <p class="font-mono text-[0.68rem] uppercase tracking-[0.16em] text-slate-500">{project.data.role}</p>
+    <div class="mt-3 flex flex-wrap gap-2">
+      {techStack.slice(0, 5).map((tech) => <span class="rounded border border-white/10 px-2 py-1 text-xs text-slate-300">{tech}</span>)}
     </div>
   </div>
 </a>

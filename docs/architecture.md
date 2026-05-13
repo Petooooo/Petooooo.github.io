@@ -1,13 +1,13 @@
 # Architecture
 
-The platform is static-first. Astro builds content collections into static pages, Caddy serves the output, and GitHub stores both source code and content history.
+The site is static-first and notebook-shaped. Astro builds content collections into static pages, GitHub Pages serves the public site, and GitHub stores both source code and content history. The Raspberry Pi 4 deployment path remains documented for self-hosting experiments with Docker Compose and Caddy.
 
 ## Components
 
 - Astro web app: presentation, routing, content rendering, RSS, sitemap.
 - Decap CMS: manual editing interface that commits Markdown or MDX to GitHub.
-- Docker Compose: repeatable RP4 runtime.
-- Caddy: static server, compression, security headers, HTTPS readiness.
+- Docker Compose: repeatable optional RP4 runtime.
+- Caddy: optional RP4 static server, compression, security headers, HTTPS readiness.
 - n8n: future automation orchestrator.
 
 ## Publishing Model

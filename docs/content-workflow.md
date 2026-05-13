@@ -6,11 +6,11 @@ Use `/admin` for Decap CMS or edit MDX files directly under `apps/web/src/conten
 
 ## Collections
 
-- Projects: portfolio case studies.
-- Notes: general technical notes.
-- DevOps: operation logs and runbooks.
-- Research: math, computation, and study notes.
-- Auto Archive: reviewed generated posts.
+- Projects: systems implementation records.
+- Notes: reusable technical references.
+- DevOps: operation logs, deployment notes, and runbooks.
+- Research: computational questions, assumptions, and study notes.
+- Archive: reviewed generated or automation-assisted posts.
 
 ## Drafts
 

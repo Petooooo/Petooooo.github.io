@@ -3,19 +3,44 @@ import BaseLayout from "@/layouts/BaseLayout.astro";
 import SectionHeader from "@/components/SectionHeader.astro";
 ---
 <BaseLayout title="About" description="About this personal engineering lab.">
-  <section class="grid gap-10 py-14 lg:grid-cols-[0.8fr_1.2fr]">
+  <section class="grid gap-10 border-b border-white/10 py-12 lg:grid-cols-[0.8fr_1.2fr] lg:py-16">
     <div>
-      <p class="font-mono text-sm uppercase tracking-[0.18em] text-signal">About</p>
+      <p class="font-mono text-xs uppercase tracking-[0.18em] text-slate-500">About / CV</p>
       <h1 class="mt-4 text-4xl font-semibold text-white md:text-5xl">Peto</h1>
-      <p class="mt-5 text-lg leading-8 text-slate-300">I use this site to keep a public record of platform work: static web architecture, deployment notes, self-hosting experiments, and research-style technical writing. Personal details stay intentionally minimal here.</p>
+      <p class="mt-5 text-base leading-8 text-slate-300 md:text-lg">This is a concise public profile for an engineering notebook, not a full resume page. The emphasis is on systems work, research habits, infrastructure experiments, and notes that can be checked against the repository.</p>
       <div class="mt-6 flex flex-wrap gap-3 text-sm text-slate-300">
-        <a class="rounded-md border border-white/15 px-3 py-2" href="https://github.com/Petooooo">GitHub</a>
+        <a class="rounded border border-white/15 px-3 py-2 hover:border-signal hover:text-signal" href="https://github.com/Petooooo">GitHub</a>
       </div>
     </div>
-    <div class="space-y-10">
-      <SectionHeader title="Working Areas" description="Astro, TypeScript, Markdown/MDX publishing, Docker Compose, Caddy, Linux operations, GitHub-based workflows, lightweight automation, and technical documentation." />
-      <SectionHeader title="Current Focus" description="Turning this repository into a credible engineering archive: useful notes, repeatable deployment docs, clean public content, and automation that creates reviewable drafts instead of publishing unchecked output." />
-      <SectionHeader title="Boundaries" description="The public site avoids private infrastructure details, credentials, personal contact filler, and invented resume claims. Evidence should come from the repository and the writing itself." />
+    <div class="grid gap-5">
+      <div class="rounded-md border border-white/10 bg-white/[0.03] p-5">
+        <h2 class="text-xl font-semibold text-white">Research Interests</h2>
+        <p class="mt-3 leading-7 text-slate-300">Computational notes, reproducible experiments, technical writing, and small research artifacts that explain assumptions instead of hiding them.</p>
+      </div>
+      <div class="rounded-md border border-white/10 bg-white/[0.03] p-5">
+        <h2 class="text-xl font-semibold text-white">Systems Interests</h2>
+        <p class="mt-3 leading-7 text-slate-300">Static-first web systems, Linux operations, Raspberry Pi hosting, Docker/Caddy deployment, Git-based publishing, and maintenance routines that survive being revisited months later.</p>
+      </div>
+      <div class="rounded-md border border-white/10 bg-white/[0.03] p-5">
+        <h2 class="text-xl font-semibold text-white">Content Boundaries</h2>
+        <p class="mt-3 leading-7 text-slate-300">Public notes avoid private infrastructure details, credentials, personal contact filler, and invented resume claims. Evidence should come from the repository and the writing itself.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="cv" class="py-12 lg:py-16">
+    <SectionHeader eyebrow="CV" title="Selected Technical Areas" description="A lightweight CV view focused on areas of practice rather than inflated biography." />
+    <div class="grid gap-5 md:grid-cols-3">
+      {[
+        ["Web / Content", "Astro, TypeScript, Tailwind CSS, MDX collections, Decap CMS, RSS, sitemap, GitHub Pages."],
+        ["Infrastructure", "Docker Compose, Caddy, Linux deployment scripts, RP4 deployment planning, backup and rollback documentation."],
+        ["Automation / Research", "Draft-generation workflows, source traceability, computational note templates, reproducibility checklists."]
+      ].map(([title, body]) => (
+        <div class="rounded-md border border-white/10 bg-white/[0.03] p-5">
+          <h3 class="text-lg font-semibold text-white">{title}</h3>
+          <p class="mt-3 text-sm leading-6 text-slate-300">{body}</p>
+        </div>
+      ))}
     </div>
   </section>
 </BaseLayout>

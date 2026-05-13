@@ -10,9 +10,9 @@ const projects = (await getCollection("projects"))
   .sort(byDateDesc);
 ---
 
-<BaseLayout title="Projects" description="Personal engineering projects and platform notes.">
+<BaseLayout title="Projects" description="Systems projects and implementation records.">
   <section class="py-14">
-    <SectionHeader eyebrow="Portfolio" title="Projects" description="Build records for systems in this lab: what they are for, how they are wired, and which tradeoffs are still open." />
+    <SectionHeader eyebrow="Projects" title="Systems Under Construction" description="Implementation records for systems in the lab: purpose, wiring, tradeoffs, and unfinished work." />
     <div class="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
       {projects.map((project) => <ProjectCard project={project} />)}
     </div>

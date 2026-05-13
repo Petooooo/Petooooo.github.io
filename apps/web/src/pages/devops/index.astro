@@ -8,7 +8,7 @@ const entries = (await getCollection("devops")).filter(isPublishedEntry).sort(by
 ---
 <BaseLayout title="DevOps Logs" description="Infrastructure operation notes.">
   <section class="py-14">
-    <SectionHeader eyebrow="Operations" title="DevOps Logs" description="Deployment notes and runbooks for the parts of the platform that need to be repeatable." />
+    <SectionHeader eyebrow="DevOps" title="Operations Journal" description="Deployment notes, runbooks, rollback paths, and infrastructure decisions that need to stay repeatable." />
     <div class="grid gap-5 md:grid-cols-2">{entries.map((entry) => <ContentCard entry={entry} href={getCollectionUrl(entry)} label="devops" />)}</div>
   </section>
 </BaseLayout>

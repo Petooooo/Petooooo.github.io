@@ -85,7 +85,7 @@ collections:
     fields: *post_fields
 
   - name: "auto-archive"
-    label: "Auto Archive"
+    label: "Archive"
     folder: "apps/web/src/content/auto-archive"
     create: true
     extension: "mdx"

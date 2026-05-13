@@ -38,14 +38,13 @@ const ogImage = new URL(withBase(image), Astro.site ?? "http://localhost:4321");
     <link rel="alternate" type="application/rss+xml" title="RSS" href={withBase("/rss.xml")} />
   </head>
   <body>
-    <div class="mx-auto flex min-h-screen w-full max-w-7xl flex-col px-5 sm:px-8">
-      <header class="sticky top-0 z-40 border-b border-white/10 bg-ink/80 py-4 backdrop-blur-xl">
-        <nav class="flex items-center justify-between gap-6" aria-label="Primary navigation">
-          <a href={withBase("/")} class="font-mono text-sm font-semibold text-white">peto.lab</a>
-          <div class="hidden items-center gap-5 text-sm text-slate-300 md:flex">
+    <div class="mx-auto flex min-h-screen w-full max-w-6xl flex-col px-5 sm:px-8">
+      <header class="sticky top-0 z-40 border-b border-white/10 bg-ink/90 py-3 backdrop-blur-xl">
+        <nav class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between" aria-label="Primary navigation">
+          <a href={withBase("/")} class="font-mono text-sm font-semibold text-white">peto.lab/notes</a>
+          <div class="-mx-5 flex gap-4 overflow-x-auto px-5 pb-1 text-sm text-slate-300 md:mx-0 md:px-0">
             {siteConfig.nav.map((item) => <a class="transition hover:text-white" href={withBase(item.href)}>{item.label}</a>)}
           </div>
-          <a class="rounded-md border border-white/15 px-3 py-2 text-sm text-white transition hover:border-signal hover:text-signal" href={withBase("/admin/")}>Admin</a>
         </nav>
       </header>
       <main class="flex-1">
@@ -53,11 +52,11 @@ const ogImage = new URL(withBase(image), Astro.site ?? "http://localhost:4321");
       </main>
       <footer class="border-t border-white/10 py-8 text-sm text-slate-400">
         <div class="flex flex-col justify-between gap-4 md:flex-row">
-          <p>Personal engineering notes, kept in Git and built as a static Astro site.</p>
+          <p>Personal engineering and research notes, kept in Git and built as a static Astro site.</p>
           <div class="flex gap-4">
             <a href={siteConfig.githubUrl}>GitHub</a>
             <a href={withBase("/rss.xml")}>RSS</a>
-            <a href={withBase("/about")}>Resume</a>
+            <a href={withBase("/admin/")}>CMS</a>
           </div>
         </div>
       </footer>
