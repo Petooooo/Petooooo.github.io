@@ -8,6 +8,7 @@ The automation layer supports draft organization only. It does not decide what i
 - `research`: computer science, electrical/electronic engineering, systems engineering, AI infrastructure, software engineering, algorithms, and embedded/system-level engineering notes.
 - `devops`: deployment notes, troubleshooting logs, terminal logs, infrastructure decisions, rollback notes, and operating records.
 - `notes`: implementation notes, study notes, practical observations, and reusable technical references.
+- `paper-reviews`: concise reviews of computer science, electrical/electronic engineering, systems, AI infrastructure, software engineering, algorithms, and embedded/system-level engineering papers.
 - `auto-archive`: reviewed generated or automation-assisted notes that do not fit a durable public section yet.
 
 ## Content Types

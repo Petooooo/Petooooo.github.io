@@ -1,0 +1,22 @@
+---
+import { getCollection } from "astro:content";
+import BaseLayout from "@/layouts/BaseLayout.astro";
+import ContentCard from "@/components/ContentCard.astro";
+import SectionHeader from "@/components/SectionHeader.astro";
+import { byDateDesc, getCollectionUrl, isPublishedEntry } from "@/lib/content";
+
+const entries = (await getCollection("paper-reviews")).filter(isPublishedEntry).sort(byDateDesc);
+---
+
+<BaseLayout title="Paper Reviews" description="Concise reviews of systems, software, algorithms, AI infrastructure, and embedded engineering papers.">
+  <section class="py-12 md:py-14">
+    <SectionHeader
+      eyebrow="Paper Reviews"
+      title="Reviewed Technical Papers"
+      description="Concise paper notes focused on core ideas, implementation details, limitations, references, and what might be useful in real engineering work."
+    />
+    <div class="grid gap-4 md:grid-cols-2">
+      {entries.map((entry) => <ContentCard entry={entry} href={getCollectionUrl(entry)} label="paper review" />)}
+    </div>
+  </section>
+</BaseLayout>

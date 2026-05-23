@@ -10,6 +10,7 @@ export async function GET(context) {
     ...(await getCollection("notes")),
     ...(await getCollection("devops")),
     ...(await getCollection("research")),
+    ...(await getCollection("paper-reviews")),
     ...(await getCollection("auto-archive"))
   ].filter(isPublishedEntry).sort(byDateDesc);
 

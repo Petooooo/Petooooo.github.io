@@ -1,7 +1,7 @@
 export const siteConfig = {
   title: "Peto Lab Notes",
   description:
-    "A Git-based engineering and research notebook for systems notes, deployment logs, computational experiments, and long-term technical writing.",
+    "A Git-based technical archive for engineering notes, systems work, DevOps logs, paper reviews, and long-term implementation records.",
   author: "Peto",
   ogImage: "/og-default.svg",
   githubUrl: "https://github.com/Petooooo/Petooooo.github.io",
@@ -12,6 +12,7 @@ export const siteConfig = {
     { label: "Research", href: "/research" },
     { label: "DevOps", href: "/devops" },
     { label: "Notes", href: "/notes" },
+    { label: "Paper Reviews", href: "/paper-reviews" },
     { label: "Archive", href: "/auto-archive" },
     { label: "CV", href: "/about#cv" }
   ]

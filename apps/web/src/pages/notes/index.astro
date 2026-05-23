@@ -7,8 +7,8 @@ import { byDateDesc, getCollectionUrl, isPublishedEntry } from "@/lib/content";
 const entries = (await getCollection("notes")).filter(isPublishedEntry).sort(byDateDesc);
 ---
 <BaseLayout title="Notes" description="Technical notes and reusable references.">
-  <section class="py-14">
-    <SectionHeader eyebrow="Notes" title="Field Notes" description="Short references for commands, implementation details, decisions, and concepts that are likely to be useful again." />
-    <div class="grid gap-5 md:grid-cols-2">{entries.map((entry) => <ContentCard entry={entry} href={getCollectionUrl(entry)} label="note" />)}</div>
+  <section class="py-12 md:py-14">
+    <SectionHeader eyebrow="Notes" title="Study And Implementation Notes" description="A technical study notebook for cloud infrastructure, digital logic, system software, networks, operating systems, algorithms, coding-test preparation, Baekjoon strategies, debugging observations, and concise concept summaries." />
+    <div class="grid gap-4 md:grid-cols-2">{entries.map((entry) => <ContentCard entry={entry} href={getCollectionUrl(entry)} label="note" />)}</div>
   </section>
 </BaseLayout>

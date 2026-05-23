@@ -12,6 +12,7 @@ Raw notes and logs can be staged under `automation/raw/inbox` before conversion.
 - Notes: reusable technical references.
 - DevOps: operation logs, deployment notes, and runbooks.
 - Research: computer science, electrical/electronic engineering, systems engineering, AI infrastructure, software engineering, algorithms, and embedded/system-level engineering notes.
+- Paper Reviews: concise reviewed-paper notes with summary, core idea, implementation details, limitations, references, and related work.
 - Archive: reviewed generated or automation-assisted posts.
 
 ## Drafts

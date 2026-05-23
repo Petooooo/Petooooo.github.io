@@ -107,6 +107,14 @@ collections:
     format: "frontmatter"
     fields: *post_fields
 
+  - name: "paper-reviews"
+    label: "Paper Reviews"
+    folder: "apps/web/src/content/paper-reviews"
+    create: true
+    extension: "mdx"
+    format: "frontmatter"
+    fields: *post_fields
+
   - name: "auto-archive"
     label: "Archive"
     folder: "apps/web/src/content/auto-archive"
