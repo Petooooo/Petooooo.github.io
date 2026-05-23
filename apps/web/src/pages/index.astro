@@ -31,7 +31,7 @@ const sections = [
   { title: "DevOps", description: "Infrastructure operations, troubleshooting, CI/CD, Docker, networking, GitOps, and recovery notes.", href: "/devops", count: devops.length },
   { title: "Notes", description: "Study notes for networks, OS, algorithms, digital logic, implementation techniques, and problem solving.", href: "/notes", count: notes.length },
   { title: "Paper Reviews", description: "Concise reviews of technical papers with implementation details and practical observations.", href: "/paper-reviews", count: paperReviews.length },
-  { title: "Archive", description: "Unfinished drafts, automation outputs, temporary notes, and reviewed draft history.", href: "/auto-archive", count: archive.length }
+  { title: "Archive", description: "Temporary notes, experiments, migrated material, and older archive entries.", href: "/auto-archive", count: archive.length }
 ];
 ---
 
@@ -58,7 +58,7 @@ const sections = [
         {[
           ["Input", "raw notes, logs, study fragments"],
           ["Format", "Markdown and MDX content collections"],
-          ["Review", "manual edit, Decap CMS, Git diff"],
+          ["Review", "editor review, Decap CMS, Git diff"],
           ["Deploy", "GitHub Pages; optional RP4 path"]
         ].map(([label, value]) => (
           <div>
@@ -108,7 +108,7 @@ const sections = [
         ["DevOps", "Kubernetes, CoreDNS, Nexus, Docker, CI/CD, RP4 deploys, bootstrap issues, monitoring, recovery"],
         ["Research", "systems, AI infrastructure, distributed systems, networking, architecture, embedded, performance, algorithms"],
         ["Paper Reviews", "summary, core idea, implementation details, limitations, references, related work"],
-        ["Archive", "unreviewed drafts, automation outputs, temporary notes, experimental content"]
+        ["Archive", "temporary notes, experiments, migrated material, and older archive entries"]
       ].map(([title, description]) => (
         <div class="border-b border-white/10 py-4">
           <h3 class="font-mono text-xs uppercase tracking-[0.16em] text-slate-500">{title}</h3>
