@@ -9,7 +9,7 @@ type RoutedCollectionKey = Extract<
 type Entry = CollectionEntry<RoutedCollectionKey>;
 
 export function isPublishedEntry(entry: Entry) {
-  return !entry.data.draft && entry.data.reviewed !== false;
+  return !entry.data.draft;
 }
 
 export function byDateDesc(a: Entry, b: Entry) {
