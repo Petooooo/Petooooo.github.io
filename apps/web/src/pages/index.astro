@@ -13,7 +13,7 @@ const notes = (await getCollection("notes")).filter(isPublishedEntry);
 const devops = (await getCollection("devops")).filter(isPublishedEntry);
 const research = (await getCollection("research")).filter(isPublishedEntry);
 const paperReviews = (await getCollection("paper-reviews")).filter(isPublishedEntry);
-const archive = (await getCollection("auto-archive")).filter(isPublishedEntry);
+const archive = (await getCollection("archive")).filter(isPublishedEntry);
 const posts = [
   ...notes,
   ...devops,
@@ -31,7 +31,7 @@ const sections = [
   { title: "DevOps", description: "Infrastructure operations, troubleshooting, CI/CD, Docker, networking, GitOps, and recovery notes.", href: "/devops", count: devops.length },
   { title: "Notes", description: "Study notes for networks, OS, algorithms, digital logic, implementation techniques, and problem solving.", href: "/notes", count: notes.length },
   { title: "Paper Reviews", description: "Concise reviews of technical papers with implementation details and practical observations.", href: "/paper-reviews", count: paperReviews.length },
-  { title: "Archive", description: "Temporary notes, experiments, migrated material, and older archive entries.", href: "/auto-archive", count: archive.length }
+  { title: "Archive", description: "Temporary notes, experiments, migrated material, and older archive entries.", href: "/archive", count: archive.length }
 ];
 ---
 

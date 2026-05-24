@@ -11,7 +11,7 @@ export async function GET(context) {
     ...(await getCollection("devops")),
     ...(await getCollection("research")),
     ...(await getCollection("paper-reviews")),
-    ...(await getCollection("auto-archive"))
+    ...(await getCollection("archive"))
   ].filter(isPublishedEntry).sort(byDateDesc);
 
   return rss({

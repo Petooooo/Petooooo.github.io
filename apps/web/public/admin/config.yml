@@ -115,9 +115,9 @@ collections:
     format: "frontmatter"
     fields: *post_fields
 
-  - name: "auto-archive"
+  - name: "archive"
     label: "Archive"
-    folder: "apps/web/src/content/auto-archive"
+    folder: "apps/web/src/content/archive"
     create: true
     extension: "mdx"
     format: "frontmatter"

@@ -4,11 +4,14 @@ import BaseLayout from "@/layouts/BaseLayout.astro";
 import ContentCard from "@/components/ContentCard.astro";
 import SectionHeader from "@/components/SectionHeader.astro";
 import { byDateDesc, getCollectionUrl, isPublishedEntry } from "@/lib/content";
-const entries = (await getCollection("auto-archive")).filter(isPublishedEntry).sort(byDateDesc);
+
+const entries = (await getCollection("archive")).filter(isPublishedEntry).sort(byDateDesc);
 ---
+
 <BaseLayout title="Archive" description="Temporary notes, experiments, migrated material, and older archive entries.">
   <section class="py-12 md:py-14">
     <SectionHeader eyebrow="Archive" title="Archive Entries" description="A separate lane for temporary notes, experiments, migrated material, and entries that do not yet belong in the main sections." />
     <div class="grid gap-4 md:grid-cols-2">{entries.map((entry) => <ContentCard entry={entry} href={getCollectionUrl(entry)} label="archive" />)}</div>
   </section>
 </BaseLayout>
+

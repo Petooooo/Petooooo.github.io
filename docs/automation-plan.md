@@ -39,7 +39,7 @@ npm run draft:from-note -- --source automation/raw/inbox/example.md
 
 Useful options:
 
-- `--collection notes|devops|research|paper-reviews|auto-archive|projects`
+- `--collection notes|devops|research|paper-reviews|archive|projects`
 - `--type troubleshooting-log|terminal-log|deployment-note|implementation-note|algorithm-study|system-design|infrastructure-decision|debugging-note|experiment-note|paper-review|engineering-observation`
 - `--tags "docker,github-pages,deployment"`
 - `--tech "Astro,Docker,Caddy"`

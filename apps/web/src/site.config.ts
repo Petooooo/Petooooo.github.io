@@ -13,7 +13,7 @@ export const siteConfig = {
     { label: "DevOps", href: "/devops" },
     { label: "Notes", href: "/notes" },
     { label: "Paper Reviews", href: "/paper-reviews" },
-    { label: "Archive", href: "/auto-archive" },
+    { label: "Archive", href: "/archive" },
     { label: "CV", href: "/about#cv" }
   ]
 };

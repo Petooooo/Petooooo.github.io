@@ -52,7 +52,7 @@ const notes = defineCollection({ type: "content", schema: basePostSchema });
 const devops = defineCollection({ type: "content", schema: basePostSchema });
 const research = defineCollection({ type: "content", schema: basePostSchema });
 const paperReviews = defineCollection({ type: "content", schema: basePostSchema });
-const autoArchive = defineCollection({ type: "content", schema: basePostSchema });
+const archive = defineCollection({ type: "content", schema: basePostSchema });
 
 export const collections = {
   projects,
@@ -60,5 +60,5 @@ export const collections = {
   devops,
   research,
   "paper-reviews": paperReviews,
-  "auto-archive": autoArchive
+  archive
 };

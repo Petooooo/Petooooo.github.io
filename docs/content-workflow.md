@@ -27,6 +27,8 @@ reviewStatus: "needs-review"
 
 Drafts are excluded from public routes.
 
+Entries with `reviewed: false` are also excluded from public routes. Use `reviewed: true` only after a real review pass.
+
 ## Public Metadata Policy
 
 Internal workflow fields are kept in frontmatter, but public pages must not label posts as generated, manual, reviewed, or in-review.
