@@ -1,0 +1,44 @@
+---
+title: "TCP 3-way Handshake 정리"
+description: "TCP 연결 수립 과정을 SYN, SYN-ACK, ACK 흐름과 상태 전이 관점에서 정리한 노트."
+date: "2026-05-25"
+updated: "2026-05-25"
+draft: false
+reviewed: true
+category: "Notes"
+area: "Computer Networks"
+type: "concept"
+series: "networking-basics"
+tags: ["tcp", "transport-layer", "three-way-handshake"]
+---
+
+## 목적
+
+TCP 3-way handshake는 양쪽 호스트가 연결을 시작하기 전에 서로 통신 가능 여부와 초기 sequence number를 확인하는 절차다. 단순히 포트를 여는 과정이 아니라, 이후 reliable byte stream을 만들기 위한 초기 동기화 단계로 보는 것이 좋다.
+
+## SYN / SYN-ACK / ACK 흐름
+
+1. Client가 Server로 `SYN`을 보낸다.
+   - Client 상태: `SYN-SENT`
+   - Client는 자신의 초기 sequence number를 보낸다.
+2. Server가 `SYN-ACK`로 응답한다.
+   - Server 상태: `SYN-RECEIVED`
+   - Server도 자신의 초기 sequence number를 보내고, Client의 SYN을 확인한다.
+3. Client가 마지막 `ACK`를 보낸다.
+   - 양쪽 모두 연결이 성립되고 `ESTABLISHED` 상태로 들어간다.
+
+## 왜 2-way가 아니라 3-way인지
+
+2-way만 사용하면 Server는 Client가 자신의 SYN-ACK를 실제로 받았는지 확인할 수 없다. 마지막 ACK가 있어야 양쪽 모두 송신과 수신 경로가 동작한다는 것을 확인하고, 서로의 초기 sequence number를 기준으로 이후 데이터를 해석할 수 있다.
+
+## 실무에서 확인할 때 보는 포인트
+
+- `SYN`만 반복되면 Server까지 패킷이 도달하지 못하거나 방화벽, 라우팅, 리스닝 포트 문제가 있을 수 있다.
+- `SYN-ACK`까지 오는데 마지막 `ACK`가 없다면 Client 측 필터링이나 비대칭 라우팅을 의심한다.
+- `ESTABLISHED`가 생기지만 애플리케이션 응답이 없으면 TCP 연결 이후의 프로토콜 계층을 따로 봐야 한다.
+- `tcpdump`, `ss`, `netstat` 같은 도구로 상태와 패킷 흐름을 같이 확인한다.
+
+## 짧은 요약
+
+TCP 3-way handshake는 `SYN -> SYN-ACK -> ACK` 흐름으로 양방향 통신 가능성과 초기 sequence number를 동기화하는 절차다. 연결 문제를 볼 때는 어느 단계에서 멈추는지부터 확인한다.
+

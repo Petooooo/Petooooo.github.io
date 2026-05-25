@@ -5,10 +5,46 @@ import ContentCard from "@/components/ContentCard.astro";
 import SectionHeader from "@/components/SectionHeader.astro";
 import { byDateDesc, getCollectionUrl, isPublishedEntry } from "@/lib/content";
 const entries = (await getCollection("notes")).filter(isPublishedEntry).sort(byDateDesc);
+const areaOrder = [
+  "Algorithms",
+  "Baekjoon",
+  "Computer Networks",
+  "Operating Systems",
+  "Databases",
+  "System Software",
+  "Digital Circuits",
+  "Computer Architecture",
+  "Cloud Infrastructure",
+  "Programming",
+  "Security",
+  "Uncategorized"
+];
+const areas = [...new Set(entries.map((entry) => entry.data.area ?? "Uncategorized"))].sort(
+  (a, b) => areaOrder.indexOf(a) - areaOrder.indexOf(b)
+);
 ---
 <BaseLayout title="Notes" description="Technical notes and reusable references.">
   <section class="py-12 md:py-14">
     <SectionHeader eyebrow="Notes" title="Study And Implementation Notes" description="A technical study notebook for cloud infrastructure, digital logic, system software, networks, operating systems, algorithms, coding-test preparation, Baekjoon strategies, debugging observations, and concise concept summaries." />
-    <div class="grid gap-4 md:grid-cols-2">{entries.map((entry) => <ContentCard entry={entry} href={getCollectionUrl(entry)} label="note" />)}</div>
+    {areas.length > 0 && (
+      <div class="mb-8 flex flex-wrap gap-2">
+        {areas.map((area) => (
+          <a class="border border-white/10 px-2.5 py-1 text-xs text-slate-300 hover:border-signal/50 hover:text-white" href={`#${area.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")}`}>{area}</a>
+        ))}
+      </div>
+    )}
+    <div class="grid gap-10">
+      {areas.map((area) => {
+        const areaEntries = entries.filter((entry) => (entry.data.area ?? "Uncategorized") === area);
+        return (
+          <section id={area.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")}>
+            <h2 class="border-b border-white/10 pb-2 text-lg font-semibold text-white">{area}</h2>
+            <div class="mt-4 grid gap-4 md:grid-cols-2">
+              {areaEntries.map((entry) => <ContentCard entry={entry} href={getCollectionUrl(entry)} label="note" />)}
+            </div>
+          </section>
+        );
+      })}
+    </div>
   </section>
 </BaseLayout>

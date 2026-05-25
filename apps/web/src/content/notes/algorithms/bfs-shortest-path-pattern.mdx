@@ -1,0 +1,63 @@
+---
+title: "BFS 최단거리 패턴 정리"
+description: "가중치가 없는 그래프와 격자 문제에서 BFS로 최단거리를 구하는 풀이 패턴."
+date: "2026-05-25"
+updated: "2026-05-25"
+draft: false
+reviewed: true
+category: "Notes"
+area: "Algorithms"
+type: "problem-solving"
+series: "coding-test-patterns"
+tags: ["bfs", "graph", "shortest-path", "coding-test"]
+---
+
+## 언제 BFS를 쓰는지
+
+BFS는 간선의 가중치가 모두 같거나 없는 그래프에서 최단거리를 구할 때 사용한다. 한 번에 한 단계씩 확장하기 때문에, 처음 방문한 시점의 거리가 최단거리라는 성질을 쓸 수 있다.
+
+격자 문제에서는 상하좌우 이동 비용이 모두 1인 경우가 대표적이다. 미로 탐색, 최소 이동 횟수, 가까운 목표 찾기 같은 문제에서 자주 나온다.
+
+## Queue, Visited, Distance 관리
+
+- `queue`: 다음에 확장할 정점을 순서대로 저장한다.
+- `visited`: 같은 정점을 여러 번 넣지 않도록 막는다.
+- `distance`: 시작점에서 현재 정점까지의 이동 횟수를 저장한다.
+
+방문 처리는 queue에서 꺼낼 때보다 queue에 넣을 때 하는 편이 안전하다. 그래야 같은 정점이 여러 번 queue에 들어가는 일을 줄일 수 있다.
+
+## 격자 문제에서 dx/dy 패턴
+
+```python
+from collections import deque
+
+dx = [1, -1, 0, 0]
+dy = [0, 0, 1, -1]
+
+queue = deque([(sx, sy)])
+dist = [[-1] * m for _ in range(n)]
+dist[sx][sy] = 0
+
+while queue:
+    x, y = queue.popleft()
+
+    for direction in range(4):
+        nx = x + dx[direction]
+        ny = y + dy[direction]
+
+        if not (0 <= nx < n and 0 <= ny < m):
+            continue
+        if blocked[nx][ny] or dist[nx][ny] != -1:
+            continue
+
+        dist[nx][ny] = dist[x][y] + 1
+        queue.append((nx, ny))
+```
+
+## 자주 하는 실수
+
+- 시작점 거리를 0으로 둘지 1로 둘지 문제 조건과 맞추지 않는다.
+- 벽, 범위, 방문 여부 검사 순서가 섞여 index error가 난다.
+- 방문 처리를 늦게 해서 같은 칸이 queue에 중복으로 들어간다.
+- 가중치가 있는 문제에도 BFS를 그대로 적용한다. 이 경우 Dijkstra나 0-1 BFS를 확인해야 한다.
+

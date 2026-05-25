@@ -13,17 +13,20 @@ The automation layer supports draft organization only. It does not decide what i
 
 ## Content Types
 
-- `troubleshooting-log`
-- `terminal-log`
-- `deployment-note`
-- `implementation-note`
-- `algorithm-study`
-- `system-design`
-- `infrastructure-decision`
-- `debugging-note`
-- `experiment-note`
+Use `type` for writing format:
+
+- `concept`
+- `troubleshooting`
+- `problem-solving`
+- `project-log`
+- `runbook`
 - `paper-review`
-- `engineering-observation`
+- `research-note`
+- `implementation-note`
+- `decision-record`
+- `experiment-note`
+
+Keep older `contentType` values only for legacy automation compatibility.
 
 ## Tags
 

@@ -1,0 +1,66 @@
+---
+title: "CoreDNS CrashLoopBackOff 점검 노트"
+description: "Kubernetes 환경에서 CoreDNS 장애가 image pull, service discovery, internal DNS에 미치는 영향을 점검하는 DevOps 노트."
+date: "2026-05-25"
+updated: "2026-05-25"
+draft: false
+reviewed: true
+category: "DevOps"
+area: "Kubernetes"
+type: "troubleshooting"
+series: "k3s-operations"
+tags: ["kubernetes", "k3s", "coredns", "dns", "troubleshooting"]
+---
+
+## 증상
+
+CoreDNS가 `CrashLoopBackOff` 상태가 되면 cluster 내부 DNS resolution이 불안정해진다. Pod가 service name을 해석하지 못하거나, registry/service endpoint를 이름으로 찾지 못하는 문제가 같이 나타날 수 있다.
+
+대표 증상:
+
+- `kube-system` namespace의 CoreDNS Pod가 반복 재시작된다.
+- Pod 내부에서 service DNS 조회가 실패한다.
+- 배포 중 image pull이나 init container 단계가 지연된다.
+- 애플리케이션 로그에 DNS lookup 실패가 보인다.
+
+## 영향 범위
+
+CoreDNS 문제는 단일 애플리케이션 장애처럼 보일 수 있지만 실제 영향은 더 넓다.
+
+- service discovery
+- internal DNS lookup
+- registry 주소 해석
+- webhook, operator, controller 간 통신
+- 새 Pod 생성과 rollout 안정성
+
+## 먼저 확인할 명령
+
+```bash
+kubectl -n kube-system get pods -l k8s-app=kube-dns
+kubectl -n kube-system describe pod -l k8s-app=kube-dns
+kubectl -n kube-system logs -l k8s-app=kube-dns --tail=100
+kubectl get events -A --sort-by=.lastTimestamp
+```
+
+DNS 동작은 임시 디버그 Pod에서 확인한다.
+
+```bash
+kubectl run dns-check --rm -it --image=busybox:1.36 --restart=Never -- nslookup kubernetes.default
+```
+
+## 원인 후보
+
+- CoreDNS ConfigMap 문법 오류
+- upstream DNS 접근 문제
+- node resource pressure
+- CNI/network policy 문제
+- image pull 실패
+- cluster DNS service endpoint 문제
+
+## 복구 후 검증
+
+- CoreDNS Pod restart count가 더 이상 증가하지 않는지 확인한다.
+- `kubernetes.default`와 주요 service name이 정상 조회되는지 확인한다.
+- 새 Pod 생성과 image pull이 정상적으로 진행되는지 확인한다.
+- 같은 증상이 반복되면 ConfigMap 변경 이력과 node 상태를 같이 본다.
+

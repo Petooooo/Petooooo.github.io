@@ -1,0 +1,49 @@
+---
+title: "GitLab Runner 수동 승인 배포 흐름 정리"
+description: "빌드와 이미지 push 이후 GitOps 반영 단계를 수동 승인으로 분리하는 CI/CD 흐름 정리."
+date: "2026-05-25"
+updated: "2026-05-25"
+draft: false
+reviewed: true
+category: "DevOps"
+area: "CI/CD"
+type: "decision-record"
+series: "deployment-workflows"
+tags: ["gitlab-runner", "ci-cd", "gitops", "manual-approval"]
+---
+
+## 배경
+
+CI/CD를 완전 자동 배포로 구성하면 빠르지만, 작은 homelab이나 내부 실험 환경에서는 의도하지 않은 변경이 바로 반영되는 것이 부담이 될 수 있다. 특히 여러 repository가 하나의 cluster 배포 상태에 영향을 주는 경우에는 배포 승인 지점을 분리하는 편이 안전하다.
+
+## 빌드 단계와 배포 단계 분리
+
+권장 흐름은 다음처럼 나눈다.
+
+1. application repository에서 build/test를 수행한다.
+2. container image를 registry에 push한다.
+3. 배포 repository 또는 GitOps manifest 변경은 별도 job으로 둔다.
+4. manifest 반영 job은 manual approval 후 실행한다.
+
+이 구조에서는 build 성공과 deploy 실행을 분리할 수 있다.
+
+## Manual Approval의 장점
+
+- 배포 시점을 사람이 선택할 수 있다.
+- 여러 변경을 묶어서 반영할 수 있다.
+- 장애 상황에서는 build는 유지하되 deploy만 멈출 수 있다.
+- GitOps repository 변경 diff를 확인한 뒤 반영할 수 있다.
+
+## 여러 Repo를 관리할 때의 고려사항
+
+- image tag 규칙을 통일한다.
+- GitOps repository에 어떤 repo가 어떤 manifest를 수정하는지 명확히 둔다.
+- approval 권한을 너무 넓게 주지 않는다.
+- rollback tag 또는 이전 manifest로 돌아가는 절차를 문서화한다.
+
+## 남은 과제
+
+- approval job의 책임 범위를 정리한다.
+- registry 장애 시 deploy job이 어떻게 실패하는지 확인한다.
+- GitOps controller가 반영한 실제 revision을 추적하는 방법을 정한다.
+

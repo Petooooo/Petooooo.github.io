@@ -8,6 +8,7 @@ const { Content } = await entry.render();
 const parentHref = withBase(`/${entry.collection}`);
 const tags = normalizeTags(entry.data.tags as string[]);
 const showSource = entry.data.source && entry.data.sensitivity !== "private-source";
+const writingType = entry.data.type ?? entry.data.contentType;
 const collectionLabels: Record<string, string> = {
   projects: "Projects",
   notes: "Notes",
@@ -37,10 +38,28 @@ const collectionLabel = collectionLabels[entry.collection] ?? entry.collection;
             <dd class="mt-1"><time datetime={entry.data.updated.toISOString()}>{formatDate(entry.data.updated)}</time></dd>
           </div>
         )}
-        {entry.data.contentType && (
+        {entry.data.area && (
+          <div>
+            <dt class="font-mono text-xs uppercase tracking-[0.18em] text-slate-500">Area</dt>
+            <dd class="mt-1">{entry.data.area}</dd>
+          </div>
+        )}
+        {writingType && (
           <div>
             <dt class="font-mono text-xs uppercase tracking-[0.18em] text-slate-500">Type</dt>
-            <dd class="mt-1">{entry.data.contentType}</dd>
+            <dd class="mt-1">{writingType}</dd>
+          </div>
+        )}
+        {entry.data.series && (
+          <div>
+            <dt class="font-mono text-xs uppercase tracking-[0.18em] text-slate-500">Series</dt>
+            <dd class="mt-1">{entry.data.series}</dd>
+          </div>
+        )}
+        {entry.data.problemId && (
+          <div>
+            <dt class="font-mono text-xs uppercase tracking-[0.18em] text-slate-500">Problem</dt>
+            <dd class="mt-1">{entry.data.problemId}</dd>
           </div>
         )}
         {entry.data.category && (

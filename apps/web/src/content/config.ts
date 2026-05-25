@@ -7,6 +7,23 @@ const basePostSchema = z.object({
   updated: z.coerce.date().optional(),
   tags: z.array(z.string()).default([]),
   category: z.string().optional(),
+  area: z.string().optional(),
+  type: z
+    .enum([
+      "concept",
+      "troubleshooting",
+      "problem-solving",
+      "project-log",
+      "runbook",
+      "paper-review",
+      "research-note",
+      "implementation-note",
+      "decision-record",
+      "experiment-note"
+    ])
+    .optional(),
+  series: z.string().optional(),
+  problemId: z.string().optional(),
   contentType: z
     .enum([
       "troubleshooting-log",
@@ -33,6 +50,8 @@ const basePostSchema = z.object({
   sourceKind: z.enum(["raw-note", "terminal-log", "git-diff", "deployment-log", "study-note", "manual"]).optional(),
   sensitivity: z.enum(["public", "sanitized", "private-source"]).default("public"),
   techStack: z.array(z.string()).default([]),
+  githubUrl: z.string().url().optional(),
+  externalUrl: z.string().url().optional(),
   thumbnail: z.string().optional(),
   readingTime: z.string().optional()
 });
@@ -42,8 +61,6 @@ const projects = defineCollection({
   schema: basePostSchema.extend({
     role: z.string(),
     period: z.string(),
-    githubUrl: z.string().url().optional(),
-    externalUrl: z.string().url().optional(),
     status: z.enum(["planned", "building", "active", "archived"]).default("building")
   })
 });

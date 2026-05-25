@@ -1,14 +1,24 @@
 ---
+import { formatDate } from "@/lib/content";
+
 const { entry, href, label } = Astro.props;
 const tags = entry.data.tags as string[];
+const writingType = entry.data.type ?? entry.data.contentType;
 ---
 
 <a href={href} class="group block border border-white/10 bg-white/[0.025] p-4 transition hover:border-signal/50">
-  <div class="flex items-center justify-between gap-4 border-b border-white/10 pb-3">
+  <div class="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-3">
     <span class="font-mono text-xs uppercase tracking-[0.18em] text-slate-500">{label}</span>
+    <time class="font-mono text-xs text-slate-500" datetime={entry.data.date.toISOString()}>{formatDate(entry.data.date)}</time>
   </div>
   <h3 class="mt-4 text-lg font-semibold leading-snug text-white">{entry.data.title}</h3>
   <p class="mt-3 line-clamp-3 text-sm leading-6 text-slate-300">{entry.data.description}</p>
+  {(entry.data.area || writingType) && (
+    <div class="mt-4 flex flex-wrap gap-2">
+      {entry.data.area && <span class="border border-signal/20 px-2 py-1 text-xs text-slate-200">{entry.data.area}</span>}
+      {writingType && <span class="border border-white/10 px-2 py-1 font-mono text-xs text-slate-400">{writingType}</span>}
+    </div>
+  )}
   <div class="mt-5 flex flex-wrap gap-2">
     {tags.slice(0, 4).map((tag) => <span class="border border-white/10 px-2 py-1 text-xs text-slate-300">{tag}</span>)}
   </div>

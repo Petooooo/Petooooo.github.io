@@ -1,0 +1,56 @@
+---
+title: "Nexus 장애 대비 Bootstrap Registry 전략"
+description: "내부 registry 장애와 CoreDNS 장애가 겹칠 때를 대비해 핵심 이미지를 별도 bootstrap registry에 두는 전략."
+date: "2026-05-25"
+updated: "2026-05-25"
+draft: false
+reviewed: true
+category: "DevOps"
+area: "Registry/Nexus"
+type: "implementation-note"
+series: "registry-operations"
+tags: ["nexus", "registry", "bootstrap", "k3s", "containerd"]
+---
+
+## 문제 상황
+
+Cluster 내부에서 Nexus를 registry로 운영하는 경우, Nexus 자체가 내려가거나 DNS가 불안정하면 새 Pod가 필요한 이미지를 pull하지 못할 수 있다. 특히 CoreDNS와 registry 문제가 겹치면 복구에 필요한 컴포넌트조차 정상적으로 뜨지 못하는 상황이 생긴다.
+
+## Nexus Self-Dependency 문제
+
+Nexus가 cluster 내부 workload로 떠 있고, 다른 핵심 컴포넌트가 Nexus에 의존하면 bootstrap 경로가 꼬일 수 있다.
+
+예시 흐름:
+
+1. DNS 또는 registry 문제가 발생한다.
+2. 일부 핵심 Pod가 재시작된다.
+3. 재시작 과정에서 이미지를 pull해야 한다.
+4. registry 또는 DNS가 불안정해 pull이 실패한다.
+5. 복구에 필요한 컴포넌트가 다시 뜨지 못한다.
+
+## 핵심 이미지 별도 보관 전략
+
+핵심 복구 이미지와 cluster bootstrap에 필요한 이미지는 별도 bootstrap registry 또는 node-local image cache에 보관한다.
+
+대상 후보:
+
+- CoreDNS
+- CNI 관련 이미지
+- ingress/controller 이미지
+- registry 복구에 필요한 최소 이미지
+- 디버깅용 busybox/netshoot 계열 이미지
+
+## 장점
+
+- 내부 Nexus 장애와 cluster bootstrap 경로를 분리할 수 있다.
+- 복구 시 필요한 이미지 pull 실패 가능성을 줄인다.
+- 장애 대응 절차가 단순해진다.
+- cluster 초기 구성과 재해 복구 문서가 더 명확해진다.
+
+## 주의사항
+
+- bootstrap registry 주소는 private hostname이나 private IP를 공개 문서에 적지 않는다.
+- 이미지 버전 drift를 관리해야 한다.
+- bootstrap registry도 백업과 접근 제어가 필요하다.
+- containerd mirror 설정을 바꾼 경우 rollback 방법을 같이 문서화한다.
+

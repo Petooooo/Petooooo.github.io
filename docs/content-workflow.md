@@ -15,6 +15,33 @@ Raw notes and logs can be staged under `automation/raw/inbox` before conversion.
 - Paper Reviews: concise reviewed-paper notes with summary, core idea, implementation details, limitations, references, and related work.
 - Archive: temporary notes, experiments, and reviewed archive material.
 
+## Taxonomy
+
+Top-level collections describe the content type. Keep navigation simple and use metadata inside collections for finer organization.
+
+- `area`: study or technical field, such as `Computer Networks`, `Algorithms`, `Kubernetes`, or `Registry/Nexus`.
+- `type`: writing format, such as `concept`, `troubleshooting`, `problem-solving`, `runbook`, `paper-review`, `research-note`, `implementation-note`, `decision-record`, or `experiment-note`.
+- `series`: learning path, grouped sequence, or ongoing topic.
+- `tags`: specific keywords.
+- `problemId`: optional problem identifier for coding-test or Baekjoon notes.
+
+Notes areas include Algorithms, Baekjoon, Computer Networks, Operating Systems, Databases, System Software, Digital Circuits, Computer Architecture, Cloud Infrastructure, Programming, and Security.
+
+DevOps areas include Kubernetes, Docker, CI/CD, Git/GitHub, Registry/Nexus, Networking/DNS/TLS, Observability, Raspberry Pi / Homelab, Storage, and Troubleshooting.
+
+Research areas are limited to computer science and electrical/electronic engineering topics: Computer Architecture, Systems, Distributed Systems, AI Infrastructure, Embedded Systems, and Electronic Engineering.
+
+Placement rules:
+
+- Concept study notes go to Notes.
+- Algorithm and Baekjoon notes go to Notes.
+- Computer networks, operating systems, databases, system software, and digital circuits study notes go to Notes.
+- Real operational logs, deployment notes, troubleshooting, and incident notes go to DevOps.
+- Built systems and tools go to Projects.
+- Paper summaries go to Paper Reviews.
+- CS/EE research ideas and experiments go to Research.
+- Old drafts or low-confidence generated material goes to Archive.
+
 ## Drafts
 
 Drafts use:
