@@ -36,39 +36,105 @@ a {
   color: #d9e2f0;
   line-height: 1.74;
   font-size: 1rem;
+  overflow-wrap: anywhere;
+  word-break: keep-all;
+}
+
+.prose-platform > :first-child {
+  margin-top: 0;
+}
+
+.prose-platform > :last-child {
+  margin-bottom: 0;
 }
 
 .prose-platform h1,
 .prose-platform h2,
-.prose-platform h3 {
+.prose-platform h3,
+.prose-platform h4 {
   color: #ffffff;
   letter-spacing: 0;
   line-height: 1.15;
+  font-weight: 650;
+}
+
+.prose-platform h1 {
+  margin-top: 2.5rem;
+  font-size: 2rem;
 }
 
 .prose-platform h2 {
   margin-top: 2.4rem;
   padding-top: 1rem;
   border-top: 1px solid var(--line);
+  font-size: 1.45rem;
 }
 
 .prose-platform h3 {
   margin-top: 2rem;
+  font-size: 1.2rem;
+}
+
+.prose-platform h4 {
+  margin-top: 1.6rem;
+  font-size: 1.05rem;
+  color: #e8eef8;
 }
 
 .prose-platform p,
 .prose-platform ul,
-.prose-platform ol {
+.prose-platform ol,
+.prose-platform blockquote,
+.prose-platform table,
+.prose-platform pre {
   margin-top: 1rem;
+}
+
+.prose-platform ul,
+.prose-platform ol {
+  padding-left: 1.35rem;
+}
+
+.prose-platform ul {
+  list-style: disc;
+}
+
+.prose-platform ol {
+  list-style: decimal;
 }
 
 .prose-platform li + li {
   margin-top: 0.35rem;
 }
 
+.prose-platform li > ul,
+.prose-platform li > ol {
+  margin-top: 0.35rem;
+}
+
+.prose-platform li > p {
+  margin-top: 0.45rem;
+}
+
+.prose-platform strong {
+  color: #ffffff;
+  font-weight: 650;
+}
+
+.prose-platform em {
+  color: #edf4ff;
+}
+
 .prose-platform a {
   color: #66e3ff;
-  text-decoration: none;
+  text-decoration: underline;
+  text-decoration-color: rgba(102, 227, 255, 0.35);
+  text-underline-offset: 0.2em;
+}
+
+.prose-platform a:hover {
+  color: #ffffff;
+  text-decoration-color: #66e3ff;
 }
 
 .prose-platform code {
@@ -78,19 +144,92 @@ a {
   padding: 0.12rem 0.35rem;
   color: #dffbff;
   font-size: 0.92em;
+  font-family: JetBrains Mono, SFMono-Regular, Consolas, monospace;
 }
 
 .prose-platform pre {
   overflow-x: auto;
   border: 1px solid var(--line);
+  border-radius: 0.4rem;
   padding: 1rem;
   background: #0c0f15;
+  line-height: 1.65;
 }
 
 .prose-platform pre code {
+  display: block;
   border: 0;
   background: transparent;
   padding: 0;
+  color: #e6edf7;
+  font-size: 0.9rem;
+  overflow-wrap: normal;
+  white-space: pre;
+  word-break: normal;
+}
+
+.prose-platform blockquote {
+  border-left: 3px solid rgba(102, 227, 255, 0.45);
+  background: rgba(255, 255, 255, 0.035);
+  padding: 0.85rem 1rem;
+  color: #c8d3e2;
+}
+
+.prose-platform blockquote > :first-child {
+  margin-top: 0;
+}
+
+.prose-platform blockquote > :last-child {
+  margin-bottom: 0;
+}
+
+.prose-platform hr {
+  margin: 2.5rem 0;
+  border: 0;
+  border-top: 1px solid var(--line);
+}
+
+.prose-platform table {
+  display: block;
+  width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+  font-size: 0.92rem;
+}
+
+.prose-platform th,
+.prose-platform td {
+  border: 1px solid var(--line);
+  padding: 0.65rem 0.75rem;
+  vertical-align: top;
+}
+
+.prose-platform th {
+  background: rgba(255, 255, 255, 0.055);
+  color: #ffffff;
+  font-weight: 650;
+  text-align: left;
+}
+
+.prose-platform td {
+  background: rgba(255, 255, 255, 0.018);
+}
+
+.prose-platform img {
+  margin-top: 1.4rem;
+  max-width: 100%;
+  border: 1px solid var(--line);
+}
+
+.prose-platform figure {
+  margin-top: 1.6rem;
+}
+
+.prose-platform figcaption {
+  margin-top: 0.6rem;
+  color: #9aa6b8;
+  font-size: 0.88rem;
+  line-height: 1.6;
 }
 
 @media (prefers-color-scheme: light) {
