@@ -13,20 +13,22 @@ const { area, entries, label } = Astro.props;
 const postCount = entries.length === 1 ? "1 post" : `${entries.length} posts`;
 ---
 
-<section id={getAreaId(area)} class="scroll-mt-24 border-t border-white/10 pt-5">
+<section id={getAreaId(area)} class="scroll-mt-24 overflow-hidden border-t border-white/10 pt-5">
   <div class="mb-4 flex items-end justify-between gap-4">
     <div>
       <h2 class="text-lg font-semibold text-white">{area}</h2>
       <p class="mt-1 font-mono text-xs uppercase tracking-[0.16em] text-slate-500">{postCount}</p>
     </div>
   </div>
-  <div class="-mx-4 overflow-x-auto px-4 pb-4 [scrollbar-color:rgba(148,163,184,0.35)_transparent]" aria-label={`${area} posts`}>
-    <div class="grid grid-flow-col auto-cols-[minmax(17rem,22rem)] gap-4 snap-x snap-mandatory sm:auto-cols-[minmax(20rem,24rem)]">
+  <div class="max-w-full overflow-hidden border border-white/10 bg-white/[0.018] p-3">
+    <div class="w-full max-w-full snap-x snap-mandatory overflow-x-auto overscroll-x-contain pb-3 [scrollbar-color:rgba(148,163,184,0.35)_transparent]" aria-label={`${area} posts`}>
+      <div class="flex w-max gap-4 pr-3">
       {entries.map((entry) => (
-        <div class="snap-start">
+        <div class="w-[18rem] shrink-0 snap-start sm:w-[22rem] md:w-[24rem]">
           <ContentCard entry={entry} href={getCollectionUrl(entry)} label={label} />
         </div>
       ))}
+      </div>
     </div>
   </div>
 </section>

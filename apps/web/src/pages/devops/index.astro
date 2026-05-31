@@ -27,8 +27,8 @@ const areaGroups = sortAreas([...new Set(entries.map(getEntryArea))], areaOrder)
   <section class="py-12 md:py-14">
     <SectionHeader eyebrow="DevOps" title="Operations And Troubleshooting" description="Runbooks and recovery notes for Kubernetes issues, CoreDNS/Nexus problems, CI/CD, Docker, networking, RP4 deployment, bootstrap dependencies, monitoring, GitOps, and deployment strategy." />
     {areaGroups.length > 0 && (
-      <nav class="mb-8 overflow-x-auto border-y border-white/10 py-3" aria-label="DevOps areas">
-        <div class="flex min-w-max gap-2">
+      <nav class="mb-8 border-y border-white/10 py-3" aria-label="DevOps areas">
+        <div class="flex flex-wrap gap-2">
         {areaGroups.map(({ area, entries }) => (
           <a class="border border-white/10 px-2.5 py-1 text-xs text-slate-300 hover:border-signal/50 hover:text-white" href={`#${getAreaId(area)}`}>{area} <span class="font-mono text-slate-500">{entries.length}</span></a>
         ))}

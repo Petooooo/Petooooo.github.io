@@ -28,8 +28,8 @@ const areaGroups = sortAreas([...new Set(entries.map(getEntryArea))], areaOrder)
   <section class="py-12 md:py-14">
     <SectionHeader eyebrow="Notes" title="Study And Implementation Notes" description="A technical study notebook for cloud infrastructure, digital logic, system software, networks, operating systems, algorithms, coding-test preparation, Baekjoon strategies, debugging observations, and concise concept summaries." />
     {areaGroups.length > 0 && (
-      <nav class="mb-8 overflow-x-auto border-y border-white/10 py-3" aria-label="Notes areas">
-        <div class="flex min-w-max gap-2">
+      <nav class="mb-8 border-y border-white/10 py-3" aria-label="Notes areas">
+        <div class="flex flex-wrap gap-2">
         {areaGroups.map(({ area, entries }) => (
           <a class="border border-white/10 px-2.5 py-1 text-xs text-slate-300 hover:border-signal/50 hover:text-white" href={`#${getAreaId(area)}`}>{area} <span class="font-mono text-slate-500">{entries.length}</span></a>
         ))}
