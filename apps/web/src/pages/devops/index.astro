@@ -1,9 +1,9 @@
 ---
 import { getCollection } from "astro:content";
 import BaseLayout from "@/layouts/BaseLayout.astro";
-import ContentCard from "@/components/ContentCard.astro";
+import AreaPostRail from "@/components/AreaPostRail.astro";
 import SectionHeader from "@/components/SectionHeader.astro";
-import { byDateDesc, getCollectionUrl, isPublishedEntry } from "@/lib/content";
+import { byDateDesc, getAreaId, getEntryArea, isPublishedEntry, sortAreas } from "@/lib/content";
 const entries = (await getCollection("devops")).filter(isPublishedEntry).sort(byDateDesc);
 const areaOrder = [
   "Kubernetes",
@@ -18,32 +18,25 @@ const areaOrder = [
   "Troubleshooting",
   "Uncategorized"
 ];
-const areas = [...new Set(entries.map((entry) => entry.data.area ?? "Uncategorized"))].sort(
-  (a, b) => areaOrder.indexOf(a) - areaOrder.indexOf(b)
-);
+const areaGroups = sortAreas([...new Set(entries.map(getEntryArea))], areaOrder).map((area) => ({
+  area,
+  entries: entries.filter((entry) => getEntryArea(entry) === area)
+}));
 ---
 <BaseLayout title="DevOps Logs" description="Infrastructure operation notes.">
   <section class="py-12 md:py-14">
     <SectionHeader eyebrow="DevOps" title="Operations And Troubleshooting" description="Runbooks and recovery notes for Kubernetes issues, CoreDNS/Nexus problems, CI/CD, Docker, networking, RP4 deployment, bootstrap dependencies, monitoring, GitOps, and deployment strategy." />
-    {areas.length > 0 && (
-      <div class="mb-8 flex flex-wrap gap-2">
-        {areas.map((area) => (
-          <a class="border border-white/10 px-2.5 py-1 text-xs text-slate-300 hover:border-signal/50 hover:text-white" href={`#${area.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")}`}>{area}</a>
+    {areaGroups.length > 0 && (
+      <nav class="mb-8 overflow-x-auto border-y border-white/10 py-3" aria-label="DevOps areas">
+        <div class="flex min-w-max gap-2">
+        {areaGroups.map(({ area, entries }) => (
+          <a class="border border-white/10 px-2.5 py-1 text-xs text-slate-300 hover:border-signal/50 hover:text-white" href={`#${getAreaId(area)}`}>{area} <span class="font-mono text-slate-500">{entries.length}</span></a>
         ))}
-      </div>
+        </div>
+      </nav>
     )}
-    <div class="grid gap-10">
-      {areas.map((area) => {
-        const areaEntries = entries.filter((entry) => (entry.data.area ?? "Uncategorized") === area);
-        return (
-          <section id={area.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")}>
-            <h2 class="border-b border-white/10 pb-2 text-lg font-semibold text-white">{area}</h2>
-            <div class="mt-4 grid gap-4 md:grid-cols-2">
-              {areaEntries.map((entry) => <ContentCard entry={entry} href={getCollectionUrl(entry)} label="devops" />)}
-            </div>
-          </section>
-        );
-      })}
+    <div class="grid gap-8">
+      {areaGroups.map(({ area, entries }) => <AreaPostRail area={area} entries={entries} label="devops" />)}
     </div>
   </section>
 </BaseLayout>

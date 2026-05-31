@@ -1,0 +1,32 @@
+---
+import ContentCard from "@/components/ContentCard.astro";
+import { getAreaId, getCollectionUrl } from "@/lib/content";
+import type { RoutedEntry } from "@/lib/content";
+
+interface Props {
+  area: string;
+  entries: RoutedEntry[];
+  label: string;
+}
+
+const { area, entries, label } = Astro.props;
+const postCount = entries.length === 1 ? "1 post" : `${entries.length} posts`;
+---
+
+<section id={getAreaId(area)} class="scroll-mt-24 border-t border-white/10 pt-5">
+  <div class="mb-4 flex items-end justify-between gap-4">
+    <div>
+      <h2 class="text-lg font-semibold text-white">{area}</h2>
+      <p class="mt-1 font-mono text-xs uppercase tracking-[0.16em] text-slate-500">{postCount}</p>
+    </div>
+  </div>
+  <div class="-mx-4 overflow-x-auto px-4 pb-4 [scrollbar-color:rgba(148,163,184,0.35)_transparent]" aria-label={`${area} posts`}>
+    <div class="grid grid-flow-col auto-cols-[minmax(17rem,22rem)] gap-4 snap-x snap-mandatory sm:auto-cols-[minmax(20rem,24rem)]">
+      {entries.map((entry) => (
+        <div class="snap-start">
+          <ContentCard entry={entry} href={getCollectionUrl(entry)} label={label} />
+        </div>
+      ))}
+    </div>
+  </div>
+</section>
