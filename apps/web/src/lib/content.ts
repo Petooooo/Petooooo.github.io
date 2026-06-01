@@ -1,4 +1,4 @@
-import type { CollectionEntry, CollectionKey } from "astro:content";
+import { getCollection, type CollectionEntry, type CollectionKey } from "astro:content";
 import { withBase } from "@/lib/urls";
 
 export type RoutedCollectionKey = Extract<
@@ -14,6 +14,11 @@ const naturalTitleCollator = new Intl.Collator(["ko", "en"], {
 
 export function isPublishedEntry(entry: RoutedEntry) {
   return !entry.data.draft;
+}
+
+export async function getPublishedCollectionEntries(collection: RoutedCollectionKey) {
+  const entries = (await getCollection(collection)) as RoutedEntry[];
+  return entries.filter(isPublishedEntry).sort(byDateDesc);
 }
 
 export function byDateDesc(a: RoutedEntry, b: RoutedEntry) {
