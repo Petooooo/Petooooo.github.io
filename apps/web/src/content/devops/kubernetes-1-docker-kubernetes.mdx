@@ -1,0 +1,824 @@
+---
+area: "Kubernetes"
+type: "concept"
+series: "Kubernetes Essentials"
+title: "Kubernetes 1장: Docker와 Kubernetes의 역할 구분"
+slug: "kubernetes-1-docker-kubernetes"
+date: "2026-06-01"
+updated: "2026-06-01"
+draft: false
+reviewed: true
+category: "DevOps"
+tags: ["Kubernetes", "Docker", "Container", "Orchestration", "Deployment", "Service", "Self-Healing"]
+description: "Docker와 Kubernetes를 경쟁 관계가 아니라 container packaging과 cluster orchestration의 역할로 구분하고, production 운영에서 Kubernetes가 필요한 이유를 정리한다."
+---
+## 핵심 요약
+
+**Docker**와 **Kubernetes**는 같은 문제를 해결하는 경쟁 도구가 아니다.  
+Docker는 애플리케이션을 **container image**로 만들고 개별 container를 실행하는 데 강점이 있고, Kubernetes는 그렇게 만들어진 containerized application을 여러 node에 걸쳐 배포, 확장, 복구, 네트워킹하는 **orchestration layer**에 가깝다.
+
+따라서 질문은 다음처럼 바뀌어야 한다.
+
+```text
+잘못된 질문:
+Docker를 써야 하나, Kubernetes를 써야 하나?
+
+더 정확한 질문:
+Docker 등으로 만든 containerized application을 production 환경에서 어떻게 안정적으로 운영할 것인가?
+```
+
+작은 개발 환경이나 단일 서버에서는 Docker만으로도 충분할 수 있다.  
+하지만 microservices, 다중 node, traffic 증가, 장애 복구, rolling update, service discovery가 필요해지는 순간 Kubernetes가 필요해진다.
+
+---
+
+## Docker와 Kubernetes의 역할 구분
+
+| 구분 | Docker | Kubernetes |
+|---|---|---|
+| 핵심 역할 | 애플리케이션을 container image로 packaging하고 실행 | 여러 containerized workload를 cluster 단위로 배포하고 운영 |
+| 주요 관심사 | image build, image tag, registry push/pull, container run | scheduling, desired state, replica 유지, self-healing, service discovery |
+| 운영 단위 | 개별 container | Pod, Deployment, Service, Node, Cluster |
+| 사고방식 | `docker run`으로 container 실행 | YAML manifest로 desired state 선언 |
+| 적합한 상황 | 개발 환경, local test, 단일 서버, 작은 배포 | production, multi-node, microservices, 자동 복구, scale-out |
+| 한계 | 다수 서버와 다수 container 관리가 복잡해짐 | cluster 운영 자체의 학습 비용과 복잡도가 있음 |
+
+핵심 문장으로 정리하면 다음과 같다.
+
+> Docker는 애플리케이션을 어떻게 포장하고 실행할 것인가에 가깝고, Kubernetes는 포장된 애플리케이션을 여러 서버에서 어떻게 안정적으로 굴릴 것인가에 가깝다.
+
+---
+
+## Cloud-Native Application 예시
+
+단순한 웹 서버 하나가 아니라 여러 component로 구성된 cloud-native application을 생각해보자.
+
+```text
+User
+  ↓
+React Frontend
+  ↓
+Node.js Backend
+  ↓             ↓
+Java DB Layer   Python Flask External API Layer
+  ↓             ↓
+Database        External API
+```
+
+이 구조에서는 각 component의 역할과 부하 특성이 다르다.
+
+| Component | 예시 역할 | 운영상 고려할 점 |
+|---|---|---|
+| React Frontend | 사용자 UI 제공 | 정적 파일 제공, frontend traffic 증가 대응 |
+| Node.js Backend | API 요청 처리 | request 처리량, latency, horizontal scaling |
+| Java DB Layer | database access 처리 | connection pool, transaction, database 부하 |
+| Python Flask Layer | 외부 API 호출 또는 별도 business logic | timeout, retry, 외부 dependency 장애 |
+
+이런 구조에서는 모든 component를 같은 방식으로 확장할 수 없다.
+
+예를 들어 frontend 요청이 많아졌다고 해서 database access layer까지 같은 비율로 늘릴 필요는 없다. 반대로 외부 API 호출이 병목이면 Python Flask layer만 독립적으로 늘려야 할 수도 있다.
+
+Docker는 이 component들을 각각 독립적인 image로 만들 수 있게 해준다.
+
+```text
+frontend: react-app:v1
+backend: node-api:v1
+db-access: java-db-service:v1
+external-api: flask-api-worker:v1
+```
+
+이렇게 image를 분리하면 각 component를 독립적으로 build, deploy, scale할 수 있다.  
+하지만 이 image들을 운영 환경에서 지속적으로 관리하는 문제는 별개의 문제다.
+
+---
+
+## Docker만 사용할 때의 기본 실행 구조
+
+단일 서버 기준 Docker 실행 구조는 대략 다음과 같다.
+
+```text
+Physical / Virtual Hardware
+  ↓
+Operating System, e.g. Ubuntu
+  ↓
+Docker Daemon
+  ↓
+Containers
+```
+
+개발자는 보통 다음 흐름으로 containerized application을 만든다.
+
+1. `Dockerfile` 작성
+2. image build
+3. image tag 지정
+4. registry push
+5. 운영 서버에서 image pull
+6. container 실행
+
+예시 `Dockerfile`은 다음과 같다.
+
+```dockerfile
+FROM node:20
+
+WORKDIR /app
+
+COPY package*.json ./
+RUN npm install
+
+COPY . .
+
+CMD ["npm", "start"]
+```
+
+image build와 push는 다음처럼 수행할 수 있다.
+
+```bash
+docker build -t my-api:v1 .
+docker tag my-api:v1 registry.example.com/my-api:v1
+docker push registry.example.com/my-api:v1
+```
+
+운영 서버에서 container를 실행하려면 다음처럼 실행할 수 있다.
+
+```bash
+docker run -d --name my-api -p 3000:3000 registry.example.com/my-api:v1
+```
+
+이 방식은 단일 container 또는 소규모 배포에서는 단순하고 직관적이다.
+
+그러나 production scale에서는 곧 다음 문제가 생긴다.
+
+```text
+container를 어느 서버에 띄울 것인가?
+CPU와 memory가 남는 node는 어디인가?
+container가 죽으면 누가 다시 실행할 것인가?
+새 replica를 load balancer에 어떻게 반영할 것인가?
+새 버전 배포 중 기존 요청은 어떻게 유지할 것인가?
+container IP가 바뀌면 다른 component는 어떻게 찾아갈 것인가?
+```
+
+Docker는 container 실행을 쉽게 해주지만, cluster 전체의 운영 상태를 지속적으로 맞춰주는 시스템은 아니다.
+
+---
+
+## Docker-Only Scaling의 한계
+
+처음에는 Docker만으로도 scale-out이 가능해 보인다.
+
+```bash
+docker run -d --name frontend-1 frontend:v1
+docker run -d --name frontend-2 frontend:v1
+
+docker run -d --name api-1 api:v1
+docker run -d --name api-2 api:v1
+docker run -d --name api-3 api:v1
+```
+
+하지만 여러 서버를 사용하는 순간 운영자는 다음 작업을 직접 처리해야 한다.
+
+```text
+1. node별 CPU/memory 사용량 확인
+2. 여유 있는 node 선택
+3. 해당 node에서 image pull
+4. docker run 실행
+5. load balancer 설정 변경
+6. health check 등록
+7. 장애 발생 시 container 재시작
+8. 배포 실패 시 rollback
+9. 로그 수집
+10. traffic routing 확인
+```
+
+이 정도 작업은 처음에는 shell script로 처리할 수 있어 보인다.  
+하지만 scale이 커질수록 script는 점점 작은 orchestration system처럼 변한다.
+
+예를 들어 다음 요구사항을 생각해보자.
+
+```text
+frontend는 10개 replica가 필요하다.
+api는 20개 replica가 필요하다.
+worker는 queue 길이에 따라 5~50개 사이에서 변해야 한다.
+특정 node가 장애 상태가 되면 해당 node의 container를 다른 node로 옮겨야 한다.
+새 버전을 배포할 때 전체 traffic을 한 번에 끊으면 안 된다.
+unhealthy container는 자동으로 traffic 대상에서 제외해야 한다.
+```
+
+이 문제는 더 이상 `docker run`을 몇 번 실행할지의 문제가 아니다.  
+cluster 전체의 desired state와 actual state를 지속적으로 맞추는 문제다.
+
+---
+
+## Kubernetes의 핵심 관점: Desired State
+
+Kubernetes의 핵심은 **desired state**를 선언하고, actual state가 그 상태에 가까워지도록 지속적으로 조정하는 것이다.
+
+Docker만 사용할 때는 보통 다음처럼 명령형으로 운영한다.
+
+```bash
+docker run ...
+docker stop ...
+docker rm ...
+docker run ...
+```
+
+Kubernetes에서는 다음처럼 선언형으로 운영한다.
+
+```text
+이 애플리케이션이 항상 3개 replica로 실행되게 하라.
+```
+
+즉, Kubernetes는 단순히 container를 실행하는 도구가 아니라 상태를 조정하는 시스템이다.
+
+```text
+Observe current state
+Compare with desired state
+Act to reduce difference
+Repeat
+```
+
+이 반복 과정을 통해 Kubernetes는 cluster가 사용자가 선언한 상태에 가까워지도록 유지한다.
+
+---
+
+## Kubernetes Cluster의 기본 구조
+
+Kubernetes를 도입하면 구조는 다음과 같이 바뀐다.
+
+```text
+Kubernetes Cluster
+├─ Control Plane
+│  ├─ API Server
+│  ├─ Scheduler
+│  ├─ Controller Manager
+│  └─ etcd
+│
+├─ Worker Node 1
+│  ├─ kubelet
+│  ├─ container runtime
+│  └─ Pods
+│
+├─ Worker Node 2
+│  ├─ kubelet
+│  ├─ container runtime
+│  └─ Pods
+│
+└─ Worker Node 3
+   ├─ kubelet
+   ├─ container runtime
+   └─ Pods
+```
+
+각 구성요소의 역할은 다음과 같이 볼 수 있다.
+
+| 구성요소 | 역할 |
+|---|---|
+| API Server | Kubernetes API 요청을 받는 중심 진입점 |
+| Scheduler | 새 Pod를 어느 node에 배치할지 결정 |
+| Controller Manager | desired state와 actual state를 비교하고 조정 |
+| etcd | cluster state 저장소 |
+| kubelet | 각 worker node에서 Pod 실행 상태 관리 |
+| container runtime | 실제 container 실행 담당 |
+| Pod | Kubernetes에서 container를 실행하는 기본 단위 |
+
+사용자는 개별 node에 직접 `docker run`을 실행하기보다, Kubernetes API에 원하는 상태를 선언한다.
+
+---
+
+## Deployment: Replica 수를 유지하는 리소스
+
+Kubernetes에서 application replica를 관리할 때 대표적으로 사용하는 리소스가 **Deployment**다.
+
+예를 들어 React frontend를 8개 replica로 유지하고 싶다면 다음처럼 선언할 수 있다.
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: react-frontend
+spec:
+  replicas: 8
+  selector:
+    matchLabels:
+      app: react-frontend
+  template:
+    metadata:
+      labels:
+        app: react-frontend
+    spec:
+      containers:
+        - name: react-frontend
+          image: registry.example.com/react-frontend:v1
+          ports:
+            - containerPort: 80
+```
+
+이 YAML의 의미는 다음과 같다.
+
+```text
+react-frontend라는 애플리케이션을
+항상 8개 replica로 유지하고
+각 replica는 registry.example.com/react-frontend:v1 image를 사용하며
+container 내부 80번 포트를 사용한다.
+```
+
+여기서 중요한 점은 사용자가 container를 8번 직접 실행하지 않는다는 것이다.  
+사용자는 “8개가 유지되어야 한다”는 상태를 선언하고, Kubernetes가 그 상태를 맞춘다.
+
+---
+
+## Self-Healing: 죽으면 다시 살린다
+
+Production 환경에서는 장애가 예외가 아니라 상수에 가깝다.
+
+```text
+container가 OOM으로 죽을 수 있다.
+node가 장애 상태가 될 수 있다.
+새 버전이 crash할 수 있다.
+network partition이 발생할 수 있다.
+disk pressure 때문에 Pod가 evict될 수 있다.
+```
+
+Kubernetes는 선언된 replica 수를 유지하기 위해 지속적으로 상태를 확인한다.
+
+예를 들어 desired state가 다음과 같다고 하자.
+
+```text
+api replica = 5
+```
+
+실제 상태에서 Pod 하나가 죽으면 actual state는 다음처럼 변한다.
+
+```text
+desired: 5
+actual: 4
+difference: +1
+```
+
+그러면 Kubernetes는 부족한 replica를 채우기 위해 새 Pod를 생성한다.
+
+```text
+action: create 1 new Pod
+```
+
+이것이 Kubernetes의 self-healing 개념이다.
+
+다만 주의할 점이 있다.  
+Kubernetes가 application bug 자체를 고쳐주는 것은 아니다.
+
+예를 들어 container 내부 코드가 잘못되어 계속 crash한다면 Kubernetes는 계속 재시작을 시도할 뿐이다. 이 경우에는 다음 정보를 통해 원인을 분석해야 한다.
+
+```bash
+kubectl get pods
+kubectl describe pod <pod-name>
+kubectl logs <pod-name>
+kubectl get events
+```
+
+Self-healing은 “항상 정상적인 애플리케이션으로 고쳐준다”는 의미가 아니라, **선언된 운영 상태를 유지하려고 자동으로 조치한다**는 의미에 가깝다.
+
+---
+
+## Service: Pod IP가 바뀌어도 안정적으로 접근하기
+
+Kubernetes에서 Pod는 ephemeral하다.  
+생성되고 삭제될 수 있으며, 새로 만들어진 Pod는 기존과 다른 IP를 가질 수 있다.
+
+예를 들어 backend Pod가 세 개 있다고 하자.
+
+```text
+api-pod-1: 10.244.1.10
+api-pod-2: 10.244.2.15
+api-pod-3: 10.244.3.21
+```
+
+이 중 `api-pod-2`가 죽고 새 Pod가 생기면 IP가 바뀔 수 있다.
+
+```text
+api-pod-2 old: 10.244.2.15
+api-pod-4 new: 10.244.4.33
+```
+
+Frontend가 backend Pod IP를 직접 바라보고 있었다면 장애가 발생한다.  
+따라서 Kubernetes에서는 **Service**를 사용해 안정적인 endpoint를 제공한다.
+
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: api-service
+spec:
+  selector:
+    app: api
+  ports:
+    - port: 80
+      targetPort: 3000
+```
+
+이제 frontend는 개별 Pod IP를 몰라도 된다.
+
+```text
+http://api-service
+```
+
+Service는 label selector를 기반으로 대상 Pod 집합을 찾는다.
+
+```text
+Service selector:
+  app: api
+
+Matching Pods:
+  api-pod-1
+  api-pod-2
+  api-pod-3
+```
+
+Pod가 삭제되고 새로 만들어져도 label이 같다면 Service 뒤에 자동으로 연결될 수 있다.  
+이 구조 덕분에 application code는 개별 Pod IP가 아니라 안정적인 service name을 바라볼 수 있다.
+
+---
+
+## Service Discovery와 Internal DNS
+
+Kubernetes 환경에서는 component 간 통신에서 IP를 직접 박아 넣는 방식은 피해야 한다.
+
+부적절한 방식은 다음과 같다.
+
+```text
+http://10.244.2.15:3000
+```
+
+더 적절한 방식은 Service name을 사용하는 것이다.
+
+```text
+http://api-service
+```
+
+또는 namespace까지 명시해야 하는 경우 다음처럼 사용할 수 있다.
+
+```text
+http://api-service.default.svc.cluster.local
+```
+
+이 방식은 다음 장점이 있다.
+
+| 장점 | 설명 |
+|---|---|
+| 안정적인 이름 | Pod IP가 바뀌어도 호출 주소를 유지할 수 있음 |
+| 느슨한 결합 | frontend가 backend replica의 구체적인 IP를 몰라도 됨 |
+| scale-out 대응 | backend replica가 늘어나도 호출 방식이 바뀌지 않음 |
+| 장애 대응 | unhealthy Pod를 service endpoint에서 제외할 수 있음 |
+| 운영 단순화 | application code와 runtime topology를 분리할 수 있음 |
+
+---
+
+## Rolling Update 관점에서의 차이
+
+Docker-only 방식으로 새 버전을 배포하려면 운영자가 순서를 직접 제어해야 한다.
+
+```text
+1. 기존 container 중 일부 중지
+2. 새 image pull
+3. 새 container 실행
+4. health check 확인
+5. load balancer 대상 전환
+6. 나머지 container 반복 교체
+7. 문제 발생 시 rollback
+```
+
+Kubernetes에서는 Deployment의 image tag를 변경하거나 manifest를 수정해 rollout을 진행할 수 있다.
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+spec:
+  replicas: 3
+  template:
+    spec:
+      containers:
+        - name: api
+          image: registry.example.com/api:v2
+```
+
+운영상 핵심은 “새 버전 container를 실행한다”가 아니라, **서비스 중단 없이 desired state를 새 버전으로 바꾼다**는 점이다.
+
+검증에 사용할 수 있는 명령은 다음과 같다.
+
+```bash
+kubectl rollout status deployment/api
+kubectl rollout history deployment/api
+kubectl get pods -l app=api
+```
+
+문제가 있을 경우 rollback을 고려할 수 있다.
+
+```bash
+kubectl rollout undo deployment/api
+```
+
+---
+
+## Monitoring과 Observability 관점
+
+Kubernetes 기본 명령만으로도 Pod와 Node 상태를 확인할 수 있다.
+
+```bash
+kubectl get pods
+kubectl describe pod <pod-name>
+kubectl logs <pod-name>
+kubectl top pod
+kubectl top node
+```
+
+하지만 production 운영에서는 단순히 Pod가 떠 있는지만으로는 충분하지 않다.
+
+확인해야 할 지표는 더 다양하다.
+
+```text
+요청 latency가 증가했는가?
+어느 service 간 호출에서 병목이 생겼는가?
+특정 version 배포 이후 error rate가 증가했는가?
+service A에서 service B로 가는 traffic 중 몇 %가 실패하는가?
+timeout은 network 문제인가 application 문제인가?
+특정 request가 여러 microservice를 거치며 어디에서 느려지는가?
+```
+
+이런 지점에서 observability stack이 필요해진다.
+
+| 영역 | 예시 |
+|---|---|
+| Metrics | CPU, memory, request rate, error rate, latency |
+| Logs | application log, container log, event log |
+| Traces | service 간 호출 경로와 지연 시간 |
+| Traffic Policy | retry, timeout, circuit breaking, traffic split |
+| Security | service-to-service mTLS, policy enforcement |
+
+Kubernetes는 container orchestration의 기반을 제공하지만, production 운영에서는 monitoring, logging, tracing, service mesh 같은 ecosystem을 함께 고려해야 한다.
+
+---
+
+## 최신 Kubernetes Runtime 관점에서 주의할 점
+
+개념적으로는 “Docker로 image를 만들고 Kubernetes로 운영한다”고 설명할 수 있다.  
+다만 운영 환경에서는 다음 구분이 필요하다.
+
+```text
+Docker as developer tool:
+  여전히 image build와 local container workflow에서 유용하다.
+
+Docker image / OCI image:
+  Kubernetes에서 계속 사용할 수 있다.
+
+Docker Engine as Kubernetes runtime:
+  최신 Kubernetes에서는 직접 runtime으로 사용하는 구조가 일반적이지 않다.
+
+Kubernetes runtime:
+  containerd, CRI-O 등 CRI-compatible runtime을 사용한다.
+```
+
+즉, Docker로 만든 image를 Kubernetes에서 사용할 수 없다는 뜻이 아니다.  
+중요한 것은 Kubernetes가 cluster에서 container를 실행할 때 Docker Engine 자체를 직접 전제로 삼지 않는다는 점이다.
+
+운영 관점에서는 다음처럼 구분하면 좋다.
+
+| 질문 | 답 |
+|---|---|
+| Docker로 image를 build해도 되는가? | 가능 |
+| Docker image를 registry에 push해도 되는가? | 가능 |
+| Kubernetes가 그 image를 pull해서 실행할 수 있는가? | 가능 |
+| Kubernetes worker node에 반드시 Docker Engine이 있어야 하는가? | 확인 필요. 보통은 containerd 또는 CRI-O를 사용 |
+| Docker와 Kubernetes가 경쟁 관계인가? | 아님. 역할이 다름 |
+
+---
+
+## 전체 배포 흐름 예시
+
+아래는 Docker와 Kubernetes가 각각 어느 단계에서 등장하는지 보여주는 흐름이다.
+
+### 1. Docker로 image 생성
+
+```bash
+docker build -t registry.example.com/api:v1 .
+docker push registry.example.com/api:v1
+```
+
+이 단계에서 중요한 것은 application code, runtime, dependency, 실행 명령을 image로 묶는 것이다.
+
+```text
+Source Code
+  ↓
+Dockerfile
+  ↓
+Docker Image
+  ↓
+Registry
+```
+
+### 2. Kubernetes에 Deployment 선언
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: api
+  template:
+    metadata:
+      labels:
+        app: api
+    spec:
+      containers:
+        - name: api
+          image: registry.example.com/api:v1
+          ports:
+            - containerPort: 3000
+```
+
+이 단계에서 중요한 것은 “api container를 3개 직접 실행한다”가 아니라 “api workload가 항상 3개 replica로 유지되도록 선언한다”는 점이다.
+
+### 3. Kubernetes Service로 안정적인 접근점 제공
+
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: api
+spec:
+  selector:
+    app: api
+  ports:
+    - port: 80
+      targetPort: 3000
+```
+
+이제 다른 component는 다음 이름으로 접근할 수 있다.
+
+```text
+http://api
+```
+
+### 4. 장애 발생 시 Kubernetes가 상태 조정
+
+```text
+desired: 3
+actual: 2
+action: create 1 new Pod
+```
+
+Kubernetes의 핵심 가치는 바로 이 상태 조정에 있다.
+
+---
+
+## Docker만으로 충분한 경우와 Kubernetes가 필요한 경우
+
+| 상황 | Docker만으로 충분할 가능성 | Kubernetes가 유리한 경우 |
+|---|---:|---:|
+| local development | 높음 | 낮음 |
+| 단일 container test | 높음 | 낮음 |
+| 단일 서버에 작은 서비스 배포 | 중간 | 낮음~중간 |
+| 여러 microservice 운영 | 낮음 | 높음 |
+| 여러 node에 workload 분산 | 낮음 | 높음 |
+| replica 자동 복구 | 낮음 | 높음 |
+| rolling update / rollback | 낮음~중간 | 높음 |
+| service discovery | 낮음 | 높음 |
+| autoscaling | 낮음 | 높음 |
+| production observability 연계 | 낮음~중간 | 높음 |
+
+Kubernetes를 도입해야 하는 기준은 “container를 쓰는가?”가 아니다.  
+기준은 “운영 복잡도가 container 단위 명령으로 감당 가능한 수준을 넘었는가?”에 가깝다.
+
+---
+
+## 자칫 실수하기 쉬운 부분
+
+### 1. Docker와 Kubernetes를 경쟁 관계로 이해하는 것
+
+Docker와 Kubernetes는 계층이 다르다.
+
+```text
+Docker:
+  image build와 개별 container 실행
+
+Kubernetes:
+  containerized workload의 cluster orchestration
+```
+
+따라서 “Docker vs Kubernetes”가 아니라 “Docker + Kubernetes workflow”로 보는 편이 더 정확하다.
+
+### 2. Kubernetes가 애플리케이션 문제를 자동으로 해결한다고 생각하는 것
+
+Kubernetes는 container를 재시작하고 replica를 맞출 수 있지만, application bug를 수정하지는 않는다.
+
+```text
+가능한 것:
+  죽은 Pod 재생성
+  replica 수 유지
+  unhealthy endpoint 제외
+  rollout 관리
+
+불가능한 것:
+  잘못된 business logic 수정
+  memory leak 원인 제거
+  database query 최적화
+  외부 API 장애 자체 해결
+```
+
+### 3. Pod IP에 직접 의존하는 것
+
+Pod IP는 고정된 식별자로 사용하면 안 된다.  
+Kubernetes에서는 Service name을 기준으로 통신해야 한다.
+
+```text
+피해야 할 방식:
+  http://10.244.2.15:3000
+
+권장 방식:
+  http://api-service
+```
+
+### 4. YAML을 단순 설정 파일로만 보는 것
+
+Kubernetes YAML은 단순 실행 옵션이 아니라 desired state 선언이다.
+
+```text
+명령형 사고:
+  이 container를 지금 실행해라.
+
+선언형 사고:
+  이 workload가 항상 이런 상태가 되게 유지해라.
+```
+
+이 차이를 이해해야 Deployment, ReplicaSet, Service, rollout, self-healing이 자연스럽게 연결된다.
+
+---
+
+## 검증 포인트
+
+Docker와 Kubernetes의 역할을 실제 환경에서 확인할 때는 다음 관점으로 검증할 수 있다.
+
+| 검증 항목 | 확인 방법 |
+|---|---|
+| image가 정상적으로 build되는가 | `docker build` |
+| image가 registry에 push되는가 | `docker push` |
+| Kubernetes가 image를 pull할 수 있는가 | `kubectl describe pod <pod-name>` |
+| replica 수가 유지되는가 | `kubectl get deployment` |
+| Pod 장애 시 재생성되는가 | Pod 삭제 후 `kubectl get pods -w` |
+| Service가 Pod 집합을 바라보는가 | `kubectl get endpoints` |
+| rollout 상태가 정상인가 | `kubectl rollout status deployment/<name>` |
+| application log가 정상인가 | `kubectl logs <pod-name>` |
+
+예시 명령은 다음과 같다.
+
+```bash
+kubectl get deployments
+kubectl get pods -o wide
+kubectl get svc
+kubectl get endpoints
+kubectl describe pod <pod-name>
+kubectl logs <pod-name>
+kubectl rollout status deployment/<deployment-name>
+```
+
+---
+
+## 정리
+
+Docker와 Kubernetes를 구분하는 가장 좋은 기준은 다음이다.
+
+```text
+Docker:
+  애플리케이션을 container image로 만들고 실행한다.
+
+Kubernetes:
+  그 containerized application을 cluster에서 원하는 상태로 유지한다.
+```
+
+Docker는 개발과 packaging 단계에서 매우 강력하고, Kubernetes는 production 운영 단계에서 강력하다.
+
+따라서 둘 중 하나를 선택하는 문제가 아니라, 다음 흐름으로 이해하는 것이 좋다.
+
+```text
+Source Code
+  ↓
+Dockerfile
+  ↓
+Docker Image
+  ↓
+Registry
+  ↓
+Kubernetes Deployment
+  ↓
+Pod Replica
+  ↓
+Service
+  ↓
+Self-Healing / Scaling / Rolling Update
+```
+
+운영 규모가 작을 때는 Docker만으로 충분할 수 있다.  
+그러나 여러 microservice, 여러 node, 자동 복구, 안정적인 service discovery, 무중단 배포가 필요해지면 Kubernetes의 orchestration model이 필요해진다.
