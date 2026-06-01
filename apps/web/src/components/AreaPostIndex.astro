@@ -15,12 +15,12 @@ const isDesktop = placement === "desktop";
 ---
 
 {shouldRender && (
-  <aside class={isDesktop ? "hidden xl:block" : "mb-8 xl:hidden"}>
+  <aside class={isDesktop ? "fixed right-4 top-28 z-30 hidden w-52 xl:block 2xl:right-10" : "mb-8 xl:hidden"}>
     <nav
       class:list={[
         "border border-white/10 bg-ink/90 p-3 shadow-[0_18px_50px_rgba(0,0,0,0.25)] backdrop-blur",
         isDesktop
-          ? "sticky top-24 max-h-[calc(100vh-7rem)] overflow-hidden opacity-35 transition duration-200 hover:opacity-100 focus-within:opacity-100"
+          ? "max-h-[calc(100vh-8rem)] overflow-hidden opacity-30 transition duration-200 hover:opacity-100 focus-within:opacity-100"
           : "opacity-90"
       ]}
       aria-label={`${area} posts`}
@@ -29,7 +29,7 @@ const isDesktop = placement === "desktop";
         <p class="font-mono text-[0.68rem] uppercase tracking-[0.18em] text-slate-500">{area}</p>
         <span class="font-mono text-[0.68rem] text-slate-600">{entries.length}</span>
       </div>
-      <ol class={isDesktop ? "mt-2 max-h-[calc(100vh-11rem)] space-y-1 overflow-y-auto pr-1" : "mt-2 grid gap-1 sm:grid-cols-2"}>
+      <ol class={isDesktop ? "mt-2 max-h-[calc(100vh-12rem)] space-y-1 overflow-y-auto pr-1" : "mt-2 grid gap-1 sm:grid-cols-2"}>
         {entries.map((entry) => {
           const isCurrent = entry.collection === currentEntry.collection && entry.slug === currentEntry.slug;
 
