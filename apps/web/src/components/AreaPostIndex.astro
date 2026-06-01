@@ -15,12 +15,12 @@ const isDesktop = placement === "desktop";
 ---
 
 {shouldRender && (
-  <aside class={isDesktop ? "fixed right-4 top-28 z-30 hidden w-52 xl:block 2xl:right-10" : "mb-8 xl:hidden"}>
+  <aside class={isDesktop ? "absolute inset-y-0 left-full z-30 ml-8 hidden w-48 xl:block 2xl:ml-10" : "mb-8 xl:hidden"}>
     <nav
       class:list={[
         "border border-white/10 bg-ink/90 p-3 shadow-[0_18px_50px_rgba(0,0,0,0.25)] backdrop-blur",
         isDesktop
-          ? "max-h-[calc(100vh-8rem)] overflow-hidden opacity-30 transition duration-200 hover:opacity-100 focus-within:opacity-100"
+          ? "sticky top-24 max-h-[min(32rem,calc(100vh-8rem))] overflow-hidden opacity-30 transition duration-200 hover:opacity-100 focus-within:opacity-100"
           : "opacity-90"
       ]}
       aria-label={`${area} posts`}
@@ -29,7 +29,7 @@ const isDesktop = placement === "desktop";
         <p class="font-mono text-[0.68rem] uppercase tracking-[0.18em] text-slate-500">{area}</p>
         <span class="font-mono text-[0.68rem] text-slate-600">{entries.length}</span>
       </div>
-      <ol class={isDesktop ? "mt-2 max-h-[calc(100vh-12rem)] space-y-1 overflow-y-auto pr-1" : "mt-2 grid gap-1 sm:grid-cols-2"}>
+      <ol class={isDesktop ? "mt-2 max-h-[min(27rem,calc(100vh-13rem))] space-y-1 overflow-y-auto pr-1" : "mt-2 grid gap-1 sm:grid-cols-2"}>
         {entries.map((entry) => {
           const isCurrent = entry.collection === currentEntry.collection && entry.slug === currentEntry.slug;
 
@@ -39,7 +39,8 @@ const isDesktop = placement === "desktop";
                 href={getCollectionUrl(entry)}
                 aria-current={isCurrent ? "page" : undefined}
                 class:list={[
-                  "block border px-2.5 py-2 text-xs leading-5 transition",
+                  "block border px-2.5 leading-5 transition",
+                  isDesktop ? "py-1.5 text-[0.7rem]" : "py-2 text-xs",
                   isCurrent
                     ? "border-signal/45 bg-signal/10 text-white"
                     : "border-transparent text-slate-500 hover:border-white/10 hover:bg-white/[0.035] hover:text-slate-200"

@@ -87,12 +87,12 @@ const collectionLabel = collectionLabels[entry.collection] ?? entry.collection;
         </div>
       )}
     </header>
-    <div class="mx-auto mt-10 max-w-3xl">
+    <div class="relative mx-auto mt-10 max-w-3xl">
       <AreaPostIndex currentEntry={entry} entries={areaEntries} placement="mobile" />
+      <AreaPostIndex currentEntry={entry} entries={areaEntries} placement="desktop" />
       <div class="prose-platform">
         <Content />
       </div>
     </div>
-    <AreaPostIndex currentEntry={entry} entries={areaEntries} placement="desktop" />
   </article>
 </BaseLayout>
