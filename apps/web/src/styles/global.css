@@ -29,6 +29,15 @@ a {
   color: inherit;
 }
 
+.scrollbar-none {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
 ::selection {
   background: rgba(102, 227, 255, 0.28);
 }
