@@ -1,0 +1,652 @@
+---
+area: "Edge Computing"
+type: "concept"
+series: "Edge Computing"
+title: "데이터 발생 지점에서 실행하는 분산 Workload"
+slug: "edge-computing-1-workload"
+date: "2026-06-01"
+updated: "2026-06-01"
+draft: false
+reviewed: true
+category: "DevOps"
+tags: ["edge-computing", "cloud-computing", "iot", "latency", "distributed-workload", "edge-cluster", "edge-device", "cloud-native"]
+description: "Edge Computing의 정의, Cloud와의 관계, workload 배치 기준, 운영 관점의 장점과 주의점을 정리한다."
+---
+## 개요
+
+**Edge Computing**은 data source와 action이 필요한 위치 가까이에 workload를 배치하는 distributed computing architecture다. 기존 cloud 중심 구조에서는 device, sensor, camera, application에서 발생한 데이터를 중앙 data center나 cloud region으로 보낸 뒤 처리한다. 반면 Edge Computing은 모든 데이터를 중앙으로 이동시키기 전에, 현장 가까이에서 먼저 계산하고 판단한다.
+
+핵심은 단순히 "현장에 작은 서버를 둔다"가 아니다. 더 정확히는 다음과 같은 기준으로 compute 위치를 재배치하는 것이다.
+
+```text
+데이터가 생성되는 위치
++ 판단이 필요한 위치
++ 실제 action이 수행되는 위치
+가까이에 workload를 배치한다.
+```
+
+즉 Edge Computing은 cloud를 대체하는 방식이 아니라, cloud의 기능 일부를 network edge로 확장하는 방식에 가깝다.
+
+---
+
+## 기본 정의
+
+Edge Computing은 다음 한 문장으로 정리할 수 있다.
+
+> 데이터를 중앙 cloud로 모두 끌고 가지 않고, 데이터가 생기는 곳 근처에서 먼저 처리하고 판단하는 분산 컴퓨팅 구조다.
+
+여기서 **edge**는 network의 가장자리를 의미한다. 중앙 cloud data center가 대규모 compute와 storage가 모여 있는 중심부라면, edge는 실제 business와 physical system이 동작하는 현장에 가깝다.
+
+대표적인 edge 위치는 다음과 같다.
+
+- 공장 내부의 local server
+- 매장 또는 지점의 edge node
+- 병원 내부의 local processing server
+- 차량 내부의 embedded compute
+- 통신 기지국 또는 telco edge
+- 창고, 항만, 광산, 농장 등의 현장 장비 근처
+- CCTV, sensor, gateway와 가까운 local cluster
+
+이 구조에서는 raw data 전체를 중앙으로 보내기보다, edge에서 먼저 filtering, inference, aggregation, event detection을 수행한다. 이후 필요한 결과, 요약 정보, metadata, 장기 분석용 데이터만 cloud로 전송한다.
+
+---
+
+## Cloud Computing과 Edge Computing의 관계
+
+Edge Computing은 Cloud Computing의 반대 개념이 아니다. 실제 운영 구조에서는 대부분 cloud와 edge가 함께 사용된다.
+
+| 구분 | Cloud 중심 구조 | Edge Computing 구조 |
+| --- | --- | --- |
+| 주요 처리 위치 | 중앙 data center, public cloud region | 데이터 발생 지점 근처 |
+| 강점 | 대규모 compute, storage, centralized management | low latency, local decision, bandwidth 절감 |
+| 약점 | network 왕복 지연, data transfer cost, 연결 의존성 | 분산 운영 복잡도, 제한된 local resource |
+| 적합한 작업 | model training, batch analytics, 장기 저장, global coordination | real-time inference, local filtering, 현장 제어, 빠른 event 판단 |
+
+현실적인 시스템에서는 다음과 같이 역할을 나누는 경우가 많다.
+
+```text
+Edge:
+  - 빠른 local decision
+  - sensor data filtering
+  - AI inference
+  - event detection
+  - 현장 제어
+  - 임시 저장과 local buffering
+
+Cloud:
+  - 대규모 model training
+  - 장기 저장
+  - global analytics
+  - fleet management
+  - policy 관리
+  - software update 배포
+  - 전체 observability dashboard
+```
+
+따라서 Edge Computing을 이해할 때 중요한 관점은 "cloud를 버린다"가 아니라 **cloud에서 하던 작업 중 일부를 edge로 내려보낸다**는 것이다.
+
+---
+
+## Mental Model
+
+Edge Computing의 기본 흐름은 다음과 같이 볼 수 있다.
+
+```text
+Edge Device / Sensor
+        ↓
+Edge Gateway
+        ↓
+Local Edge Server or Edge Cluster
+        ↓
+Central Cloud / Data Center
+```
+
+각 계층의 역할은 다르다.
+
+| 계층 | 역할 |
+| --- | --- |
+| Edge Device | 데이터가 처음 발생하는 지점 |
+| Edge Gateway | protocol 변환, buffering, local filtering, 보안 경계 |
+| Edge Server / Edge Cluster | inference, stream processing, local API, event 판단 |
+| Central Cloud | 장기 저장, 학습, global management, 정책 배포 |
+
+이 구조에서 edge는 단순 중계 계층이 아니라, 의미 있는 계산을 수행하는 active compute layer다.
+
+---
+
+## Workload를 Edge에 둔다는 의미
+
+"workload를 edge에 둔다"는 말은 단순히 application binary 하나를 현장 서버에 복사한다는 뜻이 아니다. 실제로는 현장에서 필요한 application stack의 일부를 edge location에 배치한다는 의미다.
+
+Edge에 배치될 수 있는 workload 예시는 다음과 같다.
+
+- sensor data 수집 agent
+- stream processing pipeline
+- AI inference service
+- local database 또는 cache
+- message broker
+- device control service
+- event filtering logic
+- authentication 또는 security agent
+- observability collector
+- OTA update agent
+- container runtime 위의 microservice
+
+예를 들어 공장 생산라인에서 camera 기반 불량 검출을 수행한다면 edge workload는 다음과 같은 흐름을 가질 수 있다.
+
+```text
+camera input collector
+→ frame preprocessing
+→ defect detection model inference
+→ event decision service
+→ actuator control API
+→ local event log storage
+→ selected metadata upload to cloud
+```
+
+이때 모든 raw video를 cloud로 보내지 않는다. edge에서 먼저 분석하고, 불량 발생 여부나 이상 이벤트 같은 의미 있는 결과만 중앙으로 전송한다.
+
+---
+
+## Edge Computing이 필요한 이유
+
+Edge Computing이 필요한 이유는 cloud가 부족해서가 아니다. 정확히는 cloud만으로 처리하기 어려운 workload가 늘어났기 때문이다.
+
+IoT device, camera, sensor, mobile device, industrial equipment가 증가하면 다음 문제가 커진다.
+
+1. latency가 커진다.
+2. bandwidth 사용량이 커진다.
+3. network 연결 장애에 취약해진다.
+4. privacy와 compliance 부담이 커진다.
+5. 현장 action이 늦어진다.
+
+Edge Computing은 이 문제들을 data source 근처의 local compute로 완화한다.
+
+---
+
+## 해결하는 핵심 문제
+
+### 1. Latency
+
+가장 직관적인 효과는 latency 감소다.
+
+Cloud 중심 구조에서는 request와 data가 다음 경로를 거친다.
+
+```text
+Device → Network → Cloud Region → Processing → Network → Device
+```
+
+Edge Computing 구조에서는 경로가 짧아진다.
+
+```text
+Device → Local Edge Node → Device
+```
+
+이 차이는 단순히 응답 속도가 조금 빨라지는 수준이 아니다. 일부 workload에서는 architecture 자체의 가능 여부를 결정한다.
+
+대표적으로 다음 영역은 빠른 local decision이 중요하다.
+
+- industrial safety shutdown
+- robot arm 제어
+- 자율주행 판단
+- 충돌 회피
+- 환자 monitoring alert
+- AR/VR interaction
+- real-time anomaly detection
+
+이런 시스템에서는 cloud 왕복 지연이 허용되지 않을 수 있다.
+
+### 2. Bandwidth
+
+고해상도 영상, sensor telemetry, vibration data, LiDAR, CCTV stream을 모두 cloud로 보내면 network 비용과 병목이 커진다.
+
+Edge에서는 raw data를 먼저 줄일 수 있다.
+
+```text
+raw data 전체 전송
+→ edge에서 filtering
+→ event, summary, metadata만 전송
+```
+
+예를 들어 24시간 CCTV 영상을 모두 전송하는 대신, edge에서 object detection이나 event detection을 수행한 뒤 필요한 clip 또는 metadata만 올릴 수 있다. 이 방식은 bandwidth 사용량을 줄이고, cloud storage와 downstream processing 비용도 줄인다.
+
+### 3. Connectivity
+
+모든 현장이 안정적인 network를 갖고 있지는 않다.
+
+다음 환경에서는 cloud와의 연결이 불안정하거나 latency가 크다.
+
+- 선박
+- 항공
+- 광산
+- 농장
+- 재난 현장
+- 지하 시설
+- 원격 공장
+- 우주 환경
+- 통신 상태가 불안정한 현장
+
+이런 환경에서는 cloud 연결이 끊겨도 local operation이 계속되어야 한다. Edge Computing은 local autonomy를 제공한다.
+
+예를 들어 물류 창고의 edge system은 중앙 cloud와 연결이 끊겨도 barcode scan, robot routing, local inventory update를 계속 수행할 수 있다. 이후 연결이 복구되면 중앙 시스템과 동기화한다.
+
+### 4. Data Governance와 Privacy
+
+의료, 금융, 공공, 제조 기밀 데이터는 무조건 중앙 cloud로 보내기 어렵다. data residency, compliance, 개인정보 보호, 산업 기밀 문제가 있기 때문이다.
+
+Edge Computing을 사용하면 민감한 raw data를 local에 유지하고, 익명화된 결과나 aggregate data만 중앙으로 보낼 수 있다.
+
+예시는 다음과 같다.
+
+```text
+민감한 raw image 또는 sensor data
+→ edge에서 local processing
+→ 익명화된 결과, event, 통계치만 cloud 전송
+```
+
+이 방식은 data control을 강화하고, 불필요한 민감 데이터 이동을 줄인다.
+
+---
+
+## 주요 구성요소
+
+### Edge Device
+
+**Edge Device**는 데이터가 처음 발생하는 장치다.
+
+예시는 다음과 같다.
+
+- sensor
+- CCTV camera
+- smartphone
+- wearable device
+- industrial robot
+- PLC
+- autonomous vehicle
+- medical device
+- smart meter
+- drone
+
+일부 edge device는 자체 compute resource를 갖고 직접 inference나 filtering을 수행할 수 있다. 반면 일부 device는 단순히 데이터를 수집해 gateway나 local server로 전달한다.
+
+### Edge Gateway
+
+**Edge Gateway**는 edge device와 local server 또는 cloud 사이의 중간 계층이다.
+
+주요 역할은 다음과 같다.
+
+- protocol translation
+- local buffering
+- lightweight filtering
+- security boundary
+- device aggregation
+- network routing
+- temporary store-and-forward
+
+공장 환경에서는 장비가 `Modbus`, `OPC-UA`, `CAN`, serial 통신 등 다양한 protocol을 사용할 수 있다. edge gateway는 이런 현장 protocol을 application이 처리 가능한 형태로 변환하는 역할을 한다.
+
+### Edge Server / Edge Cluster
+
+**Edge Server** 또는 **Edge Cluster**는 실질적인 compute workload가 실행되는 위치다.
+
+예시는 다음과 같다.
+
+- mini PC
+- industrial PC
+- rack server
+- telco MEC server
+- small Kubernetes cluster
+- k3s 기반 local cluster
+- GPU 또는 NPU가 포함된 edge box
+
+여기서는 AI inference, stream processing, local database, cache, API service, control plane agent 등이 실행될 수 있다.
+
+### Central Cloud / Data Center
+
+Cloud는 edge 구조에서도 계속 중요한 역할을 담당한다.
+
+주요 역할은 다음과 같다.
+
+- model training
+- global analytics
+- long-term storage
+- fleet management
+- edge node 상태 모니터링
+- policy 관리
+- software update 배포
+- 보안 패치 관리
+- 전체 dashboard 구성
+
+Edge가 local decision을 담당한다면, cloud는 global intelligence와 centralized governance를 담당한다.
+
+---
+
+## 대표 Use Case
+
+### Smart Factory
+
+Smart Factory에서는 edge가 특히 중요하다. 공장에는 vibration sensor, temperature sensor, pressure sensor, camera, robot arm, PLC, conveyor belt 같은 장비가 많다.
+
+Edge server는 다음을 수행할 수 있다.
+
+```text
+장비 센서 데이터 수집
+→ 이상 패턴 감지
+→ 고장 예측
+→ 불량품 판정
+→ 생산라인 속도 조절
+→ 위험 상황 시 즉시 정지
+```
+
+이 환경에서는 분석 결과가 실제 physical action으로 이어진다. 따라서 latency가 낮아야 하고, network 장애 상황에서도 local operation이 유지되어야 한다.
+
+### Retail
+
+Retail 환경에서는 POS, inventory sensor, camera, digital signage, customer behavior data가 발생한다.
+
+Edge Computing을 사용하면 매장 내부에서 다음 작업을 수행할 수 있다.
+
+- 혼잡도 분석
+- 재고 상태 감지
+- 고객 동선 분석
+- queue length 측정
+- self-checkout 안내
+- local event 기반 signage 변경
+
+이 경우 edge는 매장 단위의 빠른 판단 계층으로 동작한다.
+
+### Healthcare
+
+Healthcare에서는 privacy와 latency가 모두 중요하다.
+
+예시는 다음과 같다.
+
+- remote patient monitoring
+- wearable health device
+- 의료 영상 local preprocessing
+- 응급 alert 판단
+- 병원 내부 민감 데이터 처리
+
+모든 health data를 중앙으로 보내는 대신, edge에서 먼저 이상 징후를 감지하고 필요한 event만 전송할 수 있다.
+
+### Transportation
+
+Transportation 영역에서는 차량, 도로 인프라, fleet tracking system이 많은 데이터를 만든다.
+
+자율주행 또는 운행 보조 시스템에서는 다음 흐름이 중요하다.
+
+```text
+차량 sensor data
+→ local perception
+→ object detection
+→ path planning
+→ braking / steering decision
+```
+
+이런 판단은 cloud 왕복에 의존하기 어렵다. 따라서 차량 내부 또는 도로 인프라 근처의 edge compute가 중요해진다.
+
+### Telecommunications와 MEC
+
+5G 환경에서 Edge Computing은 **MEC**(Multi-access Edge Computing)와 연결된다.
+
+무선 구간이 빨라져도 application server가 멀리 있으면 전체 latency는 줄어들지 않는다. 따라서 telco 사업자는 기지국, central office, regional data center 근처에 compute resource를 배치해 low latency service를 제공하려고 한다.
+
+MEC는 다음 use case와 연결될 수 있다.
+
+- mobile gaming
+- AR/VR
+- real-time video analytics
+- smart city
+- connected vehicle
+- telco network automation
+
+### Entertainment와 Streaming
+
+Streaming과 gaming에서도 edge는 중요하다.
+
+대표적으로 CDN은 edge caching의 한 형태로 볼 수 있다. 사용자가 자주 요청하는 content를 사용자 가까운 위치에 cache하면 origin server까지 매번 요청하지 않아도 된다.
+
+Gaming이나 cloud gaming에서는 input latency가 사용자 경험을 크게 좌우한다. 사용자 가까이에 edge server를 두면 rendering, session state, content delivery를 더 빠르게 처리할 수 있다.
+
+---
+
+## DevOps 관점에서의 Edge Computing
+
+DevOps 관점에서 Edge Computing은 결국 **분산된 여러 site에 workload를 배포하고 관리하는 문제**다.
+
+중앙 cloud에서는 cluster 하나 또는 소수의 region을 관리하면 된다. 그러나 edge 환경에서는 다음과 같이 많은 site가 존재할 수 있다.
+
+```text
+공장 A edge cluster
+공장 B edge cluster
+매장 1 edge node
+매장 2 edge node
+기지국 근처 MEC node
+물류센터 edge server
+차량 내부 embedded compute
+```
+
+이때 각 site는 hardware, network, security policy, device protocol이 다를 수 있다. 따라서 Edge Computing의 운영 난점은 application 실행 자체보다 **배포, 업데이트, 모니터링, 보안, 장애 복구를 대규모로 관리하는 것**에 있다.
+
+### 운영자가 고려해야 할 질문
+
+Edge workload를 운영할 때는 다음 질문이 중요하다.
+
+- 어떤 site에 어떤 application version을 배포할 것인가?
+- 어떤 site에 어떤 model version을 배포할 것인가?
+- network가 끊긴 상태에서도 local service가 계속 동작하는가?
+- container image는 어디서 pull할 것인가?
+- 중앙 registry가 보이지 않을 때 fallback 전략은 있는가?
+- log와 metric은 local에 얼마나 보관할 것인가?
+- offline 상태였다가 복귀한 node는 어떻게 reconcile할 것인가?
+- 보안 패치와 certificate rotation은 어떻게 강제할 것인가?
+- model drift 또는 local anomaly는 어떻게 감지할 것인가?
+
+Edge Computing은 cloud-native의 연장선에 있지만, 단순한 cloud-native 운영보다 더 까다롭다. network와 node 상태를 항상 안정적이라고 가정할 수 없기 때문이다.
+
+---
+
+## Edge Native 운영에서 자주 부딪히는 문제
+
+### Resource Constraint
+
+Edge node는 cloud server만큼 강력하지 않은 경우가 많다. CPU, memory, storage, GPU, NPU, power budget이 제한될 수 있다.
+
+따라서 cloud에서 잘 동작하던 application이나 model이 edge에서는 무겁게 느껴질 수 있다. Edge AI에서는 다음 최적화가 중요해질 수 있다.
+
+- model quantization
+- pruning
+- distillation
+- batching 최적화
+- lightweight runtime 사용
+- local cache 최적화
+
+### Heterogeneity
+
+Edge 환경에서는 hardware가 균일하지 않을 수 있다.
+
+예시는 다음과 같다.
+
+```text
+x86 server
+ARM device
+NVIDIA Jetson
+Intel NUC
+industrial PC
+Raspberry Pi
+telco MEC server
+GPU-equipped edge box
+```
+
+이 차이는 container image architecture, driver, runtime, accelerator, OS patch 전략에 영향을 준다.
+
+### Offline Tolerance
+
+Edge node는 항상 online이라고 가정할 수 없다. 따라서 중앙 control plane이 일시적으로 보이지 않아도 local workload는 계속 동작해야 한다.
+
+이 관점에서 edge 운영은 다음 속성을 가져야 한다.
+
+- local desired state 유지
+- offline buffering
+- delayed sync
+- idempotent update
+- reconnect 이후 상태 reconciliation
+- local-first failure handling
+
+### Security
+
+Edge device와 edge node는 물리적으로 보호되지 않는 위치에 있을 수 있다. 따라서 cloud data center보다 공격 표면이 넓어질 수 있다.
+
+주의해야 할 보안 항목은 다음과 같다.
+
+- device identity
+- secure boot
+- TPM
+- mutual TLS
+- certificate rotation
+- zero trust access
+- image signing
+- SBOM
+- runtime security
+- local data encryption
+- remote wipe
+
+Edge 환경에서는 software security뿐 아니라 physical security도 함께 고려해야 한다.
+
+### Observability
+
+수많은 edge node에서 발생하는 log와 metric을 모두 실시간으로 중앙에 보내면 bandwidth가 커질 수 있다.
+
+따라서 edge observability는 다음 방식을 고려해야 한다.
+
+```text
+local aggregation
+event-based upload
+sampling
+priority-based log shipping
+offline buffer
+central dashboard
+```
+
+중요한 것은 모든 raw log를 중앙화하는 것이 아니라, 운영 판단에 필요한 signal을 안정적으로 수집하는 것이다.
+
+---
+
+## Cloud-Native와 Edge-Native의 차이
+
+| 구분 | Cloud-Native | Edge-Native |
+| --- | --- | --- |
+| 기본 환경 | 안정적인 data center 또는 cloud region | 분산된 현장, 제한된 network |
+| node 관리 | 비교적 균일한 infrastructure | hardware heterogeneity가 큼 |
+| network 가정 | 중앙 control plane 접근 가능성이 높음 | offline 또는 intermittent connection 가능 |
+| 배포 단위 | cluster, namespace, service 중심 | site, device group, local cluster 중심 |
+| observability | 중앙 수집이 비교적 쉬움 | local aggregation과 delayed sync 필요 |
+| 장애 대응 | 중앙 orchestration 기반 | local autonomy와 fallback 중요 |
+| 보안 관점 | logical security 중심 | logical security + physical exposure 고려 |
+
+Cloud-Native가 data center 내부의 orchestration 문제에 가깝다면, Edge-Native는 불안정하고 이질적인 현장에 workload를 안전하게 배포하고 운영하는 문제에 가깝다.
+
+---
+
+## 자칫 실수하기 쉬운 부분
+
+### Edge Computing을 Cloud 대체재로 보는 것
+
+Edge는 cloud를 대체하지 않는다. Edge는 cloud와 함께 동작한다.
+
+```text
+Edge = local decision과 action
+Cloud = global management와 intelligence
+```
+
+이 역할 구분이 흐려지면 모든 것을 edge에서 처리하려 하거나, 반대로 모든 것을 cloud로 보내는 극단적인 설계가 될 수 있다.
+
+### Edge를 단순 Cache로만 보는 것
+
+CDN이나 cache는 edge의 한 형태일 수 있지만, Edge Computing 전체를 cache로만 보면 부족하다.
+
+Edge는 다음을 수행할 수 있다.
+
+- inference
+- filtering
+- control
+- event detection
+- local database
+- protocol translation
+- offline operation
+- security enforcement
+
+즉 edge는 단순 data copy 위치가 아니라 active compute layer다.
+
+### Latency만 강조하는 것
+
+Edge Computing은 latency만을 위한 구조가 아니다.
+
+함께 고려해야 할 요소는 다음과 같다.
+
+- bandwidth
+- reliability
+- privacy
+- compliance
+- data sovereignty
+- local autonomy
+- operation continuity
+
+Latency는 중요한 이유 중 하나일 뿐이다.
+
+### 운영 복잡도를 과소평가하는 것
+
+Edge node가 하나일 때는 단순해 보일 수 있다. 그러나 edge location이 많아지면 운영 난도가 급격히 커진다.
+
+특히 다음 영역은 초기에 설계하지 않으면 나중에 문제가 된다.
+
+- image distribution
+- remote update
+- certificate rotation
+- local log retention
+- offline recovery
+- site별 version skew
+- rollback strategy
+- hardware inventory
+- security patch rollout
+
+---
+
+## 설계 기준
+
+Edge Computing을 도입할 때는 다음 질문을 기준으로 판단할 수 있다.
+
+| 질문 | Edge가 유리한 경우 |
+| --- | --- |
+| latency가 중요한가? | 실시간 제어, 응급 alert, interactive service |
+| raw data 양이 큰가? | video, LiDAR, sensor stream, telemetry |
+| network가 불안정한가? | 원격지, 이동체, 현장 설비 |
+| 민감 데이터가 있는가? | 의료, 금융, 공공, 제조 기밀 |
+| local action이 필요한가? | robot control, safety shutdown, 현장 자동화 |
+| cloud 비용이 부담되는가? | 대량 data transfer, 장기 raw data 저장 |
+| site가 여러 개인가? | 매장, 공장, 기지국, 물류센터 |
+
+반대로 다음 경우에는 edge가 반드시 필요한 것은 아닐 수 있다.
+
+- latency 요구사항이 낮은 batch workload
+- 데이터 양이 작고 중앙 수집 비용이 낮은 경우
+- local action 없이 분석만 수행하는 경우
+- hardware와 운영 인력을 현장에 둘 수 없는 경우
+- centralized governance가 훨씬 중요한 경우
+
+---
+
+## 요약
+
+Edge Computing은 data source와 action point 가까이에 workload를 배치해 latency, bandwidth, connectivity, privacy 문제를 완화하는 distributed computing architecture다.
+
+핵심은 다음과 같다.
+
+- Edge는 cloud의 대체재가 아니라 확장이다.
+- Edge는 data가 생기는 위치 근처에서 먼저 판단한다.
+- Edge는 raw data를 event, summary, metadata로 줄이는 data reduction layer로 동작할 수 있다.
+- Edge는 실시간 action이 필요한 workload에서 특히 중요하다.
+- Edge 운영의 핵심 난점은 분산된 site에 workload를 안정적으로 배포, 업데이트, 모니터링, 복구하는 것이다.
+- DevOps 관점에서는 Edge Computing을 edge-native workload lifecycle 관리 문제로 보는 것이 중요하다.
+
+결국 Edge Computing의 본질은 compute 위치의 재배치다. 모든 데이터를 중앙으로 보내는 대신, 데이터가 생성되는 현장에서 먼저 처리하고 필요한 결과만 중앙으로 올리는 구조를 통해 더 빠르고 안정적인 local decision을 만든다.
