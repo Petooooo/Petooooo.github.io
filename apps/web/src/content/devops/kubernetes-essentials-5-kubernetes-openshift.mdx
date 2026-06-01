@@ -1,0 +1,1264 @@
+---
+area: "Kubernetes"
+type: "concept"
+series: "Kubernetes Essentials"
+title: "Kubernetes Essentials 5장: Kubernetes와 OpenShift의 역할 구분"
+slug: "kubernetes-essentials-5-kubernetes-openshift"
+date: "2026-06-02"
+updated: "2026-06-02"
+draft: true
+reviewed: false
+category: "DevOps"
+tags: ["Kubernetes", "OpenShift", "Container Orchestration", "S2I", "ImageStream", "Route", "Security", "Platform Engineering"]
+description: "Kubernetes와 OpenShift의 포함 관계, platform 범위, developer workflow, build, routing, security, 운영 lifecycle 차이를 정리한다."
+---
+# Kubernetes Essentials 5장: Kubernetes와 OpenShift의 역할 구분
+
+Kubernetes와 OpenShift는 둘 다 containerized application을 배포하고 운영하는 영역에 속한다. 그래서 처음에는 두 기술이 서로 경쟁하는 대체재처럼 보일 수 있다. 하지만 더 정확한 관계는 다음에 가깝다.
+
+```text
+Kubernetes
+  → containerized workload를 배포, 스케줄링, 확장, 복구하는 orchestration layer
+
+OpenShift
+  → Kubernetes 위에 developer workflow, build, registry, routing, security,
+     console, operator, monitoring, upgrade, enterprise support를 통합한 platform
+```
+
+즉 **Kubernetes**는 container orchestration의 핵심 엔진이고, **OpenShift**는 Kubernetes를 기반으로 enterprise application platform을 구성한 제품/플랫폼이다.
+
+한 문장으로 정리하면 다음과 같다.
+
+```text
+Kubernetes는 container orchestration engine이고,
+OpenShift는 Kubernetes를 포함한 enterprise application platform이다.
+```
+
+---
+
+## 먼저 구분해야 할 질문
+
+“Kubernetes와 OpenShift 중 무엇을 써야 하는가?”라는 질문은 너무 단순하다. 실제 선택은 다음 질문으로 나눠야 한다.
+
+```text
+1. 순수한 container orchestration layer가 필요한가?
+2. 개발자가 source code에서 바로 배포까지 갈 수 있는 platform이 필요한가?
+3. 조직 차원의 보안 정책, 인증, 권한, 감사, upgrade 체계가 필요한가?
+4. on-premise 또는 hybrid cloud에서 표준화된 운영 경험이 필요한가?
+5. platform team이 Kubernetes add-on들을 직접 조합할 여력이 있는가?
+6. vendor support와 enterprise lifecycle이 중요한가?
+```
+
+Kubernetes는 “기본 조립 키트”에 가깝다. API, scheduler, controller, Pod, Deployment, Service, ConfigMap, Secret 같은 핵심 abstraction을 제공한다.
+
+OpenShift는 Kubernetes를 기반으로 “조립된 enterprise platform”에 가깝다. 기본 Kubernetes 위에 개발자 경험, 운영자 경험, 보안 기본값, image build, registry, route, web console, monitoring, automated upgrade, operator ecosystem을 더한다.
+
+---
+
+## Kubernetes는 무엇인가?
+
+Kubernetes는 containerized workloads와 services를 관리하기 위한 open-source container orchestration platform이다. 핵심은 **desired state 기반 orchestration**이다.
+
+사용자가 다음과 같은 상태를 선언한다고 하자.
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: api
+  template:
+    metadata:
+      labels:
+        app: api
+    spec:
+      containers:
+        - name: api
+          image: registry.example.com/api:1.0.0
+```
+
+이 선언의 의미는 다음이다.
+
+```text
+registry.example.com/api:1.0.0 image를 사용하는 Pod를
+항상 3개 유지해라.
+```
+
+Kubernetes는 이 desired state를 기준으로 cluster의 actual state를 조정한다.
+
+Kubernetes가 담당하는 대표적인 역할은 다음과 같다.
+
+```text
+Pod scheduling
+Replica 유지
+Self-healing
+Service discovery
+Load balancing
+Rolling update
+Config/Secret 주입
+Resource request/limit 기반 배치
+Namespace 기반 격리
+RBAC 기반 권한 제어
+```
+
+즉 Kubernetes는 container를 “몇 개, 어디에, 어떤 상태로” 실행할지 조정하는 control plane이다.
+
+다만 Kubernetes만 설치했다고 production-ready platform이 바로 완성되는 것은 아니다. 실제 운영에는 추가 요소가 필요하다.
+
+```text
+Ingress controller
+Container registry
+CI/CD pipeline
+Image build system
+Monitoring stack
+Logging stack
+Authentication integration
+Policy engine
+Security baseline
+Upgrade automation
+Developer portal
+Service mesh
+Backup/restore
+Storage class
+Network policy
+```
+
+Kubernetes는 확장성이 매우 큰 대신, 이런 구성요소를 어떤 방식으로 조합할지 운영자가 직접 결정해야 한다.
+
+---
+
+## OpenShift는 무엇인가?
+
+OpenShift는 Kubernetes 기반의 container application platform이다. 단순히 “Kubernetes 배포판”이라고만 말하면 부족하다. 더 정확히는 다음과 같다.
+
+```text
+OpenShift = Kubernetes + enterprise platform layer
+```
+
+OpenShift는 Kubernetes의 기본 object와 API를 사용한다.
+
+```text
+Pod
+Deployment
+Service
+ConfigMap
+Secret
+Namespace
+RBAC
+PersistentVolumeClaim
+```
+
+하지만 그 위에 OpenShift 특유의 기능과 운영 모델이 추가된다.
+
+```text
+Project
+Route
+BuildConfig
+ImageStream
+Source-to-Image
+Integrated registry
+Web console
+oc CLI
+Security Context Constraints
+Operator Lifecycle Manager
+Cluster Version Operator
+Integrated monitoring/logging
+Developer perspective
+Administrator perspective
+```
+
+즉 OpenShift를 쓰면 Kubernetes를 안 쓰는 것이 아니다. OpenShift 안에 Kubernetes가 있다.
+
+반대로 Kubernetes를 쓴다고 해서 OpenShift의 개발자 workflow, build system, image stream, route, web console, enterprise lifecycle, support가 자동으로 따라오는 것도 아니다.
+
+---
+
+## 관계를 단순하게 그리기
+
+Kubernetes와 OpenShift의 관계는 다음처럼 볼 수 있다.
+
+```text
+Kubernetes
+├─ API Server
+├─ Scheduler
+├─ Controller Manager
+├─ etcd
+├─ Pod
+├─ Deployment
+├─ Service
+├─ ConfigMap
+├─ Secret
+└─ RBAC
+
+OpenShift
+├─ Kubernetes core
+├─ Red Hat Enterprise Linux CoreOS / node OS integration
+├─ CRI-O based runtime layer
+├─ OpenShift Web Console
+├─ oc CLI
+├─ Projects
+├─ Routes
+├─ Builds / BuildConfig
+├─ ImageStreams
+├─ Integrated registry
+├─ Source-to-Image
+├─ Security Context Constraints
+├─ Operators / OperatorHub
+├─ Monitoring stack
+└─ Automated cluster upgrades
+```
+
+이 구조에서 가장 중요한 것은 포함 관계다.
+
+```text
+OpenShift를 쓴다
+  = Kubernetes를 포함한 enterprise platform을 쓴다.
+
+Kubernetes를 쓴다
+  = OpenShift의 추가 platform 기능이 자동으로 포함되는 것은 아니다.
+```
+
+---
+
+## 핵심 차이 1: Kubernetes는 엔진, OpenShift는 플랫폼
+
+가장 중요한 차이는 **scope**다.
+
+| 구분 | Kubernetes | OpenShift |
+|---|---|---|
+| 기본 성격 | Container orchestration engine | Kubernetes-based enterprise application platform |
+| 핵심 목적 | Workload scheduling, scaling, healing | App build, deploy, run, manage 통합 |
+| 제공 범위 | Core API와 controller 중심 | 개발자/운영자 workflow까지 포함 |
+| 조립 방식 | 필요한 add-on을 직접 선택 | opinionated default와 통합 기능 제공 |
+| 지원 모델 | open-source project 또는 managed KaaS | enterprise subscription/support 중심 |
+
+Kubernetes는 container를 운영하기 위한 표준 API와 control plane에 가깝다. OpenShift는 그 API 위에 enterprise platform을 조립해 제공한다.
+
+비유하면 다음과 같다.
+
+```text
+Kubernetes = 엔진, 변속기, 섀시
+OpenShift = 완성차 + 내비게이션 + 안전장치 + 정비 패키지 + 보증
+```
+
+Kubernetes를 직접 운영한다는 것은 필요한 부품을 선택해 platform을 조립하는 일에 가깝다. OpenShift를 사용한다는 것은 이미 통합된 platform을 사용하되, 그 platform의 규칙과 lifecycle을 받아들이는 것에 가깝다.
+
+---
+
+## 핵심 차이 2: Developer workflow
+
+Kubernetes 자체는 애플리케이션 source code를 container image로 build해주는 platform이 아니다. 일반적인 Kubernetes workflow는 다음과 같다.
+
+```text
+1. 개발자가 source code 작성
+2. CI에서 Dockerfile 또는 build tool로 image build
+3. image를 registry에 push
+4. Kubernetes manifest 작성
+5. kubectl apply
+6. Deployment rollout
+```
+
+예시:
+
+```bash
+docker build -t registry.example.com/api:1.0.0 .
+docker push registry.example.com/api:1.0.0
+kubectl apply -f deployment.yaml
+```
+
+OpenShift는 이 workflow를 platform 안으로 끌어올 수 있다. 특히 **BuildConfig**, **ImageStream**, **Source-to-Image**가 핵심이다.
+
+OpenShift에서 source code 기반 배포 흐름은 다음처럼 이해할 수 있다.
+
+```text
+Git repository
+  ↓
+BuildConfig
+  ↓
+Source-to-Image / Docker build
+  ↓
+Container image 생성
+  ↓
+ImageStream update
+  ↓
+Deployment trigger
+  ↓
+Pod rollout
+```
+
+즉 Kubernetes에서는 보통 CI/CD 시스템이 담당하는 image build와 trigger 일부를 OpenShift platform 안에서 처리할 수 있다.
+
+---
+
+## Source-to-Image: OpenShift의 대표적인 개발자 경험
+
+**Source-to-Image** 또는 **S2I**는 source code를 builder image에 주입해서 바로 실행 가능한 container image를 만드는 방식이다.
+
+일반 Dockerfile 기반 workflow는 다음과 같다.
+
+```text
+Source code
+  ↓
+Dockerfile 작성
+  ↓
+docker build
+  ↓
+image 생성
+```
+
+S2I workflow는 다음에 가깝다.
+
+```text
+Source code
+  ↓
+Builder image 선택
+  ↓
+S2I assemble script 실행
+  ↓
+ready-to-run image 생성
+```
+
+예를 들어 Node.js application을 생각해보자.
+
+Kubernetes 일반 workflow:
+
+```text
+개발자가 Dockerfile 작성
+CI에서 npm install, npm build 수행
+image build
+registry push
+Kubernetes Deployment 업데이트
+```
+
+OpenShift S2I workflow:
+
+```text
+개발자가 Git repository 제공
+OpenShift가 Node.js builder image 사용
+source code를 builder image에 주입
+assemble script 실행
+image 생성
+deployment로 연결
+```
+
+S2I가 유리한 경우는 다음과 같다.
+
+```text
+표준 runtime stack을 쓰는 일반적인 웹 애플리케이션
+개발자가 Dockerfile을 직접 관리하지 않아도 되는 환경
+platform team이 approved builder image를 제공하는 조직
+```
+
+반대로 Dockerfile, Buildah, Jib, custom build가 더 적합할 수 있는 경우도 있다.
+
+```text
+custom build step이 많음
+multi-stage build 최적화가 중요함
+base image와 layer 최적화를 직접 제어해야 함
+language/runtime이 표준 builder image와 맞지 않음
+```
+
+따라서 S2I는 개발자 경험을 단순화하는 강력한 방식이지만, 모든 build workflow의 대체재로 보면 안 된다.
+
+---
+
+## 핵심 차이 3: ImageStream과 integrated registry
+
+Kubernetes에서는 image reference가 보통 직접 registry 주소를 가리킨다.
+
+```yaml
+image: registry.example.com/api:1.0.0
+```
+
+새 image가 push되면 CI/CD가 Deployment의 image tag를 바꾸거나, GitOps repository의 manifest를 수정하는 식으로 rollout을 유도한다.
+
+OpenShift에는 **ImageStream**이라는 abstraction이 있다. ImageStream은 실제 image data를 담는 저장소라기보다, image version과 tag 변화를 추적하고 build/deployment automation과 연결하기 위한 OpenShift object로 이해할 수 있다.
+
+개념적으로는 다음과 같다.
+
+```text
+External/Internal Registry
+  ↓
+ImageStream
+  ↓
+Build / Deployment trigger
+  ↓
+Application rollout
+```
+
+새 image tag가 들어오면 ImageStream이 업데이트되고, 이를 기준으로 build나 deployment가 반응하도록 구성할 수 있다.
+
+```text
+new image pushed
+  ↓
+ImageStreamTag updated
+  ↓
+Deployment trigger fired
+  ↓
+new rollout
+```
+
+Kubernetes에서도 비슷한 자동화를 만들 수 있다. 예를 들어 Argo CD Image Updater, Flux Image Automation, Tekton, Jenkins, GitHub Actions 등을 사용할 수 있다. 차이는 OpenShift가 ImageStream과 BuildConfig를 platform object로 제공한다는 점이다.
+
+---
+
+## 핵심 차이 4: Route와 Ingress
+
+Kubernetes에서 외부 HTTP/HTTPS traffic을 cluster 내부 service로 넣으려면 보통 `Ingress`를 사용한다.
+
+```text
+External User
+  ↓
+Ingress Controller
+  ↓
+Service
+  ↓
+Pod
+```
+
+Kubernetes `Ingress` 예시는 다음과 같다.
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: api
+spec:
+  rules:
+    - host: api.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: api
+                port:
+                  number: 80
+```
+
+OpenShift에는 **Route**라는 object가 있다. Route는 service를 외부에 공개하는 역할을 한다.
+
+개념적으로는 다음과 같다.
+
+```text
+External User
+  ↓
+OpenShift Router
+  ↓
+Route
+  ↓
+Service
+  ↓
+Pod
+```
+
+Route 예시는 다음처럼 볼 수 있다.
+
+```yaml
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: api
+spec:
+  host: api.example.com
+  to:
+    kind: Service
+    name: api
+  port:
+    targetPort: http
+  tls:
+    termination: edge
+```
+
+Route는 OpenShift에서 오래 사용된 외부 노출 abstraction이다. Kubernetes 생태계에서는 Ingress와 Gateway API가 일반적이고, OpenShift에서는 Route가 기본적이고 친숙한 선택지로 많이 쓰인다.
+
+주의할 점은 Route가 Kubernetes 표준 API가 아니라 OpenShift API라는 점이다. OpenShift 전용 manifest를 많이 사용하면 다른 Kubernetes distribution으로 옮길 때 수정이 필요할 수 있다.
+
+---
+
+## 핵심 차이 5: Project와 Namespace
+
+Kubernetes에는 **Namespace**가 있다. Namespace는 cluster 안에서 resource 이름과 권한, quota, policy를 분리하는 논리적 경계다.
+
+```bash
+kubectl create namespace dev
+```
+
+OpenShift에는 **Project**라는 개념이 있다. Project는 Kubernetes Namespace를 기반으로 하지만, 사용자와 팀이 애플리케이션을 조직화하고 접근 권한을 관리하기 위한 상위 개념으로 제공된다.
+
+OpenShift에서는 보통 다음처럼 작업한다.
+
+```bash
+oc new-project myapp-dev
+```
+
+Kubernetes namespace와 OpenShift project를 단순 대응시키면 다음과 같다.
+
+| Kubernetes | OpenShift |
+|---|---|
+| `Namespace` | `Project` |
+| `kubectl create namespace` | `oc new-project` |
+| namespace-scoped resource | project-scoped resource |
+| RBAC | project membership/role과 연결 |
+
+Project는 개발자에게 “이 애플리케이션 또는 팀이 작업할 공간”이라는 의미를 더 직접적으로 제공한다. Kubernetes에서도 namespace를 잘 설계하면 같은 효과를 만들 수 있지만, OpenShift는 이를 platform UX에 더 강하게 통합한다.
+
+---
+
+## 핵심 차이 6: CLI, Console, UX
+
+Kubernetes의 기본 CLI는 `kubectl`이다.
+
+```bash
+kubectl get pods
+kubectl get deployment
+kubectl apply -f deployment.yaml
+kubectl logs <pod-name>
+```
+
+OpenShift의 CLI는 `oc`다.
+
+```bash
+oc get pods
+oc get deployment
+oc apply -f deployment.yaml
+oc logs <pod-name>
+```
+
+`oc`는 Kubernetes resource를 다루는 기본 기능을 포함하면서 OpenShift 전용 resource와 workflow를 지원한다.
+
+예를 들어 OpenShift에서는 다음과 같은 명령을 사용할 수 있다.
+
+```bash
+oc new-project myapp
+oc new-app nodejs~https://github.com/example/app.git
+oc expose service api
+oc start-build api
+```
+
+`oc new-app`은 source code나 image에서 application resource를 생성하는 OpenShift식 developer workflow를 보여준다.
+
+또한 OpenShift는 Web Console을 platform 경험의 핵심으로 제공한다. OpenShift console은 administrator 관점과 developer 관점을 나눠 cluster 운영과 application 배포를 UI에서 수행할 수 있게 한다.
+
+Kubernetes에도 Dashboard를 붙일 수 있지만, OpenShift에서는 console이 platform 경험에 더 깊게 통합되어 있다.
+
+---
+
+## 핵심 차이 7: 보안 기본값과 정책
+
+OpenShift가 Kubernetes와 비교될 때 자주 강조되는 지점은 보안 기본값이다.
+
+Kubernetes에서도 보안 기능은 많다.
+
+```text
+RBAC
+NetworkPolicy
+Pod Security Admission
+SecurityContext
+ServiceAccount
+Secrets
+Admission Controller
+OPA/Gatekeeper/Kyverno
+Image policy
+```
+
+하지만 기본 Kubernetes cluster는 distribution과 설치 방식에 따라 보안 baseline이 크게 달라질 수 있다. 관리자가 직접 정책을 설계해야 하는 영역이 많다.
+
+OpenShift는 enterprise platform답게 더 강한 opinionated security posture를 제공한다. OpenShift에서 자주 언급되는 보안 개념은 **Security Context Constraints**다. 이는 Pod가 어떤 권한으로 실행될 수 있는지 제한하는 정책 계층이다.
+
+예를 들어 다음을 제한할 수 있다.
+
+```text
+root container 실행
+privileged container
+hostPath mount
+hostNetwork 사용
+특정 capability 사용
+특정 UID/GID 사용
+```
+
+실무에서 OpenShift로 container를 옮길 때 자주 만나는 문제가 있다.
+
+```text
+일반 Kubernetes에서는 잘 뜨던 image가
+OpenShift에서는 permission denied 또는 root user 문제로 실패한다.
+```
+
+예를 들어 Dockerfile이 root 전제를 갖고 있으면 문제가 생길 수 있다.
+
+```dockerfile
+FROM node:20
+WORKDIR /app
+COPY . .
+RUN npm install
+CMD ["npm", "start"]
+```
+
+애플리케이션이 runtime에 `/app`에 write하려고 하는데, OpenShift에서 임의 UID로 실행되면 permission 문제가 날 수 있다.
+
+OpenShift 친화적인 image는 다음 조건을 고려해야 한다.
+
+```text
+root user에 의존하지 않기
+arbitrary UID로 실행 가능하게 만들기
+write가 필요한 경로의 permission 정리
+runtime에 image filesystem을 수정하지 않기
+read-only root filesystem 고려
+secret/config는 volume 또는 env로 주입
+log는 stdout/stderr
+```
+
+예시 Dockerfile은 다음과 같이 group permission을 정리할 수 있다.
+
+```dockerfile
+FROM node:20
+
+WORKDIR /app
+
+COPY package*.json ./
+RUN npm ci --only=production
+
+COPY . .
+
+RUN chgrp -R 0 /app && chmod -R g=u /app
+
+EXPOSE 3000
+
+CMD ["npm", "start"]
+```
+
+이 예시는 OpenShift의 arbitrary UID 실행 환경에서 group permission을 통해 application directory 접근 문제를 줄이려는 방식이다. 실제 적용 여부는 base image, runtime, 조직 보안 정책에 따라 검증해야 한다.
+
+---
+
+## 핵심 차이 8: 설치와 upgrade 운영
+
+Kubernetes는 다양한 방식으로 설치할 수 있다.
+
+```text
+kubeadm
+kops
+Kubespray
+RKE2
+k3s
+managed Kubernetes
+cloud provider Kubernetes service
+```
+
+이 유연성은 장점이다. 하지만 production-ready Kubernetes를 직접 조립하려면 결정해야 할 것이 많다.
+
+```text
+OS
+container runtime
+CNI
+CSI
+Ingress controller
+certificate management
+authentication
+authorization
+logging
+monitoring
+backup
+upgrade strategy
+node lifecycle
+security baseline
+```
+
+OpenShift는 이 부분에서 더 opinionated하다. 운영자가 임의 조합을 자유롭게 선택하는 것보다, 검증된 stack과 upgrade path를 따르게 하는 쪽에 가깝다.
+
+장점:
+
+```text
+검증된 platform stack
+일관된 upgrade lifecycle
+enterprise support
+operator 기반 cluster component 관리
+hybrid/on-premise 환경에서 통일된 경험
+```
+
+단점:
+
+```text
+더 무겁고 복잡할 수 있음
+설치 요구사항이 큼
+OpenShift 방식에 맞춰야 함
+license/subscription 비용 고려 필요
+순수 Kubernetes보다 제약이 많을 수 있음
+```
+
+---
+
+## 핵심 차이 9: Runtime과 Docker에 대한 표현 주의
+
+현대 Kubernetes와 OpenShift에서는 “Docker runtime” 자체보다 **OCI image**와 **CRI-compatible runtime**이 더 중요한 표현이다.
+
+정리하면 다음과 같다.
+
+```text
+예전식 표현
+  OpenShift / Kubernetes가 Docker container를 실행한다.
+
+더 정확한 현대식 표현
+  OpenShift / Kubernetes가 OCI-compatible image를 CRI-O 같은 container runtime을 통해 실행한다.
+```
+
+따라서 OpenShift와 Kubernetes를 비교할 때 “Docker가 포함된다”는 표현은 역사적 맥락에서는 이해될 수 있지만, 현재 운영 문서에서는 `container image`, `container runtime`, `CRI-O`, `OCI runtime`을 구분하는 것이 더 정확하다.
+
+---
+
+## OpenShift는 Kubernetes 호환인가?
+
+OpenShift는 Kubernetes 기반 platform이다. 따라서 Kubernetes의 핵심 resource는 대부분 그대로 사용할 수 있다.
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: api
+  template:
+    metadata:
+      labels:
+        app: api
+    spec:
+      containers:
+        - name: api
+          image: registry.example.com/api:1.0.0
+```
+
+이런 표준 Kubernetes manifest는 OpenShift에서도 대체로 사용할 수 있다.
+
+하지만 다음과 같은 OpenShift 전용 resource를 사용하면 portability가 낮아진다.
+
+```text
+Route
+BuildConfig
+ImageStream
+DeploymentConfig
+SecurityContextConstraints
+Template
+```
+
+이것이 나쁘다는 뜻은 아니다. OpenShift의 장점을 적극 활용하려면 OpenShift 전용 resource를 쓰는 것이 자연스럽다. 다만 다른 Kubernetes 환경으로 옮길 가능성이 있다면 구분이 필요하다.
+
+| 접근 | 장점 | 단점 |
+|---|---|---|
+| Kubernetes 표준 resource 중심 | portability 높음 | OpenShift 특화 기능 활용 제한 |
+| OpenShift resource 적극 활용 | platform 기능 활용도 높음 | 다른 Kubernetes로 이전 시 변환 필요 |
+| 혼합 방식 | 표준 workload + OpenShift edge/build만 사용 | 경계 설계 필요 |
+
+실무적으로는 다음처럼 결정할 수 있다.
+
+```text
+Deployment, Service, ConfigMap, Secret, PVC는 표준 Kubernetes resource로 유지
+외부 노출은 OpenShift에서는 Route, 다른 환경에서는 Ingress/Gateway 사용
+build automation은 조직 표준에 따라 OpenShift BuildConfig 또는 외부 CI 사용
+security는 OpenShift SCC 제약에 맞는 image build 원칙 적용
+```
+
+---
+
+## OpenShift의 batteries included 성격
+
+OpenShift를 이해하는 핵심 표현은 **batteries included**다.
+
+Kubernetes는 기본적으로 다음을 제공한다.
+
+```text
+API
+scheduler
+controller
+Pod abstraction
+Service abstraction
+Deployment rollout
+RBAC
+namespace
+```
+
+하지만 운영 platform에 필요한 많은 요소는 선택과 조립의 영역이다.
+
+OpenShift는 다음을 더 통합적으로 제공한다.
+
+```text
+Web console
+Developer workflow
+Build system
+S2I
+ImageStream
+Integrated registry
+Route
+Monitoring
+Logging integration
+OperatorHub
+Security defaults
+Cluster upgrade management
+Enterprise support
+```
+
+이 차이는 platform team의 역할을 바꾼다.
+
+Kubernetes 직접 운영:
+
+```text
+platform team이 add-on을 선택하고 조합한다.
+각 구성요소의 lifecycle을 직접 관리한다.
+조직 표준을 직접 설계한다.
+```
+
+OpenShift 운영:
+
+```text
+platform team이 opinionated stack을 기반으로 운영한다.
+검증된 upgrade path와 support lifecycle을 활용한다.
+개발자는 console, oc, S2I, routes 등 통합 경험을 사용한다.
+```
+
+---
+
+## 명령어 관점 비교
+
+### Kubernetes
+
+```bash
+kubectl create namespace myapp
+kubectl apply -f deployment.yaml
+kubectl apply -f service.yaml
+kubectl apply -f ingress.yaml
+kubectl get pods -n myapp
+kubectl logs <pod-name> -n myapp
+```
+
+### OpenShift
+
+```bash
+oc new-project myapp
+oc new-app nodejs~https://github.com/example/app.git
+oc expose service api
+oc get pods
+oc logs <pod-name>
+```
+
+두 CLI 모두 Kubernetes API와 상호작용할 수 있지만, `oc`는 OpenShift 특화 workflow를 제공한다.
+
+예를 들어 `oc new-app`은 source code나 image를 기반으로 여러 resource를 자동 생성할 수 있다.
+
+```text
+source repository
+  ↓
+BuildConfig
+ImageStream
+Deployment
+Service
+Route
+```
+
+반면 Kubernetes에서는 이런 workflow를 외부 CI/CD, Helm, Kustomize, Argo CD 등과 조합해 구성하는 경우가 많다.
+
+---
+
+## 개발자 관점 비교
+
+### Kubernetes 개발자 경험
+
+Kubernetes에서는 개발자가 보통 다음 흐름을 이해해야 한다.
+
+```text
+Dockerfile 또는 image build process
+Container registry
+Deployment YAML
+Service YAML
+Ingress YAML
+ConfigMap/Secret
+kubectl apply
+kubectl logs
+kubectl rollout status
+```
+
+개발자가 Kubernetes 자체를 많이 알아야 할 수 있다. 물론 platform team이 Helm chart, templates, GitOps pipeline을 잘 만들어두면 이 부담을 줄일 수 있다.
+
+### OpenShift 개발자 경험
+
+OpenShift에서는 source code에서 application까지 가는 path가 더 통합되어 있다.
+
+```text
+Git repository
+  ↓
+oc new-app 또는 web console
+  ↓
+BuildConfig / S2I
+  ↓
+ImageStream
+  ↓
+Deployment
+  ↓
+Route
+```
+
+개발자는 web console에서 project를 만들고, source repository를 연결하고, build와 deployment 상태를 볼 수 있다.
+
+이 구조는 특히 기업 조직에서 다음 경우 유리하다.
+
+```text
+개발자에게 Kubernetes 세부 구현을 모두 노출하고 싶지 않음
+승인된 builder image를 통해 표준 build path를 제공하고 싶음
+조직 표준 security baseline을 강제하고 싶음
+project 단위 self-service를 제공하고 싶음
+```
+
+---
+
+## 운영자 관점 비교
+
+### Kubernetes 운영자
+
+순수 Kubernetes를 운영하는 platform team은 다음을 직접 결정해야 한다.
+
+```text
+어떤 distribution을 쓸 것인가?
+node OS는 무엇인가?
+CNI는 무엇인가?
+Ingress controller는 무엇인가?
+monitoring은 Prometheus stack으로 할 것인가?
+logging은 어떤 pipeline으로 할 것인가?
+registry는 무엇을 쓸 것인가?
+cluster upgrade는 어떻게 할 것인가?
+RBAC와 admission policy는 어떻게 설계할 것인가?
+```
+
+이 접근은 자유도가 높다. `k3s`, `RKE2`, `kubeadm`, managed Kubernetes 등 요구사항에 맞게 가볍거나 특화된 구성을 만들 수 있다.
+
+### OpenShift 운영자
+
+OpenShift 운영자는 더 통합된 platform lifecycle을 다룬다.
+
+```text
+cluster install
+operator 기반 component 관리
+cluster version upgrade
+node machine config 관리
+project/RBAC 관리
+integrated monitoring 확인
+route/router 운영
+image registry 운영
+SCC/security baseline 적용
+```
+
+OpenShift는 선택지를 줄이는 대신, 검증된 platform stack과 support lifecycle을 제공한다. 기업 내부 platform에서는 이 consistency가 큰 장점이 될 수 있다.
+
+---
+
+## OpenShift에서 자주 나오는 resource
+
+| Resource | 역할 |
+|---|---|
+| `Project` | team/application 단위 작업 공간 |
+| `Route` | Service를 외부에 노출 |
+| `BuildConfig` | source code 또는 Dockerfile을 image로 build하는 정의 |
+| `ImageStream` | image tag와 version 변화를 추적하고 build/deployment trigger와 연결 |
+| `SecurityContextConstraints` | Pod가 어떤 security context로 실행될 수 있는지 제한 |
+| `Operator` | cluster component 또는 application lifecycle을 Kubernetes-native 방식으로 관리 |
+
+예시 명령:
+
+```bash
+oc new-project myapp-dev
+oc expose service api
+oc get imagestreams
+oc get buildconfigs
+```
+
+이 resource들은 Kubernetes 표준 object와 함께 OpenShift의 platform 경험을 구성한다.
+
+---
+
+## OpenShift가 유리한 상황
+
+OpenShift가 특히 잘 맞는 상황은 다음과 같다.
+
+```text
+1. 기업 내부 platform으로 표준 Kubernetes 환경을 제공해야 한다.
+2. 개발자 self-service 배포 경험이 중요하다.
+3. on-premise와 public cloud를 함께 쓰는 hybrid 환경이다.
+4. platform lifecycle, support, upgrade path가 중요하다.
+5. 보안 기본값과 정책 강제가 중요하다.
+6. 조직 차원의 builder image, registry, route, monitoring 표준이 필요하다.
+7. Kubernetes add-on을 직접 조립할 인력이 부족하거나 표준화를 우선한다.
+```
+
+예를 들어 금융, 공공, 대기업 내부 platform처럼 다음 요구가 강하면 OpenShift가 적합할 수 있다.
+
+```text
+감사 가능성
+일관된 권한 모델
+표준화된 개발자 포털
+통합 registry
+통합 monitoring
+vendor support
+보안 baseline
+on-premise lifecycle 관리
+```
+
+---
+
+## Kubernetes 직접 운영이 유리한 상황
+
+반대로 순수 Kubernetes 또는 다른 Kubernetes distribution이 더 적합한 경우도 있다.
+
+```text
+1. 가벼운 cluster가 필요하다.
+2. k3s 같은 lightweight distribution이 목적에 맞다.
+3. 특정 CNI/CSI/Ingress/observability stack을 직접 조합하고 싶다.
+4. cloud provider managed Kubernetes를 사용하는 것이 더 단순하다.
+5. OpenShift의 resource 요구사항과 비용이 부담된다.
+6. OpenShift 전용 abstraction 없이 portability를 최우선으로 하고 싶다.
+7. platform team이 Kubernetes add-on lifecycle을 직접 관리할 역량이 있다.
+```
+
+예를 들어 homelab, edge device, 작은 SaaS team, 실험 cluster라면 OpenShift보다 더 가벼운 Kubernetes distribution이 더 적합할 수 있다.
+
+---
+
+## Kubernetes와 OpenShift의 비교표
+
+| 항목 | Kubernetes | OpenShift |
+|---|---|---|
+| 기본 성격 | Open-source container orchestration platform | Kubernetes 기반 enterprise application platform |
+| 포함 관계 | 자체적으로 OpenShift 기능은 포함하지 않음 | Kubernetes core를 포함 |
+| CLI | `kubectl` | `oc` + `kubectl` 호환 성격 |
+| 외부 노출 | Ingress, LoadBalancer, Gateway API 등 | Route, Ingress 등 |
+| build 기능 | core에는 없음, 외부 CI/CD 필요 | BuildConfig, S2I, image build workflow 제공 |
+| image abstraction | registry image reference 중심 | ImageStream 제공 |
+| registry | 별도 구성 필요 | integrated registry 제공 가능 |
+| UI | Dashboard는 별도 설치/구성 | Web Console이 platform 경험에 통합 |
+| 보안 기본값 | distribution/설정에 따라 다름 | 더 opinionated하고 엄격한 기본값 |
+| upgrade | 배포 방식마다 다름 | platform lifecycle과 operator 기반 update |
+| support | project/community 또는 vendor별 | enterprise subscription/support |
+| portability | 표준 resource 중심이면 높음 | OpenShift resource 사용 시 migration 고려 필요 |
+| flexibility | 매우 높음 | platform 규칙에 맞추는 대신 통합성 높음 |
+| 운영 부담 | 직접 조합할수록 증가 | platform 자체는 무겁지만 통합 운영 가능 |
+
+---
+
+## 가장 자주 생기는 오해
+
+### 오해 1: OpenShift는 Kubernetes와 별개의 경쟁 기술이다
+
+정확히는 OpenShift는 Kubernetes 기반 platform이다.
+
+```text
+OpenShift를 쓴다
+  = Kubernetes를 안 쓴다
+
+가 아니라
+
+OpenShift를 쓴다
+  = Kubernetes를 포함한 enterprise platform을 쓴다
+```
+
+### 오해 2: Kubernetes를 쓰면 OpenShift가 필요 없다
+
+조직에 따라 맞을 수도 있고 아닐 수도 있다. Kubernetes만으로도 production platform을 만들 수 있다. 다만 registry, CI/CD, monitoring, ingress, security, upgrade, developer workflow를 직접 설계해야 한다.
+
+### 오해 3: OpenShift를 쓰면 Kubernetes를 몰라도 된다
+
+아니다. OpenShift 문제를 해결하려면 결국 Kubernetes object를 알아야 한다.
+
+```text
+Pod
+Deployment
+ReplicaSet
+Service
+ConfigMap
+Secret
+PVC
+Namespace
+RBAC
+Event
+Node
+```
+
+OpenShift는 Kubernetes를 숨기는 도구가 아니라 Kubernetes를 enterprise platform으로 확장한 도구다.
+
+### 오해 4: OpenShift 전용 기능은 무조건 나쁘다
+
+아니다. `Route`, `ImageStream`, `BuildConfig`, `S2I`는 OpenShift의 장점이다. 다만 portability와 trade-off가 있다.
+
+### 오해 5: OpenShift의 보안 제약은 불편하기만 하다
+
+보안 제약은 multi-tenant enterprise cluster에서 guardrail 역할을 한다. 다만 image를 OpenShift 친화적으로 만들지 않으면 초기 migration 시 permission 문제가 생길 수 있다.
+
+---
+
+## 실제 선택 기준
+
+Kubernetes와 OpenShift를 비교할 때는 “어느 것이 더 좋은가”보다 “어떤 운영 모델이 필요한가”를 봐야 한다.
+
+### Kubernetes를 선택하기 쉬운 경우
+
+```text
+가볍고 유연한 cluster가 필요하다.
+cloud managed Kubernetes를 쓰면 충분하다.
+add-on stack을 직접 조합하고 싶다.
+비용과 resource footprint를 줄이고 싶다.
+표준 Kubernetes portability가 중요하다.
+platform team이 Kubernetes 운영 역량을 갖고 있다.
+```
+
+### OpenShift를 선택하기 쉬운 경우
+
+```text
+enterprise support가 중요하다.
+on-premise 또는 hybrid cloud에서 표준 platform이 필요하다.
+개발자 self-service 환경이 중요하다.
+보안 기본값과 정책 강제가 중요하다.
+source-to-image, integrated registry, routes, console 같은 통합 기능이 필요하다.
+cluster lifecycle과 upgrade를 vendor-supported 방식으로 가져가고 싶다.
+```
+
+---
+
+## DevOps 관점에서 보는 차이
+
+DevOps 관점에서는 source code가 실제 runtime으로 배포되는 경로가 중요하다.
+
+### Kubernetes 중심 workflow
+
+```text
+Source code
+  ↓
+CI pipeline
+  ↓
+Container image build
+  ↓
+Registry push
+  ↓
+Manifest/Helm/Kustomize update
+  ↓
+kubectl apply or GitOps sync
+  ↓
+Deployment rollout
+```
+
+### OpenShift 중심 workflow
+
+```text
+Source code
+  ↓
+OpenShift BuildConfig / S2I or external CI
+  ↓
+ImageStream update
+  ↓
+Deployment trigger
+  ↓
+Route exposure
+  ↓
+Web Console / oc로 상태 확인
+```
+
+OpenShift는 source-to-runtime path를 platform 내부 object로 많이 표현한다. Kubernetes는 더 중립적이어서 외부 CI/CD와 GitOps 도구를 조합하는 경우가 많다.
+
+---
+
+## 운영 검증 포인트
+
+### Kubernetes에서 확인할 것
+
+```bash
+kubectl get nodes
+kubectl get pods -A
+kubectl get deployments -A
+kubectl get svc -A
+kubectl get ingress -A
+kubectl describe pod <pod-name>
+kubectl logs <pod-name>
+kubectl rollout status deployment/<deployment-name>
+```
+
+### OpenShift에서 확인할 것
+
+```bash
+oc get nodes
+oc get projects
+oc get pods
+oc get deployments
+oc get svc
+oc get routes
+oc get imagestreams
+oc get buildconfigs
+oc logs <pod-name>
+oc describe pod <pod-name>
+```
+
+### OpenShift migration 시 특히 확인할 것
+
+```text
+container가 root 없이 실행 가능한가?
+arbitrary UID로 실행 가능한가?
+write path permission이 정리되어 있는가?
+Route와 Ingress 중 무엇을 쓸 것인가?
+ImageStream/BuildConfig를 사용할 것인가, 외부 CI/CD를 유지할 것인가?
+Secret은 어떻게 주입할 것인가?
+NetworkPolicy와 SCC 제약을 충족하는가?
+```
+
+---
+
+## 전체 mental model
+
+Kubernetes와 OpenShift의 차이는 기술 우열이 아니라 platform 범위의 차이다.
+
+```text
+1. Kubernetes와 OpenShift는 모두 container management 영역에 있다.
+
+2. Kubernetes는 containerized workload를 orchestration하는 open-source platform이다.
+
+3. OpenShift는 Kubernetes를 기반으로 enterprise application platform을 구성한다.
+
+4. OpenShift는 Kubernetes core 위에 developer workflow, build, registry, route,
+   web console, security defaults, operator, monitoring, upgrade, support를 통합한다.
+
+5. Kubernetes는 더 유연하고 neutral하지만 production platform 조립 책임이 크다.
+
+6. OpenShift는 더 opinionated하고 무겁지만 enterprise 운영과 개발자 경험을 통합한다.
+
+7. OpenShift 전용 resource를 쓰면 platform 기능을 잘 활용할 수 있지만 portability trade-off가 생긴다.
+
+8. 선택 기준은 기술 우열이 아니라 조직의 운영 모델, 보안 요구, 지원 필요성,
+   platform team 역량, hybrid/on-prem 요구사항이다.
+```
+
+---
+
+## 요약
+
+Kubernetes는 container orchestration의 표준 API와 control plane이다. OpenShift는 Kubernetes 위에 enterprise-grade developer and operations platform을 얹은 것이다.
+
+Kubernetes만으로도 충분히 강력하다. 하지만 production-ready platform을 만들려면 registry, CI/CD, ingress, monitoring, logging, authentication, authorization, policy, upgrade, security baseline을 직접 조합해야 한다.
+
+OpenShift는 이 조합을 opinionated platform으로 제공한다. 대신 더 무겁고, subscription/support 모델과 OpenShift 방식에 맞춰야 하며, OpenShift 전용 resource를 사용할수록 portability를 고려해야 한다.
+
+핵심은 다음이다.
+
+```text
+Kubernetes
+  → container orchestration의 core engine
+
+OpenShift
+  → Kubernetes를 포함하고, 개발자 경험과 운영 lifecycle까지 통합한 enterprise platform
+```
+
+따라서 선택 기준은 “Kubernetes가 더 좋은가, OpenShift가 더 좋은가”가 아니다. 실제 기준은 조직이 원하는 운영 모델이다.
+
+```text
+직접 조립하고 가볍고 유연하게 가고 싶다면 Kubernetes 중심 접근
+통합된 enterprise platform과 support, 보안 기본값, developer self-service가 필요하다면 OpenShift
+```
