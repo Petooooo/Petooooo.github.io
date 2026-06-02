@@ -1,0 +1,1040 @@
+---
+area: "DevOps"
+type: "concept"
+series: "DevOps Explained"
+title: "Continuous Integration: Code Integration과 자동 검증의 출발점"
+slug: "continuous-integration-code-integration"
+date: "2026-06-02"
+updated: "2026-06-02"
+draft: true
+reviewed: false
+category: "DevOps"
+tags: ["Continuous Integration", "CI", "CI/CD", "DevOps", "Git", "Build", "Test Automation", "Kubernetes", "Artifact"]
+description: "Continuous Integration의 개념을 infrequent integration 문제, 자동 build/test, main branch 보호, artifact 추적성, Kubernetes CI 검증 관점에서 정리한다."
+---
+## 개요
+
+**Continuous Integration**은 여러 개발자의 code change를 자주 shared repository에 통합하고, 그때마다 자동 build와 test를 수행하여 integration 문제를 빠르게 발견하는 software development practice다.
+
+CI를 단순히 Jenkins, GitHub Actions, GitLab CI, Tekton 같은 도구를 설치하는 것으로 이해하면 핵심을 놓치기 쉽다. CI의 본질은 도구가 아니라 다음 두 가지 습관이다.
+
+```text
+1. 작은 변경을 자주 통합한다.
+2. 통합될 때마다 자동으로 검증한다.
+```
+
+짧게 정리하면 다음과 같다.
+
+```text
+CI = 코드를 자주 합치고, 합칠 때마다 자동으로 검증하는 방식
+```
+
+여기서 중요한 것은 **자주 합친다**와 **자동으로 검증한다**가 함께 있어야 한다는 점이다.
+
+```text
+자주 합치지만 test가 없다:
+  깨진 code가 main branch에 자주 들어감
+
+test는 있지만 오래된 branch를 가끔 합친다:
+  merge conflict와 integration failure가 크게 터짐
+
+CI:
+  작은 변경을 자주 통합하고,
+  자동 build/test로 즉시 feedback을 받음
+```
+
+CI는 Continuous Delivery와 Continuous Deployment의 출발점이다. CI가 약하면 CD pipeline은 검증되지 않은 artifact를 배포하게 되고, production 안정성도 흔들릴 수 있다.
+
+---
+
+## CI가 해결하려는 문제: Infrequent Integration
+
+CI를 이해하려면 먼저 CI가 없을 때의 문제를 봐야 한다. 전통적인 방식에서는 개발자가 각자 feature branch 또는 local copy에서 오랫동안 작업하다가 release 직전에 한꺼번에 코드를 합치는 경우가 많았다.
+
+```text
+개발자 A:
+  feature-a branch에서 2주 작업
+
+개발자 B:
+  feature-b branch에서 2주 작업
+
+개발자 C:
+  feature-c branch에서 2주 작업
+
+release 직전:
+  세 branch를 main에 한꺼번에 merge
+```
+
+이 방식은 처음에는 편해 보인다. 각 개발자가 독립적으로 작업할 수 있기 때문이다. 그러나 통합 시점이 늦어질수록 문제는 커진다.
+
+```text
+2주 동안 분리된 branch
+  -> main과 차이 증가
+  -> merge conflict 증가
+  -> dependency 변경 충돌
+  -> test failure 증가
+  -> 원인 추적 어려움
+  -> release 지연
+```
+
+이런 상황은 흔히 **integration hell**로 이어진다. 코드 충돌만 문제가 아니다. 기능 A는 단독으로 정상이고, 기능 B도 단독으로 정상일 수 있다. 하지만 둘을 합쳤을 때 shared utility, API contract, database schema, configuration이 서로 충돌할 수 있다.
+
+| 상황 | 발생 가능한 문제 |
+|---|---|
+| A가 API response field 이름을 변경 | B의 frontend code가 옛 field를 사용 |
+| B가 database schema를 변경 | C의 query가 더 이상 동작하지 않음 |
+| C가 dependency version을 올림 | A의 module이 runtime error 발생 |
+| A가 config key를 변경 | staging 배포 시 application start 실패 |
+| B가 shared utility function 수정 | 다른 feature에서 예상치 못한 side effect 발생 |
+
+늦게 통합할수록 원인 후보가 많아진다. release 직전에 build가 깨지면 어느 변경이 문제인지 찾기 어렵다. CI는 이 문제를 **작은 변경을 자주 합치고, 즉시 검증하는 방식**으로 줄인다.
+
+---
+
+## Continuous Integration의 기본 Workflow
+
+CI의 기본 workflow는 다음과 같다.
+
+```text
+1. 개발자가 작은 변경을 만든다.
+2. 변경 사항을 shared repository에 push한다.
+3. pull request 또는 merge request가 생성된다.
+4. CI system이 자동으로 build를 실행한다.
+5. unit test, static analysis, integration test 등이 실행된다.
+6. 결과가 개발자에게 빠르게 feedback된다.
+7. 문제가 없으면 main branch에 merge한다.
+8. 문제가 있으면 즉시 수정한다.
+```
+
+이를 pipeline 관점으로 표현하면 다음과 같다.
+
+```text
+Developer commit
+  -> CI trigger
+  -> source checkout
+  -> dependency install
+  -> build
+  -> test
+  -> package
+  -> result feedback
+```
+
+CI에서 중요한 것은 feedback이 빠르게 돌아와야 한다는 점이다.
+
+| CI 상태 | 결과 |
+|---|---|
+| commit 후 몇 분 안에 성공/실패 확인 | 개발자가 context를 유지한 채 바로 수정 가능 |
+| commit 후 몇 시간 뒤 실패 확인 | 이미 다른 작업으로 넘어가 context switching 발생 |
+| 실패 원인이 log에 명확히 남음 | 빠르게 원인 추적 가능 |
+| 실패 원인이 불명확함 | CI 자체에 대한 신뢰 하락 |
+
+CI의 목적은 나중에 크게 고치는 것이 아니라, 문제가 생긴 순간에 바로 알아차리는 것이다.
+
+---
+
+## CI는 도구가 아니라 Practice다
+
+CI 도구를 사용한다고 자동으로 CI가 되는 것은 아니다. 다음과 같이 운영한다면 도구는 있어도 건강한 CI라고 보기 어렵다.
+
+```text
+- branch를 몇 주 동안 유지한다.
+- main branch가 자주 깨진다.
+- test가 거의 없다.
+- build 실패를 며칠 동안 방치한다.
+- pipeline이 너무 느려서 개발자가 결과를 기다리지 않는다.
+- 실패 원인을 아무도 책임지고 고치지 않는다.
+```
+
+CI를 제대로 운영하려면 다음 조건이 필요하다.
+
+| 항목 | 건강한 CI의 기준 |
+|---|---|
+| 통합 빈도 | 작은 변경을 자주 merge |
+| feedback 속도 | build/test 결과가 빠르게 돌아옴 |
+| main branch 상태 | 항상 build 가능한 상태로 유지 |
+| 실패 대응 | broken build를 즉시 수정 |
+| test 품질 | 의미 있는 자동 test suite 보유 |
+| visibility | 팀 전체가 build 상태를 확인 |
+| 책임 | code owner가 실패를 방치하지 않음 |
+
+CI의 핵심은 자동화된 검증과 팀의 운영 습관이 함께 맞물리는 것이다.
+
+---
+
+## CI에서 Integration의 의미
+
+CI에서 integration은 단순히 Git merge만 의미하지 않는다. 여러 수준의 통합이 동시에 일어난다.
+
+| 통합 대상 | 설명 |
+|---|---|
+| Source code integration | 여러 개발자의 code change를 하나의 branch에 통합 |
+| Dependency integration | library, package, runtime version과 함께 build |
+| Module integration | 여러 module이 함께 동작하는지 확인 |
+| API integration | service 간 contract가 깨지지 않았는지 확인 |
+| Database integration | schema, migration, query가 호환되는지 확인 |
+| Configuration integration | environment variable, config file, secret 참조 확인 |
+| Build integration | 실제 artifact가 생성되는지 확인 |
+| Deployment integration | container image, manifest, runtime 환경과 연결 가능 여부 확인 |
+
+예를 들어 `user-service`의 API response가 바뀌면 frontend나 다른 backend service가 영향을 받을 수 있다.
+
+```text
+개발자 A:
+  user-service API response 변경
+
+개발자 B:
+  frontend에서 user-service 호출
+
+개발자 C:
+  user-service database query 최적화
+
+CI가 없다면:
+  release 직전에 frontend가 깨짐
+
+CI가 있다면:
+  pull request 단계에서 contract test 또는 integration test 실패
+```
+
+CI는 단순히 compile 여부만 보는 것이 아니라, 변경 사항이 기존 system과 함께 동작할 수 있는지를 빠르게 확인하는 장치다.
+
+---
+
+## CI의 기본 구성 요소
+
+일반적인 CI system은 다음 요소로 구성된다.
+
+| 구성 요소 | 역할 |
+|---|---|
+| Version control | Git repository, branch, commit, pull request 관리 |
+| CI server / runner | pipeline 실행 |
+| Build script | source code를 artifact로 변환 |
+| Test suite | unit, integration, static, security test 실행 |
+| Artifact storage | build 결과물 저장 |
+| Status check | pull request merge 가능 여부 판단 |
+| Notification | 실패 결과를 개발자에게 전달 |
+| Logs | 실패 원인 분석용 실행 기록 |
+| Cache | dependency install과 build 속도 개선 |
+
+일반적인 CI pipeline은 다음과 같다.
+
+```text
+Git push
+  -> CI job trigger
+  -> checkout
+  -> dependency install
+  -> lint
+  -> unit test
+  -> build
+  -> integration test
+  -> artifact package
+  -> result report
+```
+
+Node.js project의 간단한 CI 단계는 다음처럼 구성할 수 있다.
+
+```bash
+npm ci
+npm run lint
+npm test
+npm run build
+```
+
+Java project라면 다음처럼 구성될 수 있다.
+
+```bash
+mvn clean verify
+```
+
+Container 기반 project라면 다음 단계가 추가될 수 있다.
+
+```bash
+docker build -t my-app:${GIT_SHA} .
+docker run --rm my-app:${GIT_SHA} ./run-tests.sh
+```
+
+명령 자체보다 중요한 것은 이 과정이 **매번 같은 방식으로 자동 실행**된다는 점이다.
+
+---
+
+## CI와 Build
+
+CI에서 build는 source code를 실행 가능한 software artifact로 바꾸는 과정이다.
+
+| Project 유형 | Build 결과물 |
+|---|---|
+| Java | JAR, WAR |
+| Go | binary |
+| Node.js frontend | static bundle |
+| Python | wheel, package, container image |
+| Container app | Docker/OCI image |
+| Kubernetes app | image + manifest/Helm chart |
+
+CI에서 build가 중요한 이유는 다음과 같다.
+
+```text
+code가 repository에 존재한다
+  !=
+실행 가능한 software가 만들어진다
+```
+
+컴파일 오류, dependency 충돌, packaging 오류, 환경 변수 누락, Dockerfile 오류는 코드를 눈으로 보는 것만으로는 알기 어렵다. CI는 build를 통해 이 codebase가 실제로 실행 가능한 artifact가 되는지 검증한다.
+
+---
+
+## CI와 Test
+
+CI의 가장 중요한 feedback source는 자동화된 test다. CI에서 수행할 수 있는 test는 다양하다.
+
+| 테스트 종류 | 목적 |
+|---|---|
+| Unit test | 작은 함수, class, module 단위 검증 |
+| Integration test | module 또는 service 간 상호작용 검증 |
+| Contract test | API provider/consumer 간 약속 검증 |
+| Static analysis | code style, type, lint, 취약 pattern 검사 |
+| Security scan | dependency vulnerability, secret detection |
+| Build test | artifact가 정상 생성되는지 확인 |
+| Smoke test | 최소 실행 가능 여부 확인 |
+| Migration test | database migration이 깨지지 않는지 확인 |
+
+모든 test를 CI의 첫 단계에 넣으면 pipeline이 너무 느려질 수 있다. 따라서 test를 계층화해야 한다.
+
+```text
+빠른 feedback:
+  lint
+  type check
+  unit test
+
+중간 feedback:
+  integration test
+  container build
+  contract test
+
+느린 feedback:
+  end-to-end test
+  load test
+  full security scan
+```
+
+CI에서 핵심은 **빠른 실패**다. 가장 자주 깨지고 빠르게 확인 가능한 test를 앞쪽에 배치해야 한다. lint나 unit test가 실패할 code라면 굳이 container image build나 end-to-end test까지 진행할 필요가 없다.
+
+---
+
+## Main Branch 보호
+
+CI는 main branch를 보호하는 gate 역할을 한다.
+
+```text
+feature branch
+  -> pull request
+  -> CI check
+  -> review
+  -> merge to main
+```
+
+보통 다음 조건을 만족해야 merge할 수 있게 구성한다.
+
+```text
+Merge 가능 조건:
+  - build 성공
+  - unit test 성공
+  - lint 성공
+  - required checks 통과
+  - code review 승인
+```
+
+하지만 PR에서 CI가 성공했더라도 merge 직후 main에서 깨질 수 있다. PR이 생성된 이후 main branch가 바뀌었을 수 있기 때문이다.
+
+```text
+PR A:
+  CI 성공
+
+PR B:
+  CI 성공
+
+둘 다 main에 merge:
+  A와 B가 서로 충돌하는 변경을 포함
+  main에서 test 실패
+```
+
+이를 줄이기 위한 전략은 다음과 같다.
+
+| 전략 | 설명 |
+|---|---|
+| branch 최신화 | merge 전 main과 rebase 또는 merge |
+| merge queue | PR을 순서대로 main에 합치기 전 재검증 |
+| required status checks | CI 실패 시 merge 차단 |
+| small PR | 충돌 가능성을 줄임 |
+| trunk-based development | 긴 branch 수명을 줄임 |
+
+CI의 목표는 main branch를 항상 건강하게 유지하는 것이다.
+
+---
+
+## CI와 Branch 전략
+
+CI는 branch 전략과 강하게 연결된다. 오래 유지되는 feature branch는 CI 효과를 약하게 만든다. CI는 continuous integration인데, branch가 오래 분리되어 있으면 실제 통합이 continuous하지 않기 때문이다.
+
+### 긴 feature branch의 문제
+
+```text
+feature branch 3주 유지
+  -> main branch와 차이 커짐
+  -> merge conflict 증가
+  -> integration test 실패 가능성 증가
+  -> review 부담 증가
+  -> release risk 증가
+```
+
+### 짧은 branch와 작은 PR
+
+CI와 잘 맞는 방식은 작은 변경을 자주 merge하는 것이다.
+
+```text
+작은 변경
+  -> 빠른 review
+  -> 빠른 CI
+  -> 빠른 merge
+  -> 작은 risk
+```
+
+큰 기능은 feature flag로 숨기고, code는 작은 단위로 main에 통합할 수 있다.
+
+```text
+큰 기능:
+  한 번에 merge하지 않음
+
+대신:
+  작은 내부 변경을 main에 자주 merge
+  feature flag로 사용자 노출 제어
+```
+
+이 방식은 통합 시점을 늦추지 않고, build failure의 원인을 빠르게 찾을 수 있게 한다.
+
+---
+
+## CI와 Artifact
+
+CI는 test만 실행하는 것이 아니라 검증된 build 결과물을 artifact로 만들기도 한다. Artifact는 배포 가능한 결과물이다.
+
+| Artifact 유형 | 예시 |
+|---|---|
+| Binary | compiled executable |
+| Package | JAR, wheel, npm package |
+| Container image | OCI image |
+| Static bundle | frontend build 결과 |
+| Helm chart | Kubernetes 배포 package |
+| SBOM | software bill of materials |
+
+CI에서 artifact를 만들 때 중요한 것은 artifact가 commit과 연결되어야 한다는 점이다.
+
+```text
+commit SHA:
+  a1b2c3d
+
+container image:
+  my-app:a1b2c3d
+
+build log:
+  CI run #152
+
+test result:
+  passed
+
+artifact:
+  registry/my-app:a1b2c3d
+```
+
+이렇게 해야 production에서 문제가 발생했을 때 어떤 commit이 배포되었는지 추적할 수 있다.
+
+```text
+production 장애 발생
+  -> 현재 image tag 확인
+  -> 해당 image가 어떤 commit에서 만들어졌는지 확인
+  -> CI test 결과 확인
+  -> 변경 diff 확인
+  -> rollback 후보 확인
+```
+
+CI는 개발 편의 도구일 뿐 아니라 production debugging과 traceability의 기반이다.
+
+---
+
+## CI와 CD의 관계
+
+CI는 CI/CD pipeline의 첫 번째 단계다.
+
+```text
+CI:
+  code 통합과 검증
+
+CD:
+  검증된 artifact를 배포 가능한 상태로 만들거나 production에 배포
+```
+
+흐름으로 보면 다음과 같다.
+
+```text
+Continuous Integration:
+  commit
+    -> build
+    -> test
+    -> artifact
+
+Continuous Delivery:
+  artifact
+    -> staging deploy
+    -> smoke test
+    -> release candidate
+    -> manual production approval
+
+Continuous Deployment:
+  artifact
+    -> automated validation
+    -> production deploy
+```
+
+CI가 약하면 CD도 약해진다.
+
+```text
+CI가 약한 상태:
+  artifact 품질 불명확
+  test 신뢰도 낮음
+  build 재현성 낮음
+  main branch 자주 깨짐
+
+결과:
+  Continuous Delivery/Deployment를 안전하게 운영하기 어려움
+```
+
+따라서 CI는 DevOps pipeline의 foundation이다.
+
+---
+
+## Broken Build 대응 원칙
+
+CI에서 build가 깨졌을 때 가장 중요한 원칙은 **broken build를 방치하지 않는 것**이다.
+
+깨진 CI를 방치하면 팀은 점점 CI를 신뢰하지 않게 된다.
+
+```text
+CI 실패
+  -> 모두가 무시
+  -> main branch 상태 불명확
+  -> 새 실패와 기존 실패 구분 어려움
+  -> test 결과 신뢰도 하락
+  -> CI가 형식적 절차로 전락
+```
+
+좋은 CI 문화에서는 다음 원칙을 둔다.
+
+| 원칙 | 설명 |
+|---|---|
+| Stop the line | main build가 깨지면 새 작업보다 복구 우선 |
+| Fast ownership | 실패를 유발한 변경의 owner를 빠르게 확인 |
+| Clear logs | 실패 원인을 찾을 수 있는 log 제공 |
+| Reproducible failure | 로컬 또는 CI 환경에서 재현 가능해야 함 |
+| Flaky test 관리 | 불안정한 test를 방치하지 않음 |
+| Visible status | 팀 전체가 build 상태를 볼 수 있어야 함 |
+
+Broken build를 며칠 동안 방치하면 CI는 더 이상 integration safety net이 아니다.
+
+---
+
+## Flaky Test 문제
+
+**Flaky test**는 code가 바뀌지 않았는데도 어떤 때는 성공하고 어떤 때는 실패하는 test다. CI 신뢰도를 크게 떨어뜨리는 대표적인 문제다.
+
+| 원인 | 설명 |
+|---|---|
+| time dependency | sleep, timeout, clock 차이 |
+| network dependency | 외부 API, DNS, network latency |
+| shared state | test 간 DB/cache/file 충돌 |
+| order dependency | test 실행 순서에 따라 결과 변화 |
+| race condition | concurrent code에서 timing 문제 |
+| resource limit | CI runner CPU/memory 부족 |
+| random seed | random behavior 고정 안 됨 |
+
+Flaky test가 위험한 이유는 실제 regression도 무시하게 만들 수 있기 때문이다.
+
+```text
+test 실패
+  -> 개발자: "또 flaky겠지"
+  -> 실제 regression도 무시될 가능성 증가
+```
+
+Flaky test는 다음처럼 관리해야 한다.
+
+```text
+1. 실패 pattern 기록
+2. owner 지정
+3. test 격리성 개선
+4. timeout과 retry 남용 방지
+5. external dependency mock 또는 test container 사용
+6. 불안정 test는 quarantine하되 반드시 수정 backlog에 등록
+```
+
+CI의 목적은 신뢰 가능한 feedback을 제공하는 것이다. Flaky test가 많으면 CI의 목적 자체가 흔들린다.
+
+---
+
+## CI Pipeline 속도
+
+CI는 빨라야 한다. 결과가 너무 늦게 나오면 개발자의 작업 흐름을 방해하고 feedback 가치가 떨어진다.
+
+CI 속도를 높이는 방법은 다음과 같다.
+
+| 방법 | 설명 |
+|---|---|
+| dependency cache | package install 시간 단축 |
+| build cache | compile 또는 image layer 재사용 |
+| test split | test suite를 여러 job으로 병렬 실행 |
+| fast test first | lint/unit test를 먼저 실행 |
+| selective test | 변경 범위에 맞는 test 우선 실행 |
+| container image cache | image build 속도 개선 |
+| self-hosted runner | resource를 통제해 대기 시간 감소 |
+| pipeline stage 분리 | 빠른 feedback과 느린 검증을 분리 |
+
+속도를 위해 검증 품질을 무리하게 줄이면 CI의 의미가 약해진다. 좋은 구조는 빠른 feedback과 깊은 검증을 계층화하는 것이다.
+
+```text
+PR 단계:
+  lint
+  unit test
+  type check
+  build
+
+merge 후:
+  integration test
+  container scan
+  staging deploy
+
+nightly:
+  full e2e test
+  load test
+  long-running test
+```
+
+---
+
+## CI와 Security
+
+CI는 보안 검증의 첫 관문이 될 수 있다. DevSecOps 관점에서는 보안 검사를 개발 후반이 아니라 CI 단계에 포함한다.
+
+| 보안 검사 | 목적 |
+|---|---|
+| Secret scanning | token, password, private key commit 방지 |
+| Dependency scanning | vulnerable library 탐지 |
+| SAST | source code 취약 pattern 분석 |
+| Container image scanning | image layer 취약점 확인 |
+| IaC scanning | Kubernetes/Terraform 설정 위험 탐지 |
+| License scanning | dependency license 정책 확인 |
+| SBOM 생성 | software component 목록 생성 |
+
+CI에서 다음과 같은 문제를 잡을 수 있다.
+
+```text
+- repository에 token이 commit됨
+- Dockerfile이 root user로 실행됨
+- Kubernetes manifest에 privileged: true 설정
+- Terraform security group에 0.0.0.0/0 SSH 허용
+- 오래된 vulnerable dependency 사용
+```
+
+CI에 security check를 넣는 것은 production 직전 보안 검토 부담을 줄인다. 다만 모든 보안 검사를 PR 단계에 넣으면 pipeline이 느려질 수 있으므로, 빠른 검사와 깊은 검사를 나누는 것이 좋다.
+
+---
+
+## Kubernetes 환경에서의 CI
+
+Kubernetes 환경에서 CI는 container image와 manifest 검증에 중요하다.
+
+일반적인 Kubernetes application CI 흐름은 다음과 같다.
+
+```text
+Git push
+  -> lint
+  -> unit test
+  -> build
+  -> container image build
+  -> image scan
+  -> manifest lint
+  -> Helm template 검증
+  -> integration test
+  -> image registry push
+```
+
+Kubernetes 환경에서 CI가 확인해야 할 항목은 다음과 같다.
+
+| 항목 | 검증 내용 |
+|---|---|
+| Dockerfile | build 성공, 불필요한 layer, root user 여부 |
+| Image tag | commit SHA 기반 tag 사용 여부 |
+| Image scan | critical vulnerability 여부 |
+| Helm chart | `helm lint`, `helm template` 성공 여부 |
+| Kubernetes YAML | schema validation, required field 확인 |
+| Resource 설정 | requests/limits 존재 여부 |
+| Probes | readiness/liveness/startupProbe 설정 여부 |
+| Secret 처리 | secret이 code에 직접 들어가지 않는지 |
+| Policy | privileged, hostNetwork, hostPath 등 위험 설정 확인 |
+
+Helm chart 검증은 다음처럼 수행할 수 있다.
+
+```bash
+helm lint ./chart
+helm template my-app ./chart --values values.yaml
+```
+
+Kubernetes manifest는 dry-run으로 기본 검증을 수행할 수 있다.
+
+```bash
+kubectl apply --dry-run=client -f k8s/
+```
+
+CI 단계에서 이런 검증을 수행하면 CD 단계에서 cluster에 적용할 때 실패할 가능성을 줄일 수 있다.
+
+---
+
+## Container Image Tagging
+
+Kubernetes 환경에서 CI가 container image를 만들 때 image tag 전략이 중요하다.
+
+피해야 할 대표적인 방식은 다음과 같다.
+
+```text
+my-app:latest
+```
+
+`latest`는 간단하지만 production 추적성이 낮다. 실제 어떤 commit이 배포되었는지 확인하기 어렵고, node cache 때문에 예상과 다른 image가 실행될 수 있다.
+
+더 나은 방식은 commit SHA 기반 tag다.
+
+```text
+my-app:a1b2c3d
+my-app:2026-06-02-a1b2c3d
+```
+
+이 방식의 장점은 다음과 같다.
+
+| 장점 | 설명 |
+|---|---|
+| 추적성 | image와 commit을 연결 가능 |
+| rollback | 이전 commit image로 되돌리기 쉬움 |
+| 재현성 | 어떤 image가 실행 중인지 명확 |
+| audit | production 변경 이력 확인 가능 |
+| cache 문제 감소 | tag가 바뀌므로 image pull behavior 명확 |
+
+CI는 image build 후 다음 metadata를 남기는 것이 좋다.
+
+```text
+commit SHA
+branch
+build number
+image tag
+test result
+scan result
+build timestamp
+```
+
+이 metadata는 장애 대응과 rollback에 중요하다.
+
+---
+
+## Artifact Promotion
+
+CI에서 만든 artifact를 환경마다 다시 build하면 문제가 생길 수 있다.
+
+나쁜 방식은 다음과 같다.
+
+```text
+dev 배포:
+  commit a1b2c3d를 build해서 image 생성
+
+staging 배포:
+  같은 commit을 다시 build해서 image 생성
+
+production 배포:
+  같은 commit을 또 다시 build해서 image 생성
+```
+
+겉으로는 같은 commit이지만 build 시점의 dependency, base image, network 상태가 달라져 결과물이 달라질 수 있다.
+
+좋은 방식은 **build once, promote**다.
+
+```text
+CI:
+  commit a1b2c3d build
+  image registry/my-app:a1b2c3d 생성
+
+dev:
+  같은 image 배포
+
+staging:
+  같은 image 배포
+
+production:
+  같은 image 배포
+```
+
+이 방식은 delivery 신뢰도를 높인다.
+
+```text
+staging에서 검증한 artifact와
+production에 배포한 artifact가 동일해야 한다.
+```
+
+CI는 artifact를 만들고, CD는 그 artifact를 환경별로 promote하는 구조가 안정적이다.
+
+---
+
+## Monorepo에서의 CI
+
+Monorepo에서는 여러 service나 package가 하나의 repository에 있다. 이 경우 CI 설계가 더 중요하다.
+
+```text
+monorepo:
+  service-a
+  service-b
+  service-c
+  shared-lib
+  frontend
+  infra
+```
+
+`service-a`만 변경했는데 모든 service의 full test를 실행하면 비효율적일 수 있다. Monorepo CI에서는 다음 전략을 사용할 수 있다.
+
+| 전략 | 설명 |
+|---|---|
+| path-based trigger | 변경된 directory에 따라 job 선택 |
+| dependency graph | 영향을 받는 package만 test |
+| affected build | 변경 영향 범위 계산 |
+| remote cache | build/test 결과 cache |
+| parallel execution | package별 test 병렬 실행 |
+| required global check | shared-lib 변경 시 넓은 범위 test |
+
+주의할 점은 selective CI가 필요한 test를 누락할 수 있다는 것이다. 특히 shared library나 common config 변경은 넓은 범위의 test를 수행해야 한다.
+
+---
+
+## Microservices에서의 CI
+
+Microservices 환경에서는 CI가 더 복잡해진다. 각 service는 독립적으로 build/test/deploy될 수 있지만, 서비스 간 contract가 깨지면 production 장애가 발생할 수 있다.
+
+예를 들어 `order-service`가 `payment-service`를 호출한다고 하자.
+
+```text
+order-service:
+  payment-service의 /payments API 호출
+
+payment-service 변경:
+  request field 이름 변경
+  response schema 변경
+
+결과:
+  order-service가 runtime에서 실패 가능
+```
+
+이 문제를 줄이려면 contract test가 필요하다.
+
+| 테스트 | 목적 |
+|---|---|
+| Consumer-driven contract test | consumer가 기대하는 API contract 검증 |
+| Provider contract verification | provider가 contract를 만족하는지 확인 |
+| Integration test | 실제 service 조합 검증 |
+| End-to-end test | 사용자 journey 기준 검증 |
+
+Microservices CI에서는 각 service의 독립성만 보는 것이 아니라 service 간 약속이 깨지지 않았는지도 확인해야 한다.
+
+---
+
+## Database Migration과 CI
+
+CI에서 놓치기 쉬운 부분이 database migration이다. Application code는 build/test를 통과했지만 migration이 production에서 실패하면 배포가 중단되거나 장애가 날 수 있다.
+
+CI에서 migration을 검증하려면 다음을 고려해야 한다.
+
+```text
+1. test database 생성
+2. migration 적용
+3. application test 실행
+4. rollback 가능성 확인
+5. backward compatibility 확인
+```
+
+Continuous Delivery/Deployment를 고려한다면 migration은 backward compatible해야 한다.
+
+안전한 migration 흐름은 다음과 같다.
+
+```text
+1. 새 column 추가
+2. application이 old/new schema 모두 지원
+3. data backfill
+4. application이 new schema 사용
+5. old column 제거
+```
+
+CI에서는 migration script syntax만 보는 것이 아니라, 실제로 migration을 적용했을 때 application이 동작하는지 확인하는 것이 중요하다.
+
+---
+
+## CI Failure 분석
+
+CI가 실패했을 때는 실패 유형을 분류해야 한다.
+
+| 실패 유형 | 의미 | 대응 |
+|---|---|---|
+| Compile/build failure | code가 artifact로 만들어지지 않음 | code 또는 dependency 수정 |
+| Unit test failure | 작은 로직 regression | 해당 변경 확인 |
+| Integration failure | module/service 간 충돌 | contract, config, dependency 확인 |
+| Environment failure | runner, network, external dependency 문제 | CI infra 상태 확인 |
+| Flaky test | 재현성 없는 test 실패 | test 안정화 |
+| Security failure | secret, vulnerability, policy 위반 | 보안 수정 |
+| Timeout | test/build가 너무 오래 걸림 | 성능 개선 또는 timeout 조정 |
+| Resource failure | CI runner CPU/memory 부족 | runner resource 조정 |
+
+모든 CI 실패를 같은 방식으로 보면 안 된다. Flaky test와 실제 regression은 다르게 대응해야 한다. 하지만 flaky test라고 해서 무시하면 안 된다. Flaky test 자체가 CI reliability issue다.
+
+---
+
+## CI 운영 지표
+
+CI 자체도 운영 대상이다. CI가 느리거나 자주 깨지면 개발 생산성이 떨어진다.
+
+CI에서 볼 수 있는 지표는 다음과 같다.
+
+| 지표 | 의미 |
+|---|---|
+| Build success rate | pipeline이 얼마나 자주 성공하는가 |
+| Mean time to repair build | broken build가 얼마나 빨리 복구되는가 |
+| Queue time | runner 할당까지 대기 시간 |
+| Pipeline duration | 전체 CI 실행 시간 |
+| Test duration | test suite 소요 시간 |
+| Flaky test rate | 불안정한 test 비율 |
+| Failure distribution | 어떤 단계에서 주로 실패하는가 |
+| Merge frequency | code integration 빈도 |
+| Revert rate | merge 후 되돌리는 비율 |
+
+CI도 하나의 internal platform이다. 개발자가 매일 의존하는 시스템이므로 안정성과 성능이 중요하다.
+
+---
+
+## Kubernetes Homelab에 CI 적용하기
+
+개인 k3s나 homelab 환경에서도 CI는 유용하다. 처음부터 production 자동 배포까지 가지 않아도 된다. 우선 image와 manifest가 정상인지 검증하는 것만으로도 효과가 크다.
+
+개인 service를 운영한다면 다음 흐름을 만들 수 있다.
+
+```text
+Git push
+  -> GitHub Actions 또는 Jenkins/Tekton
+  -> unit test
+  -> Docker image build
+  -> image push to registry
+  -> Helm chart lint
+  -> manifest dry-run
+```
+
+개인 환경에서 권장하는 최소 CI는 다음과 같다.
+
+```text
+1. test 실행
+2. Docker image build 확인
+3. image tag를 commit SHA로 생성
+4. registry push
+5. Helm chart 또는 manifest lint
+6. secret이 repository에 들어가지 않았는지 확인
+```
+
+Kubernetes app이라면 다음 검증이 유용하다.
+
+```bash
+docker build -t my-app:${GITHUB_SHA} .
+helm lint ./chart
+helm template my-app ./chart
+kubectl apply --dry-run=client -f k8s/
+```
+
+주의할 점은 internal IP, token, password, private hostname을 CI log에 출력하지 않는 것이다. CI log는 artifact로 보관될 수 있고, 생각보다 많은 사람이 접근할 수 있다.
+
+---
+
+## 자칫 실수하기 쉬운 부분
+
+### CI 도구만 설치하고 branch를 오래 유지하는 경우
+
+CI의 핵심은 continuous integration이다. feature branch를 몇 주 동안 유지하고 release 직전에 합친다면 CI 도구가 있어도 통합은 continuous하지 않다.
+
+### Broken build를 방치하는 경우
+
+Main branch CI가 깨졌는데도 모두가 무시하면 CI는 신뢰를 잃는다. Broken build는 빠르게 수정해야 한다.
+
+### Test가 거의 없는 경우
+
+Build만 성공하고 test가 없다면 CI가 잡을 수 있는 문제가 제한된다. 최소한 unit test, lint, build validation은 있어야 한다.
+
+### Pipeline이 너무 느린 경우
+
+CI 결과가 너무 늦게 나오면 개발자는 feedback을 활용하기 어렵다. 빠른 test와 느린 test를 분리해야 한다.
+
+### Flaky test를 방치하는 경우
+
+Flaky test가 많으면 실제 regression도 무시될 수 있다. Flaky test는 별도의 reliability issue로 다뤄야 한다.
+
+### Artifact 추적성이 없는 경우
+
+`latest` tag만 사용하면 어떤 commit이 배포되었는지 추적하기 어렵다. commit SHA 기반 tag를 사용하는 것이 안전하다.
+
+### CI와 CD를 혼동하는 경우
+
+CI는 code integration과 검증이다. CD는 검증된 artifact를 delivery/deployment하는 단계다. 둘을 구분해야 pipeline 설계를 정확히 할 수 있다.
+
+---
+
+## 운영 검증 포인트
+
+CI를 운영할 때는 다음 질문을 확인해야 한다.
+
+| 검증 포인트 | 확인 질문 |
+|---|---|
+| Integration 빈도 | 개발자가 작은 변경을 자주 merge하는가? |
+| Main branch 건강성 | main branch가 항상 build 가능한 상태인가? |
+| Required checks | CI 실패 시 merge가 차단되는가? |
+| Feedback 속도 | 개발자가 기다릴 수 있을 만큼 빠른가? |
+| Test 신뢰도 | flaky test가 많지 않은가? |
+| Test 범위 | 중요한 failure mode를 잡는가? |
+| Artifact 추적성 | artifact가 commit SHA와 연결되는가? |
+| Security check | secret, dependency, image 취약점을 검출하는가? |
+| Runner 안정성 | CI infra failure와 code failure를 구분할 수 있는가? |
+| Visibility | 팀 전체가 build 상태를 볼 수 있는가? |
+| Ownership | 실패한 pipeline을 누가 고치는지 명확한가? |
+| Kubernetes 검증 | image, Helm chart, manifest가 배포 전에 검증되는가? |
+
+---
+
+## 정리
+
+Continuous Integration은 개발자가 작은 code change를 자주 shared repository에 통합하고, 그때마다 자동 build와 test를 실행하여 integration 문제를 빠르게 발견하고 main branch를 건강하게 유지하는 practice다.
+
+핵심은 다음과 같다.
+
+- CI는 도구가 아니라 작은 변경을 자주 통합하고 자동 검증하는 practice다.
+- Infrequent integration은 merge conflict, integration failure, release 지연을 만든다.
+- CI는 build, test, artifact 생성, status check를 통해 빠른 feedback을 제공한다.
+- Main branch는 required check와 code review를 통해 보호해야 한다.
+- Broken build와 flaky test를 방치하면 CI 신뢰도가 무너진다.
+- CI artifact는 commit SHA와 연결되어야 production debugging과 rollback이 가능하다.
+- Kubernetes 환경에서는 image build, image scan, Helm lint, manifest dry-run, secret 노출 여부를 CI에서 검증해야 한다.
+- CI는 Continuous Delivery와 Continuous Deployment의 foundation이다.
+
+짧게 말하면 다음과 같다.
+
+```text
+CI는 코드를 자주 합치고,
+합칠 때마다 자동으로 검증하는 방식이다.
+```
+
+운영 관점에서는 다음처럼 정리할 수 있다.
+
+```text
+CI가 약하면 CD는 안전하게 작동하기 어렵다.
+CI는 DevOps delivery pipeline의 첫 번째 신뢰 지점이다.
+```
