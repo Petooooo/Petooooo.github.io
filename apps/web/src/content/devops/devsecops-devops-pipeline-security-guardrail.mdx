@@ -1,0 +1,995 @@
+---
+area: "DevOps"
+type: "concept"
+series: "DevOps Explained"
+title: "DevSecOps: DevOps Pipeline에 Security Guardrail 내장하기"
+slug: "devsecops-devops-pipeline-security-guardrail"
+date: "2026-06-02"
+updated: "2026-06-02"
+draft: false
+reviewed: true
+category: "DevOps"
+tags: ["DevSecOps", "Security", "DevOps", "CI/CD", "SAST", "DAST", "SCA", "Kubernetes", "Policy as Code", "Secret Scanning"]
+description: "DevSecOps를 DevOps 흐름에 security를 통합하는 practice로 정리하고, shift left, security as code, SAST/DAST/SCA, secret scanning, Kubernetes security, policy as code, runtime security까지 설명한다."
+---
+## 개요
+
+**DevSecOps**는 security를 software delivery lifecycle 마지막에 붙이는 별도 검문소로 두지 않고, 개발·빌드·테스트·배포·운영 전 과정에 자동화된 security practice와 shared responsibility를 내장하는 방식이다.
+
+전통적인 방식에서는 개발팀이 기능을 만들고, QA가 테스트하고, 운영팀이 배포를 준비한 뒤, 마지막에 보안팀이 취약점 검사를 수행하는 경우가 많았다.
+
+```text
+전통적 보안 방식:
+  개발
+    -> 테스트
+    -> 배포 준비
+    -> 보안 검토
+    -> 문제 발견
+    -> 개발팀으로 되돌아감
+```
+
+이 구조는 release 주기가 길고 배포가 드물던 환경에서는 어느 정도 동작할 수 있다. 하지만 DevOps와 CI/CD가 확산되면서 배포 주기는 짧아졌다. 하루에도 여러 번 production에 변경이 반영되는 환경에서 security를 마지막 단계에만 두면 병목이 된다.
+
+DevSecOps의 핵심은 다음과 같다.
+
+```text
+DevSecOps = Development + Security + Operations
+
+목표:
+  security를 SDLC 전체에 자동화하고,
+  개발팀·보안팀·운영팀이 함께 책임지며,
+  더 빠르게 더 안전한 software를 전달한다.
+```
+
+DevOps가 빠른 delivery flow를 만든다면, DevSecOps는 그 flow 안에서 security가 자동으로 검증되고 추적되도록 만드는 접근이다.
+
+---
+
+## DevSecOps가 필요한 이유
+
+DevOps는 build, test, release, deploy, monitor를 자동화해 변경 사항이 빠르게 production까지 도달하도록 만든다. 하지만 security process가 여전히 release 직전의 수동 검토에 머물러 있다면 전체 흐름은 보안 검토 단계에서 막힌다.
+
+```text
+DevOps pipeline:
+  빠르게 build
+  빠르게 test
+  빠르게 deploy
+
+Security process:
+  release 직전 별도 manual review
+  보안팀 queue 대기
+  취약점 발견 후 개발팀으로 반송
+```
+
+문제는 단순히 배포가 늦어진다는 데 있지 않다. 보안 문제는 늦게 발견할수록 수정 비용이 커진다.
+
+예를 들어 인증 설계가 잘못된 경우를 생각해보자.
+
+```text
+설계 단계에서 발견:
+  authentication flow 수정
+  영향 범위 작음
+
+release 직전 발견:
+  API 변경 필요
+  frontend/backend 수정
+  test 재작성
+  배포 일정 지연
+  운영 risk 증가
+```
+
+DevSecOps는 security 문제를 가능한 한 빨리, 가능한 한 자동으로, 가능한 한 개발자에게 가까운 위치에서 발견하려는 접근이다.
+
+| 문제 | DevSecOps 접근 |
+|---|---|
+| release 직전 보안 검토 병목 | PR, CI, build, deploy 단계에 보안 검사 분산 |
+| 취약점 수정 비용 증가 | shift-left로 초기에 발견 |
+| 보안팀 queue 대기 | 반복 검사는 자동화하고 고위험 검토에 집중 |
+| 팀 간 책임 분리 | 개발·보안·운영의 shared responsibility |
+| 수동 보안 checklist | security as code, policy as code로 자동화 |
+| production 보안 blind spot | runtime monitoring과 incident response 연결 |
+
+---
+
+## DevSecOps의 정의와 핵심 원칙
+
+DevSecOps는 DevOps에 security라는 단어를 단순히 붙인 개념이 아니다. DevOps pipeline 안에서 security가 작동하는 방식을 바꾸는 것이다.
+
+| 요소 | 의미 |
+|---|---|
+| Development | 기능 개발, code 작성, application 설계 |
+| Security | threat modeling, secure coding, vulnerability scanning, policy enforcement |
+| Operations | deployment, runtime monitoring, incident response, infrastructure security |
+
+DevSecOps의 핵심 원칙은 세 가지로 정리할 수 있다.
+
+```text
+1. Shift Left
+   보안을 개발 후반이 아니라 설계와 개발 초기에 포함한다.
+
+2. Automation
+   취약점 검사, policy check, secret scanning 등을 pipeline에 자동화한다.
+
+3. Shared Responsibility
+   보안팀만이 아니라 개발팀, 운영팀, 플랫폼팀이 함께 보안을 책임진다.
+```
+
+DevSecOps의 목표는 배포를 느리게 만드는 것이 아니다. security를 초기에 자동화해 release 직전의 큰 보안 병목을 줄이고, 더 빠르게 더 안전한 software를 전달하는 것이다.
+
+---
+
+## DevOps와 DevSecOps의 차이
+
+DevSecOps는 DevOps의 대체 개념이 아니라 확장이다.
+
+DevOps가 다음을 강조한다면:
+
+```text
+DevOps:
+  빠른 integration
+  자동 build/test/deploy
+  개발과 운영의 협업
+  feedback loop 단축
+```
+
+DevSecOps는 여기에 security guardrail을 추가한다.
+
+```text
+DevSecOps:
+  secure coding
+  vulnerability scanning
+  secret detection
+  dependency risk 관리
+  container/image security
+  IaC security
+  runtime threat detection
+  compliance evidence 자동화
+```
+
+| 구분 | DevOps | DevSecOps |
+|---|---|---|
+| 핵심 목표 | 빠르고 안정적인 software delivery | 빠르고 안전한 software delivery |
+| 주요 관심 | build, test, deploy, monitor | build, test, deploy, monitor + security |
+| 책임 구조 | 개발팀과 운영팀의 협업 | 개발팀, 운영팀, 보안팀의 shared responsibility |
+| 보안 위치 | 별도 단계로 남을 수 있음 | SDLC 전체에 내장 |
+| 자동화 대상 | CI/CD, deployment, infrastructure | CI/CD + security scan + policy enforcement |
+| 실패 기준 | build/test/deploy 실패 | build/test/deploy/security policy 실패 |
+
+DevSecOps를 잘못 이해하면 “보안팀을 pipeline에 추가하는 것” 정도로 생각할 수 있다. 하지만 핵심은 보안팀이 마지막에 검사하는 구조에서 벗어나, 반복 가능한 security guardrail을 개발과 운영 흐름 안에 넣는 것이다.
+
+---
+
+## Shift Left Security
+
+**Shift left**는 security를 SDLC 후반에서 전반으로 이동시키는 개념이다.
+
+Software delivery 흐름을 왼쪽에서 오른쪽으로 보면 다음과 같다.
+
+```text
+Plan -> Code -> Build -> Test -> Release -> Deploy -> Operate
+```
+
+전통적 보안은 오른쪽 끝에 가까웠다.
+
+```text
+Plan -> Code -> Build -> Test -> Release -> [Security Review] -> Deploy
+```
+
+Shift left는 security를 왼쪽으로 이동시킨다.
+
+```text
+[Threat Modeling] -> [Secure Coding] -> [SAST] -> [Dependency Scan]
+  -> [Image Scan] -> [Policy Check] -> Deploy -> Runtime Security
+```
+
+단계별 shift-left security 예시는 다음과 같다.
+
+| 단계 | Security practice | 목적 |
+|---|---|---|
+| Plan | threat modeling, abuse case 정리 | 설계 단계에서 위험 식별 |
+| Code | secure coding guideline, pre-commit secret scan | 개발자에게 가까운 위치에서 문제 발견 |
+| Pull Request | SAST, dependency scan, IaC scan | merge 전 자동 검증 |
+| Build | container image scan, SBOM 생성 | artifact 수준의 보안 검증 |
+| Test | DAST, integration security test | 실행 중인 application 검증 |
+| Deploy | policy-as-code, admission control | 위험한 설정 배포 차단 |
+| Operate | runtime detection, log monitoring, incident response | production 공격과 이상행위 탐지 |
+
+Shift left의 목적은 보안팀을 없애는 것이 아니다. 보안팀이 반복 검토보다 threat modeling, policy 설계, 고위험 architecture review, incident response에 집중할 수 있게 만드는 것이다.
+
+---
+
+## Security as Code와 Policy as Code
+
+DevSecOps에서는 security도 code로 표현해야 한다.
+
+기존 방식에서는 보안 정책이 문서나 checklist에만 있을 수 있다.
+
+```text
+보안 문서:
+  production database는 public access 금지
+  container는 root로 실행하지 말 것
+  secret은 repository에 저장하지 말 것
+  critical vulnerability가 있으면 배포 금지
+```
+
+문서만으로는 pipeline을 멈출 수 없다. 사람이 기억하고 검토해야 한다.
+
+DevSecOps에서는 이런 정책을 machine-readable policy로 만든다.
+
+```text
+Policy as Code:
+  security rule을 machine-readable policy로 작성
+  pipeline 또는 admission controller가 자동으로 검사
+  위반 시 merge 또는 deploy 차단
+```
+
+Kubernetes 환경에서 둘 수 있는 정책 예시는 다음과 같다.
+
+```text
+- privileged container 금지
+- hostPath volume 사용 제한
+- hostNetwork 사용 제한
+- image는 승인된 registry에서만 pull
+- container는 root user로 실행 금지
+- resource requests/limits 필수
+- Secret manifest에 plaintext credential 금지
+- LoadBalancer service는 특정 namespace에서만 허용
+```
+
+Terraform 같은 IaC에도 보안 정책을 적용할 수 있다.
+
+```text
+- 0.0.0.0/0 SSH 허용 금지
+- public object storage bucket 금지
+- production database deletion protection 필수
+- IAM wildcard permission 제한
+- encryption at rest 필수
+```
+
+Security as Code의 장점은 다음과 같다.
+
+| 장점 | 설명 |
+|---|---|
+| 일관성 | 모든 팀에 같은 기준 적용 |
+| 자동화 | 반복 보안 검토를 pipeline에서 수행 |
+| 추적성 | policy 변경도 Git history로 관리 |
+| 확장성 | 팀과 서비스가 늘어도 보안 기준 유지 |
+| audit | 언제 어떤 policy가 적용되었는지 확인 가능 |
+
+---
+
+## DevSecOps Pipeline 구조
+
+일반 DevOps pipeline이 다음과 같다면:
+
+```text
+Code
+  -> Build
+  -> Test
+  -> Package
+  -> Deploy
+```
+
+DevSecOps pipeline은 다음처럼 security 검증이 통합된다.
+
+```text
+Code
+  -> Secret Scan
+  -> SAST
+  -> Dependency Scan
+  -> Build
+  -> Container Image Scan
+  -> IaC Scan
+  -> Test
+  -> DAST
+  -> Policy Check
+  -> Deploy
+  -> Runtime Monitoring
+```
+
+단계별 보안 검사는 다음과 같이 정리할 수 있다.
+
+| 단계 | 보안 검사 | 목적 |
+|---|---|---|
+| Code | secret scanning | token, password, private key commit 방지 |
+| Code | SAST | source code 취약 pattern 탐지 |
+| Build | dependency scan | vulnerable package 탐지 |
+| Build | SBOM 생성 | software component 목록 확보 |
+| Package | image scan | container image 취약점 탐지 |
+| IaC | Terraform/Kubernetes scan | misconfiguration 탐지 |
+| Test | DAST | 실행 중 application의 취약점 탐지 |
+| Deploy | policy-as-code | 위험한 설정 배포 차단 |
+| Runtime | monitoring/detection | 운영 중 공격·이상행위 탐지 |
+
+중요한 것은 모든 security finding을 무조건 blocking으로 두지 않는 것이다. 위험도와 context에 따라 기준을 나눠야 한다.
+
+```text
+Critical:
+  merge 또는 deploy 차단
+
+High:
+  SLA 내 수정 필요, 경우에 따라 approval 필요
+
+Medium:
+  backlog 등록, 일정 기간 내 개선
+
+Low:
+  visibility 제공, 추세 관리
+```
+
+보안 검사 결과가 너무 많은 false positive를 만들면 개발자들이 경고를 무시하게 된다. DevSecOps에서 중요한 것은 보안 도구를 많이 붙이는 것이 아니라, 실제로 대응 가능한 signal을 pipeline에 넣는 것이다.
+
+---
+
+## SAST, DAST, SCA 구분
+
+DevSecOps를 설계하려면 주요 보안 검사 유형을 구분해야 한다.
+
+### SAST
+
+**SAST**는 Static Application Security Testing이다. 실행하지 않은 source code를 분석해 취약할 수 있는 pattern을 찾는다.
+
+```text
+SAST 탐지 예시:
+  - SQL injection 가능성
+  - command injection 가능성
+  - hardcoded secret
+  - insecure crypto usage
+  - path traversal 가능성
+  - unsafe deserialization
+```
+
+장점은 code 작성 단계에서 빠르게 발견할 수 있다는 것이다. 단점은 false positive가 많을 수 있고, 실제 runtime context를 완전히 알기 어렵다는 점이다.
+
+### DAST
+
+**DAST**는 Dynamic Application Security Testing이다. 실행 중인 application에 외부에서 요청을 보내 취약점을 탐지한다.
+
+```text
+DAST 탐지 예시:
+  - authentication 우회
+  - XSS
+  - SQL injection
+  - insecure header
+  - session handling 문제
+  - exposed endpoint
+```
+
+장점은 실제 실행 환경에서 확인한다는 점이다. 단점은 test environment 준비가 필요하고, CI 초반에 실행하기에는 느릴 수 있다는 점이다.
+
+### SCA
+
+**SCA**는 Software Composition Analysis다. application이 사용하는 open source dependency와 library의 취약점, license, version risk를 분석한다.
+
+```text
+SCA 탐지 예시:
+  - vulnerable npm package
+  - 오래된 Maven dependency
+  - CVE가 있는 base image
+  - 위험한 transitive dependency
+  - license policy 위반
+```
+
+요약하면 다음과 같다.
+
+| 검사 | 분석 대상 | 실행 시점 |
+|---|---|---|
+| SAST | source code | PR, CI 초반 |
+| DAST | running application | staging, test environment |
+| SCA | dependency, package | PR, build 단계 |
+| Image scan | container image | image build 후 |
+| IaC scan | Terraform, Kubernetes YAML | PR, CI 단계 |
+
+---
+
+## Secret Scanning
+
+DevSecOps에서 가장 먼저 자동화해야 할 것 중 하나가 **secret scanning**이다.
+
+개발자는 실수로 다음 정보를 Git에 commit할 수 있다.
+
+```text
+- API token
+- cloud access key
+- database password
+- private key
+- Kubernetes kubeconfig
+- OAuth client secret
+- webhook signing secret
+```
+
+이런 정보가 Git history에 들어가면 제거가 어렵다. 단순히 최신 commit에서 삭제해도 과거 commit에는 남아 있을 수 있다.
+
+Secret scanning은 다음 위치에서 수행할 수 있다.
+
+| 위치 | 목적 |
+|---|---|
+| pre-commit hook | local commit 전에 탐지 |
+| pull request | repository 반영 전에 탐지 |
+| CI pipeline | merge 전 자동 검사 |
+| repository scanning | 기존 history에서 secret 탐지 |
+| runtime monitoring | 유출된 credential 사용 감지 |
+
+Secret이 발견되면 단순 삭제로 끝내면 안 된다.
+
+```text
+secret 발견 시:
+  1. 해당 secret revoke
+  2. 새 secret 발급
+  3. 사용처 교체
+  4. Git history 정리 필요 여부 검토
+  5. 유출 범위 확인
+  6. 재발 방지 rule 추가
+```
+
+DevSecOps에서는 secret을 code에 넣지 않고 secret manager, CI/CD secret store, Kubernetes Secret, External Secrets, sealed secret 같은 방식으로 분리해야 한다.
+
+> token, password, private key, internal hostname, internal IP는 문서와 log에서 `[REDACTED]` 처리해야 한다.
+
+---
+
+## Dependency와 Supply Chain Security
+
+현대 application은 대부분 open source dependency 위에 만들어진다. 직접 작성한 code보다 dependency code가 훨씬 많을 수 있다.
+
+```text
+application code:
+  직접 작성한 code
+
+dependencies:
+  npm package
+  Maven artifact
+  Python package
+  container base image
+  OS package
+  transitive dependency
+```
+
+문제는 직접 설치한 package뿐 아니라 transitive dependency에서도 취약점이 발생할 수 있다는 점이다.
+
+```text
+my-app
+  -> framework-a
+      -> library-b
+          -> vulnerable-library-c
+```
+
+DevSecOps에서 dependency 관리의 핵심은 다음과 같다.
+
+| 항목 | 설명 |
+|---|---|
+| version pinning | dependency version을 명확히 고정 |
+| lockfile 관리 | `package-lock.json`, `poetry.lock`, `go.sum` 등 관리 |
+| vulnerability scanning | known CVE 탐지 |
+| license scanning | license policy 위반 확인 |
+| update automation | dependency update PR 자동 생성 |
+| SBOM | software component 목록 생성 |
+| provenance | artifact가 어디서 왔는지 확인 |
+| signing | image/artifact 서명 검토 |
+
+특히 container 환경에서는 base image가 중요하다. application code가 안전해도 base image에 critical vulnerability가 있으면 배포 risk가 커진다.
+
+---
+
+## Container Security
+
+Kubernetes와 Docker 기반 환경에서는 container security가 DevSecOps의 핵심이다.
+
+Container image에는 application code뿐 아니라 OS package, runtime, library, config가 들어간다. 따라서 image build 단계에서 보안 검사를 해야 한다.
+
+확인할 항목은 다음과 같다.
+
+| 항목 | 설명 |
+|---|---|
+| base image | 신뢰 가능한 image인지, 취약점이 적은지 확인 |
+| image size | 불필요한 package가 포함되어 있지 않은지 확인 |
+| root user | container가 root로 실행되는지 확인 |
+| secret 포함 여부 | image layer에 secret이 들어갔는지 확인 |
+| package 취약점 | OS package CVE 확인 |
+| runtime dependency | language package 취약점 확인 |
+| image signing | 승인된 image인지 확인 |
+| registry policy | 승인된 registry에서 pull하는지 확인 |
+
+예를 들어 다음 Dockerfile은 주의가 필요하다.
+
+```dockerfile
+FROM ubuntu:latest
+
+COPY . /app
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y curl vim
+
+CMD ["python", "app.py"]
+```
+
+주의할 점은 다음과 같다.
+
+```text
+- latest tag는 재현성을 떨어뜨릴 수 있음
+- 불필요한 package가 image에 포함됨
+- root user로 실행될 가능성
+- build context에 secret이 포함될 위험
+```
+
+더 나은 방향은 다음과 같다.
+
+```dockerfile
+FROM python:3.12-slim
+
+WORKDIR /app
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY . .
+
+USER 10001
+
+CMD ["python", "app.py"]
+```
+
+실제 production에서는 dependency pinning, image scan, non-root 실행, read-only filesystem, minimal base image 등을 함께 검토해야 한다.
+
+---
+
+## Kubernetes Security와 DevSecOps
+
+Kubernetes 환경에서는 DevSecOps가 application code뿐 아니라 manifest와 cluster policy까지 포함해야 한다.
+
+Kubernetes manifest에서 자주 발생하는 위험은 다음과 같다.
+
+```text
+- privileged: true
+- hostNetwork: true
+- hostPID: true
+- hostPath mount
+- runAsUser: 0
+- allowPrivilegeEscalation: true
+- resource limits 없음
+- readiness/livenessProbe 없음
+- Secret 값을 plaintext manifest에 작성
+- imagePullPolicy와 tag 관리 부실
+- NetworkPolicy 없음
+```
+
+DevSecOps pipeline에서는 다음을 검사할 수 있다.
+
+| 검사 대상 | 예시 |
+|---|---|
+| Helm chart | `helm lint`, template validation |
+| Kubernetes YAML | schema validation |
+| Security context | non-root, privilege escalation 제한 |
+| Resource policy | requests/limits 필수 |
+| Image policy | approved registry, digest pinning |
+| Secret policy | plaintext secret 금지 |
+| Network policy | namespace/service 간 접근 제한 |
+| Admission control | OPA, Kyverno 등으로 deploy 차단 |
+
+보안 기준은 다음처럼 표현될 수 있다.
+
+```text
+Kubernetes deployment policy:
+  container는 root로 실행하지 않는다.
+  privileged container는 금지한다.
+  hostPath mount는 승인된 workload만 허용한다.
+  production namespace에는 resource limits가 필요하다.
+  image는 내부 registry 또는 승인된 registry에서만 허용한다.
+```
+
+중요한 것은 이런 정책을 문서에만 두지 않고, pipeline과 admission control에 연결하는 것이다.
+
+---
+
+## IaC Security
+
+DevSecOps는 application code만 검사하지 않는다. Infrastructure as Code도 검사해야 한다.
+
+Terraform, CloudFormation, Kubernetes YAML, Helm values에는 보안 사고를 만들 수 있는 설정이 들어간다.
+
+IaC에서 자주 발생하는 위험은 다음과 같다.
+
+```text
+- security group에서 0.0.0.0/0 SSH 허용
+- public object storage bucket 생성
+- database public access 허용
+- encryption at rest 비활성화
+- overly permissive IAM policy
+- production deletion protection 미설정
+- Kubernetes LoadBalancer를 불필요하게 public으로 노출
+```
+
+IaC scan은 이런 misconfiguration을 PR 단계에서 잡을 수 있다.
+
+```text
+IaC PR
+  -> terraform validate
+  -> terraform plan
+  -> IaC security scan
+  -> policy check
+  -> approval
+  -> apply
+```
+
+IaC security에서 중요한 것은 plan 결과를 검토하는 것이다. Code만 봐서는 실제로 어떤 resource가 생기고 삭제되는지 한눈에 파악하기 어려울 수 있다.
+
+---
+
+## Runtime Security
+
+DevSecOps는 shift-left만으로 끝나지 않는다. Production runtime에서도 security monitoring이 필요하다.
+
+모든 취약점을 개발 단계에서 잡을 수는 없다. 또한 공격은 production에서 발생한다.
+
+Runtime security에서 볼 수 있는 항목은 다음과 같다.
+
+| 영역 | 예시 |
+|---|---|
+| Application logs | 인증 실패 증가, 비정상 요청 pattern |
+| Container behavior | 예상치 못한 process 실행, shell spawn |
+| Network behavior | 이상한 outbound connection |
+| Kubernetes audit log | 비정상 API 호출, 권한 상승 시도 |
+| File integrity | runtime 중 binary/config 변경 |
+| Secrets access | 비정상 secret read |
+| Vulnerability exposure | 실행 중인 workload의 취약 image |
+| Incident response | 공격 탐지 후 isolation, rollback, credential rotation |
+
+DevSecOps는 다음 세 위치에 security를 둔다.
+
+```text
+Secure before deploy:
+  SAST, SCA, image scan, IaC scan
+
+Secure at deploy:
+  policy-as-code, admission control
+
+Secure after deploy:
+  runtime monitoring, audit log, incident response
+```
+
+---
+
+## Compliance와 Evidence 자동화
+
+기업 환경에서는 security뿐 아니라 compliance도 중요하다. Audit, change management, access control, vulnerability management evidence가 필요할 수 있다.
+
+전통적인 방식에서는 compliance evidence를 사람이 문서로 모았다.
+
+```text
+배포 승인 기록
+취약점 검사 결과
+접근 권한 검토
+변경 이력
+보안 예외 승인
+```
+
+DevSecOps에서는 이를 pipeline과 system에서 자동으로 남길 수 있다.
+
+| Evidence | 자동화 방법 |
+|---|---|
+| 누가 변경했는가 | Git commit, PR author |
+| 누가 승인했는가 | PR review, approval record |
+| 어떤 test가 통과했는가 | CI result |
+| 어떤 보안 검사가 실행됐는가 | scan report |
+| 어떤 artifact가 배포됐는가 | image digest, SBOM |
+| 어떤 policy를 통과했는가 | policy check result |
+| 언제 배포됐는가 | deployment event |
+| 어떤 rollback이 가능한가 | release metadata |
+
+이런 자동화는 compliance를 느리게 만드는 것이 아니라, compliance evidence를 delivery pipeline의 부산물로 만들 수 있게 한다.
+
+---
+
+## DevSecOps의 이점
+
+DevSecOps의 이점은 security 강화에만 있지 않다. Speed와 security를 함께 개선하는 것이 목표다.
+
+| 이점 | 설명 |
+|---|---|
+| 취약점 조기 발견 | 개발 초기나 PR 단계에서 문제 발견 |
+| 수정 비용 감소 | production 직전보다 작은 영향 범위에서 수정 |
+| 배포 병목 감소 | 반복 보안 검사를 자동화 |
+| shared responsibility | 보안팀만이 아니라 개발·운영이 함께 책임 |
+| audit trail 확보 | security evidence가 pipeline에 남음 |
+| 일관된 정책 적용 | 모든 팀에 같은 기준 적용 |
+| production risk 감소 | 취약 image, secret, misconfiguration 차단 |
+| 보안팀 효율 향상 | 반복 검토보다 고위험 설계와 정책에 집중 가능 |
+
+DevSecOps는 “보안을 강화하느라 배포가 느려진다”는 생각을 바꾸려는 접근이다. 올바르게 구성하면 보안 검토를 자동화해 delivery flow를 더 예측 가능하게 만들 수 있다.
+
+---
+
+## DevSecOps가 실패하는 흔한 이유
+
+### 보안 도구만 붙이는 경우
+
+SAST, DAST, SCA, image scan 도구를 많이 붙였다고 DevSecOps가 되는 것은 아니다. 개발자가 결과를 이해하고 수정할 수 있어야 하고, false positive를 관리해야 하며, policy 기준이 명확해야 한다.
+
+```text
+도구만 붙인 상태:
+  scan result가 너무 많음
+  누구도 triage하지 않음
+  false positive가 많음
+  개발자는 결과를 무시
+  pipeline은 느려짐
+```
+
+### 모든 경고를 blocking하는 경우
+
+모든 vulnerability를 blocking으로 처리하면 개발 flow가 멈출 수 있다. 위험도와 context에 따라 기준을 나눠야 한다.
+
+```text
+Critical:
+  deploy 차단
+
+High:
+  일정 기간 내 수정 또는 risk acceptance 필요
+
+Medium/Low:
+  backlog와 trend 관리
+```
+
+### Ownership이 불명확한 경우
+
+취약점이 발견되었을 때 누가 수정해야 하는지 명확하지 않으면 결과가 방치된다.
+
+| Finding 유형 | 가능한 Owner |
+|---|---|
+| Application code 취약점 | service owner |
+| Base image 취약점 | platform team 또는 image owner |
+| Kubernetes manifest 문제 | service team + platform team |
+| IAM/network 문제 | infrastructure owner |
+| Secret 유출 | secret owner + security/platform team |
+
+DevSecOps에서는 security finding별 owner와 SLA가 필요하다.
+
+### Security 팀이 마지막 승인자 역할만 하는 경우
+
+DevSecOps에서는 security team이 모든 변경을 마지막에 승인하는 병목이 되어서는 안 된다. 보안팀은 policy, automation, training, threat modeling, high-risk review에 집중하고, 반복 검사는 pipeline이 수행해야 한다.
+
+---
+
+## Kubernetes Homelab에서 DevSecOps 적용하기
+
+개인 k3s나 homelab 환경에서도 DevSecOps 원칙은 유용하다. 규모가 작더라도 secret 유출, public exposure, 취약 image, 잘못된 ingress 설정은 실제 위험을 만들 수 있다.
+
+최소한 다음 정도를 적용할 수 있다.
+
+```text
+1. Git repository에 secret을 넣지 않는다.
+2. container image를 commit SHA tag로 build한다.
+3. Dockerfile에서 root user 실행을 피한다.
+4. Helm chart 또는 manifest를 CI에서 lint한다.
+5. Kubernetes manifest에 resource requests/limits를 둔다.
+6. Ingress, NodePort, LoadBalancer 노출을 기록한다.
+7. image scan 또는 dependency scan을 주기적으로 실행한다.
+8. production namespace에는 민감한 service를 불필요하게 노출하지 않는다.
+```
+
+Kubernetes homelab에서 특히 주의할 부분은 exposure다.
+
+```text
+주의할 부분:
+  NodePort로 외부에 열어둔 service
+  Traefik/IngressRoute의 host rule
+  dashboard나 admin UI의 인증 설정
+  registry/Nexus/MinIO 같은 내부 service의 public exposure
+  wildcard TLS와 DNS 설정
+```
+
+DevSecOps는 거창한 enterprise tool부터 시작할 필요가 없다. 작은 환경에서도 secret을 노출하지 않고, image와 manifest를 검증하며, 불필요한 외부 노출을 줄이는 것부터 시작할 수 있다.
+
+---
+
+## Kubernetes Application 기준 DevSecOps Pipeline 예시
+
+Kubernetes application을 기준으로 DevSecOps pipeline을 구성하면 다음과 같다.
+
+```text
+Git push
+  -> secret scan
+  -> dependency scan
+  -> unit test
+  -> SAST
+  -> Docker image build
+  -> image scan
+  -> SBOM 생성
+  -> image push
+  -> Helm lint
+  -> Kubernetes manifest policy check
+  -> staging deploy
+  -> DAST
+  -> approval 또는 automated deploy
+  -> runtime monitoring
+```
+
+이를 표로 정리하면 다음과 같다.
+
+| Pipeline 단계 | 검사 | 실패 시 처리 |
+|---|---|---|
+| PR 생성 | secret scan | 즉시 차단, secret revoke |
+| PR 생성 | dependency scan | critical/high 기준에 따라 차단 |
+| CI | SAST | severity별 triage |
+| Build | image scan | critical CVE 차단 |
+| Build | SBOM 생성 | artifact metadata로 저장 |
+| Manifest | policy check | 위험 설정 차단 |
+| Staging | DAST | critical finding 차단 |
+| Deploy | admission control | policy 위반 workload 거부 |
+| Runtime | detection | incident response |
+
+이 pipeline에서 중요한 것은 각 단계의 목적과 실패 기준을 명확히 하는 것이다. 단순히 보안 도구를 많이 붙이는 것이 아니라, 어떤 위험을 어디서 잡을지 설계해야 한다.
+
+---
+
+## DevSecOps와 Developer Experience
+
+DevSecOps가 성공하려면 개발자 경험이 중요하다. 보안 검사가 느리고, 결과가 이해하기 어렵고, false positive가 많으면 개발자는 보안을 방해 요소로 느낀다.
+
+좋은 DevSecOps는 다음을 제공해야 한다.
+
+| 항목 | 설명 |
+|---|---|
+| 빠른 feedback | PR 단계에서 바로 결과 제공 |
+| 명확한 remediation | 어떻게 수정해야 하는지 안내 |
+| 낮은 noise | false positive 최소화 |
+| local 재현성 | 개발자가 로컬에서도 검사 가능 |
+| 예외 절차 | 정당한 예외를 기록하고 승인 가능 |
+| 교육 자료 | secure coding guideline 제공 |
+| reusable template | 안전한 Dockerfile, Helm chart, pipeline template 제공 |
+
+예를 들어 단순히 “vulnerability found”라고만 알려주면 개발자는 대응하기 어렵다. 더 좋은 feedback은 다음과 같다.
+
+```text
+문제:
+  package X version 1.2.0에 critical CVE 존재
+
+영향:
+  remote code execution 가능성
+
+수정:
+  version 1.2.5 이상으로 upgrade
+
+위치:
+  package-lock.json line ...
+
+정책:
+  critical vulnerability는 merge 차단
+```
+
+DevSecOps에서 security feedback은 개발자가 행동할 수 있어야 한다.
+
+---
+
+## 운영팀과 Platform Team의 역할
+
+DevSecOps는 개발 단계만의 문제가 아니다. 운영팀과 platform team도 중요한 역할을 한다.
+
+운영팀 또는 platform team은 다음을 제공할 수 있다.
+
+| 역할 | 설명 |
+|---|---|
+| 안전한 base image | 취약점이 적고 표준화된 base image 제공 |
+| 표준 pipeline template | security scan이 포함된 CI/CD template 제공 |
+| Kubernetes policy | admission control, namespace policy 구성 |
+| Secret management | External Secrets, sealed secret, vault 연동 |
+| Observability | security event와 runtime log 수집 |
+| Runtime guardrail | network policy, RBAC, pod security 설정 |
+| Incident response | security incident 대응 절차 구성 |
+
+DevSecOps는 개발자에게 모든 보안 책임을 떠넘기는 것이 아니다. Platform이 안전한 기본값을 제공하고, 개발자는 그 guardrail 안에서 빠르게 개발할 수 있어야 한다.
+
+---
+
+## Mental Model
+
+DevSecOps는 다음 mental model로 이해할 수 있다.
+
+```text
+Security는 마지막 검문소가 아니다.
+
+Security는 다음 위치에 분산되어야 한다.
+
+Plan:
+  threat modeling
+
+Code:
+  secure coding, secret scan, SAST
+
+Build:
+  dependency scan, image scan, SBOM
+
+Test:
+  DAST, integration security test
+
+Deploy:
+  policy-as-code, admission control
+
+Operate:
+  runtime monitoring, incident response
+```
+
+핵심은 security를 pipeline 끝에 두는 것이 아니라, pipeline 전체에 얇고 반복 가능한 guardrail로 배치하는 것이다.
+
+---
+
+## 자칫 실수하기 쉬운 부분
+
+### Security를 마지막 단계에 남겨두는 경우
+
+DevSecOps를 한다고 말하면서 여전히 release 직전에만 보안 검토를 하면 병목은 그대로 남는다. 보안 검사는 PR, build, deploy, runtime으로 분산되어야 한다.
+
+### 보안 도구를 많이 붙이는 것을 목표로 삼는 경우
+
+도구 수가 많다고 보안이 좋아지는 것은 아니다. 중요한 것은 실제 위험을 줄이는 signal과 대응 체계다.
+
+### False Positive를 방치하는 경우
+
+False positive가 많으면 개발자는 보안 결과를 무시한다. Rule tuning과 triage가 필요하다.
+
+### Secret을 Git에서 삭제만 하고 끝내는 경우
+
+Git에 올라간 secret은 이미 유출되었다고 보고 revoke해야 한다. 단순 삭제만으로는 부족하다.
+
+### Container image scan만 하고 runtime을 보지 않는 경우
+
+배포 전 scan은 중요하지만 production runtime에서 발생하는 공격과 이상행위도 감지해야 한다.
+
+### 모든 취약점을 같은 기준으로 막는 경우
+
+Critical과 Low를 같은 수준으로 blocking하면 pipeline이 불필요하게 멈춘다. severity, exploitability, exposure, compensating control을 고려해야 한다.
+
+### Compliance를 수동 문서 작업으로만 처리하는 경우
+
+DevSecOps에서는 compliance evidence를 pipeline과 Git history, scan report, deployment event에서 자동으로 남기는 방향이 좋다.
+
+---
+
+## 실무 검증 포인트
+
+DevSecOps를 운영할 때는 다음을 확인해야 한다.
+
+| 검증 포인트 | 확인 질문 |
+|---|---|
+| Shift left | 보안 검사가 release 직전이 아니라 PR/CI 단계에서 실행되는가? |
+| Secret 관리 | token, password, private key가 repository와 log에 노출되지 않는가? |
+| SAST | source code 취약 pattern을 자동으로 탐지하는가? |
+| SCA | dependency와 transitive dependency 취약점을 추적하는가? |
+| Image scan | container image 취약점과 base image risk를 확인하는가? |
+| IaC scan | Terraform, Kubernetes YAML misconfiguration을 탐지하는가? |
+| Policy as Code | 위험 설정을 자동으로 차단하는 guardrail이 있는가? |
+| Runtime security | production에서 이상행위와 공격 시도를 탐지하는가? |
+| Ownership | security finding별 owner와 SLA가 명확한가? |
+| Developer UX | 보안 결과가 빠르고 이해 가능하며 actionable한가? |
+| Compliance evidence | scan 결과, approval, deployment 이력이 자동으로 남는가? |
+| Exception process | 예외 승인과 만료일이 관리되는가? |
+
+---
+
+## 정리
+
+DevSecOps는 security를 SDLC 마지막에 붙이는 별도 검문소로 두지 않고, 개발·빌드·테스트·배포·운영 전 과정에 자동화된 security practice와 shared responsibility를 내장하는 방식이다.
+
+핵심은 다음과 같다.
+
+- DevSecOps는 DevOps pipeline 전체에 security guardrail을 넣는 방식이다.
+- Shift left는 보안 문제를 release 직전이 아니라 설계와 개발 초기에 발견하기 위한 접근이다.
+- Security as Code와 Policy as Code는 보안 정책을 문서가 아니라 자동 검증 가능한 규칙으로 만든다.
+- SAST, DAST, SCA는 서로 다른 위치에서 서로 다른 유형의 위험을 찾는다.
+- Secret scanning은 DevSecOps에서 가장 먼저 자동화해야 할 검사 중 하나다.
+- Container, Kubernetes, IaC security는 cloud-native DevSecOps에서 핵심이다.
+- Runtime security는 shift-left로 잡지 못한 production 위협을 탐지한다.
+- Compliance evidence는 pipeline과 Git history, scan report, deployment event에서 자동으로 남기는 것이 좋다.
+- DevSecOps는 보안팀만의 책임이 아니라 개발팀, 운영팀, platform team의 shared responsibility다.
+
+짧게 말하면 다음과 같다.
+
+```text
+DevSecOps = DevOps pipeline 전체에 security guardrail을 넣는 방식
+```
+
+운영 관점에서는 다음처럼 정리할 수 있다.
+
+```text
+DevOps가 빠른 delivery flow를 만든다면,
+DevSecOps는 그 flow 안에서 security가 자동으로 검증되고 추적되게 만든다.
+```
