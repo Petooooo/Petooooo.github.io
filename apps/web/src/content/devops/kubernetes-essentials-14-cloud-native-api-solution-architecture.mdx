@@ -1,0 +1,1421 @@
+---
+area: "Kubernetes"
+type: "concept"
+series: "Kubernetes Essentials"
+title: "Kubernetes Essentials 14장: Cloud Native API Solution Architecture"
+slug: "kubernetes-essentials-14-cloud-native-api-solution-architecture"
+date: "2026-06-02"
+updated: "2026-06-02"
+draft: false
+reviewed: true
+category: "DevOps"
+tags: ["Kubernetes", "Cloud Native", "API Gateway", "Microservices", "CI/CD", "IaC", "OpenShift", "Observability", "API Security", "DevOps"]
+description: "Cloud Native API Solution을 API Gateway, microservices, Kubernetes/OpenShift runtime, CI/CD, IaC, 환경 분리, 보안, observability 관점에서 정리한다."
+---
+Cloud Native API Solution은 단순히 API 서버 하나를 만드는 문제가 아니다. API endpoint를 외부에 노출하는 것뿐만 아니라, API Gateway, microservices, Kubernetes/OpenShift runtime, CI/CD pipeline, Infrastructure as Code, 환경 분리, 보안, logging, monitoring, tracing까지 함께 설계해야 한다.
+
+즉 API는 단순한 URL 목록이 아니라 system boundary이자 contract다.
+
+```text
+Client
+  ↓
+API endpoint
+  ↓
+API Gateway / Ingress
+  ↓
+Authentication / Authorization
+  ↓
+Microservices
+  ↓
+Data stores / Event systems / External systems
+  ↓
+Logging / Monitoring / Tracing
+  ↓
+CI/CD / IaC / GitOps
+  ↓
+Dev / Test / Stage / Prod environments
+```
+
+Cloud Native API Solution은 API를 확장 가능하고, 반복 배포 가능하며, 운영 가능한 product로 만드는 전체 architecture다.
+
+---
+
+## 핵심 요약
+
+Cloud Native API Solution은 API를 단순한 endpoint 모음으로 보는 것이 아니라, runtime architecture와 delivery architecture를 함께 설계하는 방식이다.
+
+```text
+External Client / Mobile / Web / Partner
+  ↓
+DNS / CDN / WAF
+  ↓
+API Gateway
+  ↓
+Ingress / Gateway / Service Mesh
+  ↓
+Kubernetes or OpenShift
+  ↓
+Microservices
+  ↓
+Database / Cache / Queue / Event Streaming / External API
+  ↓
+Observability Stack
+```
+
+배포 측면에서는 다음 흐름이 붙는다.
+
+```text
+Developer
+  ↓
+Git repository
+  ↓
+CI pipeline
+  ↓
+Build / Test / Security Scan
+  ↓
+Container Registry
+  ↓
+IaC / Helm / Kustomize / GitOps
+  ↓
+Dev → Test → Stage → Prod
+  ↓
+Monitoring / Logging / Alerting
+```
+
+한 문장으로 정리하면 다음과 같다.
+
+**Cloud Native API Solution은 API Gateway, microservices, Kubernetes/OpenShift runtime, CI/CD, IaC, 환경 분리, 보안, observability를 함께 설계해 API를 확장 가능하고 반복 배포 가능하며 운영 가능한 product로 만드는 architecture다.**
+
+---
+
+## 왜 API Solution Architecture가 필요한가?
+
+단순한 API는 쉽게 만들 수 있다.
+
+```text
+GET /users
+POST /orders
+GET /products
+```
+
+하지만 production API는 endpoint만으로 끝나지 않는다.
+
+운영 환경에서는 다음 질문이 따라온다.
+
+```text
+누가 이 API를 호출할 수 있는가?
+인증은 어디서 처리하는가?
+API version은 어떻게 관리하는가?
+rate limit은 어떻게 걸 것인가?
+backend service 장애 시 어떻게 응답할 것인가?
+API traffic은 어디로 routing되는가?
+dev/test/stage/prod 환경은 어떻게 분리되는가?
+배포는 어떻게 자동화되는가?
+로그와 metric은 어디서 보는가?
+장애 발생 시 어떤 trace로 원인을 찾는가?
+secret은 어디서 관리하는가?
+API contract는 어떻게 문서화되는가?
+```
+
+Cloud Native API Solution은 이 질문들을 architecture 차원에서 묶어서 설계한다.
+
+즉 다음을 함께 본다.
+
+```text
+API contract
+traffic routing
+authentication / authorization
+microservice boundary
+container runtime
+deployment pipeline
+environment promotion
+observability
+security policy
+failure recovery
+```
+
+---
+
+## API는 cloud native system의 contract다
+
+Cloud native architecture에서는 service들이 작고 독립적으로 배포되는 경우가 많다. 이때 API는 service 간 contract가 된다.
+
+```text
+Service A
+  ↓ REST API / gRPC / Event
+Service B
+```
+
+API contract가 안정적이면 내부 구현은 바꿀 수 있다.
+
+```text
+API contract 유지
+  ↓
+내부 service refactoring 가능
+  ↓
+database 변경 가능
+  ↓
+implementation language 변경 가능
+  ↓
+client 영향 최소화
+```
+
+반대로 API contract가 불안정하면 microservices 구조는 오히려 복잡성을 키운다.
+
+```text
+endpoint 변경
+payload 변경
+error format 변경
+auth 방식 변경
+versioning 없음
+  ↓
+client break
+service coupling 증가
+운영 장애 증가
+```
+
+따라서 Cloud Native API Solution에서 API는 단순한 URL이 아니라 **system boundary와 contract**다.
+
+---
+
+## API Gateway의 역할
+
+Cloud native API architecture에서 API Gateway는 client와 backend service 사이에 위치한다.
+
+```text
+Client
+  ↓
+API Gateway
+  ↓
+Backend Services
+```
+
+API Gateway가 맡을 수 있는 역할은 다음과 같다.
+
+```text
+routing
+authentication
+authorization
+rate limiting
+request validation
+response transformation
+API version routing
+TLS termination
+quota control
+API analytics
+developer portal 연계
+backend service hiding
+```
+
+예를 들어 외부 client는 다음 API를 호출한다.
+
+```text
+GET /api/v1/orders/123
+```
+
+API Gateway는 내부적으로 이를 order service로 routing한다.
+
+```text
+/api/v1/orders/*
+  ↓
+order-service.default.svc.cluster.local
+```
+
+또는 version별로 routing할 수 있다.
+
+```text
+/api/v1/orders → order-service-v1
+/api/v2/orders → order-service-v2
+```
+
+운영 관점에서는 API Gateway를 단순 reverse proxy로 보면 부족하다. API Gateway는 외부 traffic이 시스템 내부로 들어오는 **policy enforcement point**다.
+
+---
+
+## Ingress, API Gateway, Service Mesh의 차이
+
+Cloud native API architecture를 설계할 때 자주 헷갈리는 것이 `Ingress`, API Gateway, Service Mesh다.
+
+| 구분 | 주 역할 | 위치 |
+|---|---|---|
+| `Ingress` / Gateway | 외부 HTTP traffic을 cluster 내부 service로 routing | north-south traffic |
+| API Gateway | API 단위의 policy, auth, rate limit, analytics, developer-facing gateway | north-south API traffic |
+| Service Mesh | service-to-service 통신 제어, mTLS, retry, circuit breaking, telemetry | east-west traffic |
+
+단순 web service라면 Ingress만으로 충분할 수 있다.
+
+```text
+Client
+  ↓
+Ingress
+  ↓
+Service
+  ↓
+Pod
+```
+
+하지만 API product, partner API, rate limit, API key, OAuth, analytics, developer portal이 필요하면 API Gateway가 필요해진다.
+
+```text
+Client / Partner
+  ↓
+API Gateway
+  ↓
+Ingress or Gateway
+  ↓
+Microservices
+```
+
+Service Mesh는 내부 service 간 통신이 복잡해질 때 유용하다.
+
+```text
+order-service
+  ↓
+payment-service
+  ↓
+inventory-service
+```
+
+Service Mesh가 담당할 수 있는 것:
+
+```text
+mTLS
+service-to-service authorization
+retry
+timeout
+circuit breaking
+traffic split
+distributed tracing
+```
+
+정리하면 다음과 같다.
+
+```text
+API Gateway
+  → 외부 API 소비자와 system boundary 관리
+
+Ingress/Gateway
+  → cluster ingress routing
+
+Service Mesh
+  → 내부 service 간 통신 제어
+```
+
+---
+
+## Runtime architecture: Kubernetes/OpenShift 위의 API system
+
+Cloud Native API Solution에서 Kubernetes 또는 OpenShift는 API workload가 실행되는 runtime platform이다.
+
+구조는 다음과 같다.
+
+```text
+Kubernetes / OpenShift Cluster
+  ├─ Namespace: dev
+  ├─ Namespace: test
+  ├─ Namespace: stage
+  └─ Namespace: prod
+
+각 namespace:
+  ├─ Deployment
+  ├─ Service
+  ├─ ConfigMap
+  ├─ Secret
+  ├─ Ingress / Route / Gateway
+  ├─ HPA
+  └─ NetworkPolicy
+```
+
+예를 들어 API service는 `Deployment`로 실행된다.
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: order-api
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: order-api
+  template:
+    metadata:
+      labels:
+        app: order-api
+    spec:
+      containers:
+        - name: order-api
+          image: registry.example.com/order-api:1.0.0
+          ports:
+            - containerPort: 8080
+```
+
+그리고 `Service`로 stable endpoint를 만든다.
+
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: order-api
+spec:
+  selector:
+    app: order-api
+  ports:
+    - port: 80
+      targetPort: 8080
+```
+
+API Gateway 또는 Ingress는 이 `Service`를 backend로 바라본다.
+
+```text
+API Gateway
+  ↓
+order-api Service
+  ↓
+order-api Pods
+```
+
+---
+
+## Dev / Test / Stage / Prod 환경 분리
+
+Cloud Native API Solution에서는 environment strategy가 중요하다.
+
+```text
+dev
+  → 개발자가 빠르게 기능을 확인하는 환경
+
+test
+  → automated test, integration test 환경
+
+stage
+  → production과 유사한 검증 환경
+
+prod
+  → 실제 사용자 traffic을 받는 환경
+```
+
+환경 분리 방식은 크게 namespace 기반 분리와 cluster 기반 분리로 볼 수 있다.
+
+---
+
+## Namespace 기반 분리
+
+```text
+one cluster
+  ├─ namespace dev
+  ├─ namespace test
+  ├─ namespace stage
+  └─ namespace prod
+```
+
+장점:
+
+```text
+비용 효율적
+환경 생성이 빠름
+작은 팀이나 초기 단계에 적합
+```
+
+단점:
+
+```text
+cluster 장애가 모든 환경에 영향
+RBAC/NetworkPolicy 실수 시 격리 약화
+prod와 non-prod가 같은 control plane 공유
+```
+
+---
+
+## Cluster 기반 분리
+
+```text
+dev cluster
+test cluster
+stage cluster
+prod cluster
+```
+
+장점:
+
+```text
+격리 강함
+prod 안정성 높음
+cluster-level 설정 차이를 검증 가능
+```
+
+단점:
+
+```text
+비용 증가
+운영 대상 증가
+cluster version 관리 필요
+```
+
+실무에서는 다음처럼 혼합할 수 있다.
+
+```text
+dev/test
+  → shared cluster + namespace 분리
+
+stage/prod
+  → 별도 cluster
+```
+
+환경 분리는 단순히 이름만 나누는 것이 아니라, 권한, network, secret, data, endpoint, traffic policy까지 함께 분리하는 것이다.
+
+---
+
+## CI/CD pipeline의 역할
+
+Cloud Native API Solution에서 pipeline은 API를 안정적으로 배포하기 위한 핵심이다.
+
+흐름은 다음과 같다.
+
+```text
+Source code
+  ↓
+Git push
+  ↓
+CI pipeline
+  ↓
+Unit test
+  ↓
+Integration test
+  ↓
+Container image build
+  ↓
+Security scan
+  ↓
+Image push
+  ↓
+Manifest update
+  ↓
+CD / GitOps deployment
+  ↓
+Rollout verification
+```
+
+API service가 cloud native하게 운영되려면 배포가 반복 가능해야 한다.
+
+```text
+manual SSH deploy
+  → 환경 차이 증가
+  → 재현성 낮음
+  → rollback 어려움
+
+pipeline-based deploy
+  → 동일 절차 반복
+  → audit 가능
+  → rollback 가능
+  → 자동 검증 가능
+```
+
+Pipeline에서 확인해야 할 것:
+
+```text
+test 통과 여부
+image build 성공 여부
+vulnerability scan 결과
+OpenAPI spec validation
+manifest lint
+policy validation
+rollout status
+smoke test
+```
+
+Kubernetes 배포 후에는 반드시 rollout 상태를 확인해야 한다.
+
+```bash
+kubectl rollout status deployment/order-api -n production
+```
+
+`kubectl apply` 성공과 application 정상 배포는 다르다.
+
+```text
+manifest apply 성공
+  ≠
+Pod Ready
+  ≠
+API 정상 응답
+```
+
+---
+
+## Infrastructure as Code, IaC
+
+Cloud native API solution은 application manifest만으로 끝나지 않는다. cluster, network, IAM, registry, database, logging, monitoring도 함께 필요하다.
+
+이런 infrastructure를 수동으로 만들면 환경 차이가 커진다.
+
+```text
+dev cluster 설정과 prod cluster 설정이 다름
+stage에만 특정 firewall rule이 없음
+prod LoadBalancer 설정이 수동으로 바뀜
+IAM 권한이 누락됨
+```
+
+IaC는 infrastructure를 코드로 관리한다.
+
+```text
+Terraform
+Pulumi
+Crossplane
+CloudFormation
+Ansible
+Helm
+Kustomize
+```
+
+예시 영역:
+
+```text
+Kubernetes cluster
+node pool
+VPC/subnet
+LoadBalancer
+DNS
+container registry
+database
+object storage
+IAM role
+monitoring resource
+```
+
+Cloud Native API Solution에서는 application code와 infrastructure code가 함께 versioning되어야 한다.
+
+```text
+app repo
+  → API service source code
+
+infra repo
+  → cluster, network, IAM, database, observability
+
+platform repo
+  → Helm charts, base manifests, policies
+```
+
+---
+
+## API contract: OpenAPI와 versioning
+
+API solution에서 contract는 매우 중요하다.
+
+REST API라면 OpenAPI spec을 사용할 수 있다.
+
+```yaml
+openapi: 3.0.0
+info:
+  title: Order API
+  version: 1.0.0
+paths:
+  /orders/{id}:
+    get:
+      summary: Get order by ID
+```
+
+OpenAPI spec은 다음에 활용된다.
+
+```text
+API 문서화
+client SDK 생성
+request validation
+mock server
+contract testing
+API gateway import
+보안 검토
+version 관리
+```
+
+Versioning 전략도 필요하다.
+
+```text
+URI versioning:
+  /api/v1/orders
+  /api/v2/orders
+
+Header versioning:
+  Accept: application/vnd.example.v2+json
+
+Backward-compatible evolution:
+  field 추가는 허용
+  field 삭제는 major version 변경
+```
+
+운영에서 가장 위험한 것은 breaking change를 무심코 배포하는 것이다.
+
+```text
+response field 삭제
+required field 추가
+error format 변경
+auth scheme 변경
+pagination 방식 변경
+```
+
+따라서 CI pipeline에 API contract check를 넣는 것이 좋다.
+
+---
+
+## API security
+
+API는 외부와 내부 system을 연결하는 경계다. 따라서 security 설계가 핵심이다.
+
+API security에서 확인할 것:
+
+```text
+authentication
+authorization
+TLS
+OAuth2 / OIDC
+API key
+JWT validation
+rate limiting
+input validation
+CORS
+WAF
+audit logging
+secret management
+mTLS
+```
+
+일반적인 흐름은 다음과 같다.
+
+```text
+Client
+  ↓
+TLS
+  ↓
+API Gateway
+  ↓
+JWT / OAuth token 검증
+  ↓
+rate limit
+  ↓
+request validation
+  ↓
+backend service
+```
+
+Backend service도 gateway만 믿으면 안 된다.
+
+```text
+Gateway에서 인증
+  +
+Service 내부에서도 authorization context 확인
+```
+
+특히 microservices 환경에서는 identity propagation이 중요하다.
+
+```text
+user identity
+  ↓
+API Gateway
+  ↓
+service A
+  ↓
+service B
+```
+
+이때 service 간 요청이 “누구를 대신한 요청인지” 추적할 수 있어야 한다.
+
+---
+
+## Observability: logging, monitoring, tracing
+
+Cloud Native API Solution은 observability 없이는 운영하기 어렵다.
+
+API system에서 필요한 observability는 세 가지다.
+
+```text
+Logs
+Metrics
+Traces
+```
+
+### Logs
+
+Log는 개별 event와 error를 확인하는 데 필요하다.
+
+```text
+request received
+validation failed
+database timeout
+external API error
+auth failure
+```
+
+Kubernetes에서는 기본적으로 다음 명령으로 확인할 수 있다.
+
+```bash
+kubectl logs deployment/order-api -n production
+```
+
+하지만 production에서는 centralized logging이 필요하다.
+
+```text
+Loki
+Elasticsearch / OpenSearch
+Cloud Logging
+Splunk
+Datadog
+```
+
+### Metrics
+
+Metrics는 system 상태를 숫자로 본다.
+
+```text
+request count
+request latency
+error rate
+CPU usage
+memory usage
+pod restart count
+queue depth
+database connection count
+```
+
+대표적인 API SLI:
+
+```text
+latency
+traffic
+errors
+saturation
+```
+
+### Traces
+
+Distributed tracing은 microservices 호출 chain을 추적한다.
+
+```text
+Client request
+  ↓
+API Gateway
+  ↓
+order-service
+  ↓
+payment-service
+  ↓
+inventory-service
+  ↓
+database
+```
+
+Trace가 없으면 “어느 service에서 느려졌는지” 찾기 어렵다.
+
+---
+
+## Resilience 설계
+
+Cloud native API는 장애를 전제로 설계해야 한다.
+
+```text
+Pod는 죽을 수 있다.
+Node는 사라질 수 있다.
+Network call은 실패할 수 있다.
+Database는 느려질 수 있다.
+External API는 timeout될 수 있다.
+Deployment는 실패할 수 있다.
+```
+
+Resilience를 위해 필요한 패턴:
+
+```text
+timeout
+retry with backoff
+circuit breaker
+bulkhead
+rate limiting
+fallback
+idempotency
+health check
+graceful shutdown
+rolling update
+horizontal scaling
+```
+
+예를 들어 retry는 무조건 좋은 것이 아니다.
+
+```text
+backend가 느림
+  ↓
+client가 aggressive retry
+  ↓
+traffic 폭증
+  ↓
+backend 더 느려짐
+  ↓
+장애 확대
+```
+
+따라서 retry에는 backoff와 최대 횟수가 필요하다.
+
+```text
+retry 3 times
+exponential backoff
+jitter
+timeout per call
+```
+
+API operation이 재시도될 수 있다면 idempotency도 고려해야 한다.
+
+```text
+POST /payments
+  ↓
+timeout
+  ↓
+client retry
+  ↓
+중복 결제 위험
+```
+
+해결 방식:
+
+```text
+Idempotency-Key header
+request deduplication
+transaction state machine
+```
+
+---
+
+## Data layer 설계
+
+API solution에서 database는 단순 부속물이 아니다.
+
+Microservices에서는 service별 data ownership을 고려해야 한다.
+
+```text
+order-service
+  → orders database
+
+payment-service
+  → payments database
+
+inventory-service
+  → inventory database
+```
+
+좋은 방향:
+
+```text
+각 service가 자신의 data model을 소유한다.
+다른 service의 database를 직접 조회하지 않는다.
+API 또는 event를 통해 통신한다.
+```
+
+나쁜 방향:
+
+```text
+모든 service가 하나의 shared database schema를 직접 수정한다.
+service 간 database table을 직접 join한다.
+schema 변경이 여러 service를 동시에 깨뜨린다.
+```
+
+다만 service별 database는 운영 복잡도를 높인다.
+
+```text
+transaction boundary
+eventual consistency
+data duplication
+schema migration
+backup/restore
+observability
+```
+
+따라서 API architecture에서는 data consistency model도 함께 정해야 한다.
+
+```text
+strong consistency가 필요한가?
+eventual consistency로 충분한가?
+transaction은 어디서 끝나는가?
+read model을 따로 둘 것인가?
+event sourcing이 필요한가?
+```
+
+---
+
+## Event-driven extension
+
+Cloud Native API Solution은 synchronous API만으로 구성되지 않을 수 있다.
+
+예를 들어 주문 생성 API가 있다.
+
+```text
+POST /orders
+```
+
+이 API가 모든 후속 처리를 동기적으로 수행하면 느려질 수 있다.
+
+```text
+order 생성
+payment 처리
+inventory 차감
+email 발송
+shipping 요청
+```
+
+이를 event-driven 방식으로 나눌 수 있다.
+
+```text
+POST /orders
+  ↓
+order-service가 OrderCreated event 발행
+  ↓
+payment-service
+inventory-service
+notification-service
+```
+
+장점:
+
+```text
+service 간 결합 감소
+비동기 처리 가능
+확장성 증가
+장애 격리
+```
+
+단점:
+
+```text
+eventual consistency
+중복 event 처리
+event ordering
+dead letter queue
+observability 복잡도
+```
+
+API-first와 event-driven은 경쟁 관계가 아니다.
+
+```text
+API
+  → command/query entrypoint
+
+Event
+  → state change propagation
+```
+
+---
+
+## Environment promotion 전략
+
+Cloud Native API Solution에서는 같은 artifact를 여러 환경으로 promotion하는 것이 중요하다.
+
+나쁜 방식:
+
+```text
+dev에서 image build
+test에서 다시 image build
+stage에서 다시 image build
+prod에서 다시 image build
+```
+
+이러면 환경마다 다른 artifact가 배포될 수 있다.
+
+좋은 방식:
+
+```text
+한 번 build한 image
+  ↓
+dev 배포
+  ↓
+test 검증
+  ↓
+stage 검증
+  ↓
+prod promotion
+```
+
+즉 immutable artifact를 promotion한다.
+
+```text
+registry.example.com/order-api:abc1234
+```
+
+환경별 차이는 image가 아니라 configuration으로 분리한다.
+
+```text
+same image
+different config
+different secret
+different replica count
+different ingress host
+different resource limits
+```
+
+Kubernetes에서는 Helm values나 Kustomize overlay를 사용할 수 있다.
+
+```text
+base/
+  deployment.yaml
+  service.yaml
+
+overlays/
+  dev/
+  test/
+  stage/
+  prod/
+```
+
+---
+
+## API solution에서 Kubernetes object mapping
+
+Cloud Native API Solution의 요소를 Kubernetes object로 mapping하면 다음과 같다.
+
+| Architecture 요소 | Kubernetes / Platform 요소 |
+|---|---|
+| API service runtime | `Deployment`, `Pod` |
+| stable internal endpoint | `Service` |
+| external routing | `Ingress`, Gateway, OpenShift Route |
+| config | `ConfigMap` |
+| secret | `Secret`, External Secrets |
+| scaling | `HPA`, KEDA, Knative |
+| rollout | `Deployment` rolling update, Argo Rollouts |
+| environment isolation | `Namespace`, cluster 분리 |
+| permission | `RBAC`, ServiceAccount |
+| network isolation | `NetworkPolicy` |
+| storage | `PVC`, `StorageClass` |
+| packaging | Helm, Kustomize |
+| deployment automation | CI/CD, GitOps |
+| observability | Prometheus, Grafana, logs, traces |
+
+이 mapping을 이해하면 architecture diagram이 실제 manifest로 어떻게 내려오는지 보인다.
+
+---
+
+## API Gateway와 Kubernetes Ingress routing 예시
+
+예를 들어 외부 API path가 다음과 같다고 하자.
+
+```text
+/api/orders
+/api/payments
+/api/inventory
+```
+
+Gateway routing은 다음처럼 구성될 수 있다.
+
+```text
+/api/orders
+  → order-api Service
+
+/api/payments
+  → payment-api Service
+
+/api/inventory
+  → inventory-api Service
+```
+
+Kubernetes Ingress 예시는 다음과 비슷하다.
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: api-ingress
+spec:
+  rules:
+    - host: api.example.com
+      http:
+        paths:
+          - path: /api/orders
+            pathType: Prefix
+            backend:
+              service:
+                name: order-api
+                port:
+                  number: 80
+          - path: /api/payments
+            pathType: Prefix
+            backend:
+              service:
+                name: payment-api
+                port:
+                  number: 80
+```
+
+하지만 API Gateway 수준에서는 여기에 정책이 추가된다.
+
+```text
+JWT 검증
+API key 검증
+rate limit
+quota
+analytics
+request schema validation
+API version policy
+```
+
+즉 Ingress는 routing 중심이고, API Gateway는 API management 중심이다.
+
+---
+
+## Rollout과 rollback
+
+API solution은 빠르게 배포하면서도 안전해야 한다.
+
+Deployment update 예시:
+
+```bash
+kubectl set image deployment/order-api \
+  order-api=registry.example.com/order-api:1.1.0 \
+  -n production
+```
+
+상태 확인:
+
+```bash
+kubectl rollout status deployment/order-api -n production
+```
+
+문제 발생 시 rollback:
+
+```bash
+kubectl rollout undo deployment/order-api -n production
+```
+
+하지만 API rollback은 image rollback만으로 끝나지 않을 수 있다.
+
+주의할 점:
+
+```text
+DB schema migration은 rollback 가능한가?
+API response contract는 backward compatible한가?
+client가 새 field에 의존하기 시작했는가?
+event payload version은 호환되는가?
+cache key format이 바뀌었는가?
+```
+
+따라서 safe rollout에는 다음이 필요하다.
+
+```text
+backward-compatible schema
+expand-and-contract migration
+canary deployment
+traffic split
+smoke test
+error rate monitoring
+automatic rollback 기준
+```
+
+---
+
+## Cloud Native API Solution의 보안-safe configuration
+
+API solution에서 secret을 manifest에 직접 넣으면 안 된다.
+
+피해야 할 예:
+
+```yaml
+env:
+  - name: DB_PASSWORD
+    value: "real-password"
+```
+
+대신 `Secret`을 참조한다.
+
+```yaml
+env:
+  - name: DB_PASSWORD
+    valueFrom:
+      secretKeyRef:
+        name: order-api-secret
+        key: db-password
+```
+
+운영에서는 다음도 고려한다.
+
+```text
+External Secrets
+sealed-secrets
+cloud secret manager
+KMS encryption
+short-lived credential
+service account identity
+least privilege
+```
+
+API service의 container security도 중요하다.
+
+```yaml
+securityContext:
+  runAsNonRoot: true
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+```
+
+---
+
+## API solution의 운영 검증 포인트
+
+Cloud Native API Solution은 배포 후 다음을 검증해야 한다.
+
+```text
+API endpoint가 응답하는가?
+auth가 의도대로 동작하는가?
+잘못된 token이 차단되는가?
+rate limit이 적용되는가?
+backend service endpoint가 정상인가?
+Pod가 Ready 상태인가?
+Service endpoint가 비어 있지 않은가?
+Ingress/Gateway routing이 맞는가?
+error rate가 증가하지 않는가?
+latency가 SLO 안에 있는가?
+log에 correlation ID가 있는가?
+trace가 service 간 연결을 보여주는가?
+```
+
+Kubernetes 명령으로는 다음을 확인한다.
+
+```bash
+kubectl get pods -n production
+kubectl get svc -n production
+kubectl get ingress -n production
+kubectl get endpoints order-api -n production
+kubectl describe deployment order-api -n production
+kubectl logs deployment/order-api -n production
+```
+
+Gateway/API management 쪽에서는 다음을 본다.
+
+```text
+request count
+status code distribution
+latency percentile
+consumer별 usage
+quota violation
+auth failure
+backend error
+```
+
+---
+
+## Cloud Native API Solution의 장애 패턴
+
+자주 발생하는 장애를 architecture layer별로 보면 다음과 같다.
+
+| Layer | 증상 | 가능 원인 |
+|---|---|---|
+| DNS | API domain 접속 불가 | DNS record 누락, TTL, 잘못된 target |
+| Gateway | 401/403 증가 | token 검증 실패, policy 오류 |
+| Gateway | 429 증가 | rate limit 과도 |
+| Ingress | 404/503 | path routing 오류, backend endpoint 없음 |
+| Service | endpoint 없음 | selector mismatch, Pod not Ready |
+| Pod | `ImagePullBackOff` | image tag, registry auth 문제 |
+| Pod | `CrashLoopBackOff` | env/config 오류, dependency 실패 |
+| App | 5xx 증가 | DB timeout, external API 장애 |
+| Data | consistency 문제 | transaction boundary, event 중복 처리 |
+| Observability | 원인 추적 불가 | correlation ID, trace 누락 |
+
+이렇게 보면 API 장애는 단순히 “API 서버가 죽었다”가 아니라 여러 layer에서 발생할 수 있다.
+
+---
+
+## 좋은 Cloud Native API Architecture의 특징
+
+좋은 architecture는 다음 조건을 만족한다.
+
+```text
+API contract가 명확하다.
+Gateway와 backend responsibility가 분리되어 있다.
+각 service가 독립적으로 배포 가능하다.
+CI/CD pipeline이 반복 가능하다.
+IaC로 환경을 재현할 수 있다.
+dev/test/stage/prod promotion 흐름이 있다.
+security policy가 자동화되어 있다.
+observability가 내장되어 있다.
+rollback과 migration 전략이 있다.
+Kubernetes resource가 운영 기준에 맞게 설정되어 있다.
+```
+
+나쁜 architecture는 다음과 같다.
+
+```text
+API contract 없이 endpoint가 계속 바뀐다.
+모든 service가 shared database에 직접 접근한다.
+수동 배포에 의존한다.
+환경별 설정이 문서에만 있다.
+prod와 stage가 다르게 구성되어 있다.
+log는 있지만 trace가 없다.
+Secret이 Git에 들어 있다.
+readinessProbe가 없다.
+resource requests/limits가 없다.
+```
+
+---
+
+## 전체 mental model
+
+Cloud Native API Solution을 이해하는 흐름은 다음과 같다.
+
+```text
+1. Cloud Native API Solution은 단순 API server 하나가 아니라
+   API를 중심으로 한 전체 application delivery architecture다.
+
+2. 외부 client는 API Gateway를 통해 system에 접근한다.
+
+3. API Gateway는 routing, auth, rate limit, versioning, analytics 같은
+   API policy를 담당한다.
+
+4. Backend는 microservices로 구성될 수 있으며,
+   각 service는 Kubernetes/OpenShift 위에서 Deployment와 Service로 실행된다.
+
+5. Service 간 통신은 REST/gRPC API 또는 event streaming으로 구성된다.
+
+6. CI/CD pipeline은 source code를 build/test/scan하고 container image로 만들어
+   dev/test/stage/prod 환경으로 promotion한다.
+
+7. Infrastructure as Code는 cluster, network, IAM, registry, database,
+   monitoring 같은 기반 resource를 재현 가능하게 만든다.
+
+8. Observability는 logs, metrics, traces를 통해 API system을 운영 가능하게 한다.
+
+9. Security는 API Gateway, RBAC, Secret, image scanning, network policy,
+   container securityContext 등 여러 layer에 걸쳐 설계해야 한다.
+
+10. 좋은 Cloud Native API Architecture는 scalable, resilient, observable,
+    secure, repeatable한 delivery model을 갖는다.
+```
+
+---
+
+## 요약
+
+Cloud Native API Solution은 API를 cloud native system의 중심 contract로 보고, 이를 production-ready하게 운영하기 위해 필요한 전체 architecture를 설계하는 방식이다.
+
+핵심 구성은 다음과 같다.
+
+```text
+API Gateway
+  → 외부 traffic, auth, rate limit, versioning, policy
+
+Microservices
+  → 독립 배포 가능한 backend 기능 단위
+
+Kubernetes / OpenShift
+  → containerized API workload runtime
+
+CI/CD pipeline
+  → build, test, scan, deploy 자동화
+
+Infrastructure as Code
+  → cluster와 cloud resource 재현성 확보
+
+Dev/Test/Stage/Prod
+  → 환경별 검증과 promotion 흐름
+
+Logging / Monitoring / Tracing
+  → 운영 상태 관찰과 장애 분석
+```
+
+API solution은 code, runtime, delivery, security, observability가 함께 설계되어야 한다.
+
+한 문장으로 정리하면 다음과 같다.
+
+**Cloud Native API Solution은 API Gateway, microservices, Kubernetes/OpenShift runtime, CI/CD, IaC, 환경 분리, 보안, observability를 함께 설계해 API를 확장 가능하고 반복 배포 가능하며 운영 가능한 product로 만드는 architecture다.**
