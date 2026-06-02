@@ -1,0 +1,1215 @@
+---
+area: "DevOps"
+type: "concept"
+series: "DevOps Explained"
+title: "Tekton + Argo CD: Push Pipeline과 Pull GitOps의 역할 분리"
+slug: "tekton-argo-cd-push-pipeline-pull-gitops"
+date: "2026-06-03"
+updated: "2026-06-03"
+draft: false
+reviewed: true
+category: "DevOps"
+tags: ["Tekton", "Argo CD", "GitOps", "Kubernetes", "CI/CD", "Continuous Delivery", "Pipeline", "Reconciliation"]
+description: "Tekton과 Argo CD를 함께 사용해 CI pipeline, GitOps repository, Kubernetes reconciliation의 책임을 분리하는 구조를 정리한다."
+---
+## 개요
+
+**Tekton**과 **Argo CD**는 둘 다 Kubernetes/cloud-native 환경에서 CI/CD와 관련된 도구다. 그래서 처음 보면 같은 일을 하는 도구처럼 보일 수 있다. 하지만 실제 역할은 다르다.
+
+```text
+Tekton:
+  code를 가져오고
+  test를 실행하고
+  image를 build하고
+  registry에 push하는 CI/CD pipeline 실행 도구
+
+Argo CD:
+  Git repository에 선언된 desired state를 읽고
+  Kubernetes cluster의 live state와 비교하고
+  차이가 있으면 sync/reconcile하는 GitOps CD controller
+```
+
+핵심은 다음이다.
+
+```text
+Tekton은 만든다.
+Argo CD는 맞춘다.
+Git은 기준이 된다.
+```
+
+Tekton만으로도 production에 직접 배포할 수 있다. 하지만 GitOps 관점에서는 Tekton이 production cluster에 직접 `kubectl apply`를 실행하는 대신, image를 만들고 GitOps repository를 업데이트하는 데 집중하는 구조가 더 명확하다. 이후 Argo CD가 GitOps repository를 기준으로 cluster 상태를 reconcile한다.
+
+```text
+Tekton alone:
+  CI/CD pipeline이 production까지 직접 밀어 넣을 수 있음
+
+Argo CD alone:
+  Git에 이미 선언된 manifest를 cluster와 맞출 수 있음
+
+Tekton + Argo CD:
+  Tekton은 artifact를 만들고 GitOps repo를 갱신
+  Argo CD는 GitOps repo를 기준으로 cluster를 reconcile
+```
+
+이 구조는 CI pipeline, deployment state, cluster reconciliation의 책임을 분리하면서도 Git을 중심으로 배포 이력과 운영 상태를 추적 가능하게 만든다.
+
+---
+
+## Tekton과 Argo CD를 함께 쓰는 이유
+
+Tekton과 Argo CD를 함께 쓰는 이유는 두 도구가 서로 다른 문제를 해결하기 때문이다.
+
+| 도구 | 핵심 역할 |
+|---|---|
+| Tekton | CI/CD pipeline을 Kubernetes-native `Task`, `Pipeline`으로 실행 |
+| Argo CD | GitOps 방식으로 Git desired state와 cluster live state를 sync |
+| 조합 시 | Tekton은 build/test/image push, Argo CD는 deployment reconciliation 담당 |
+
+Tekton은 reusable task와 pipeline을 제공한다. repository clone, unit test 실행, image build, registry push, GitOps repository update 같은 단계를 조합할 수 있다.
+
+Argo CD는 pull-based model로 동작한다. Git repository에 선언된 Kubernetes YAML, Helm values, Kustomize overlay 등을 기준으로 cluster live state를 비교하고, 차이가 있으면 sync한다.
+
+전체 workflow는 다음처럼 볼 수 있다.
+
+```text
+1. Developer가 application code를 Git에 push
+2. Tekton PipelineRun 실행
+3. Tekton이 source clone
+4. Tekton이 unit test / integration test 실행
+5. Tekton이 container image build
+6. Tekton이 image registry에 push
+7. Tekton이 GitOps repository의 image tag 또는 manifest 갱신
+8. Argo CD가 GitOps repository 변경 감지
+9. Argo CD가 Kubernetes cluster와 Git desired state 비교
+10. Argo CD가 OutOfSync 상태를 sync
+11. Kubernetes cluster에 새 version 배포
+```
+
+이 구조의 핵심은 **CI와 CD의 책임 분리**다.
+
+```text
+CI:
+  artifact를 만든다.
+
+GitOps CD:
+  선언된 artifact version을 cluster에 반영한다.
+```
+
+---
+
+## Tekton의 역할: Push-based CI/CD Pipeline
+
+Tekton은 Kubernetes-native CI/CD framework다. Tekton의 기본 단위는 `Task`와 `Pipeline`이다.
+
+### Tekton Task
+
+`Task`는 재사용 가능한 작업 단위다.
+
+예를 들어 다음과 같은 task가 있을 수 있다.
+
+```text
+git-clone
+run-unit-tests
+build-container-image
+push-image
+update-gitops-repo
+```
+
+각 task는 container 안에서 실행될 수 있다.
+
+```yaml
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: run-tests
+spec:
+  workspaces:
+    - name: source
+  steps:
+    - name: test
+      image: node:20
+      workingDir: $(workspaces.source.path)
+      script: |
+        npm ci
+        npm test
+```
+
+이 구조의 장점은 pipeline step의 실행 환경이 명확해진다는 것이다.
+
+```text
+test step:
+  node:20 image에서 실행
+
+build step:
+  Kaniko, Buildah, BuildKit 같은 image에서 실행
+
+deploy/update step:
+  git CLI 또는 yq/kustomize/helm image에서 실행
+```
+
+Tekton의 step은 container로 실행되므로, agent machine에 미리 설치된 toolchain 상태에 덜 의존한다. 대신 각 step image의 version, 보안성, pull 속도, image registry 접근 권한을 관리해야 한다.
+
+### Tekton Pipeline
+
+`Pipeline`은 여러 task를 연결한 workflow다.
+
+```text
+clone-source
+  -> run-tests
+  -> build-image
+  -> push-image
+  -> update-gitops-repo
+```
+
+Kubernetes manifest로는 다음처럼 표현할 수 있다.
+
+```yaml
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: app-ci
+spec:
+  params:
+    - name: repo-url
+      type: string
+    - name: image-url
+      type: string
+  workspaces:
+    - name: shared-source
+  tasks:
+    - name: clone
+      taskRef:
+        name: git-clone
+      params:
+        - name: url
+          value: $(params.repo-url)
+      workspaces:
+        - name: output
+          workspace: shared-source
+
+    - name: test
+      taskRef:
+        name: run-tests
+      runAfter:
+        - clone
+      workspaces:
+        - name: source
+          workspace: shared-source
+
+    - name: build
+      taskRef:
+        name: build-image
+      runAfter:
+        - test
+      params:
+        - name: image-url
+          value: $(params.image-url)
+      workspaces:
+        - name: source
+          workspace: shared-source
+```
+
+Tekton은 이렇게 CI/CD의 실행 흐름을 Kubernetes resource로 표현한다.
+
+---
+
+## Argo CD의 역할: Pull-based GitOps Controller
+
+Argo CD는 GitOps controller다. Tekton이 pipeline을 실행하는 쪽이라면, Argo CD는 다음을 담당한다.
+
+```text
+Git repository에 선언된 desired state 확인
+Kubernetes cluster의 live state 확인
+desired state와 live state diff 계산
+OutOfSync 상태 감지
+필요하면 sync/reconcile 수행
+```
+
+Argo CD의 mental model은 다음과 같다.
+
+```text
+Git desired state:
+  manifest, Helm values, Kustomize overlay
+
+Cluster live state:
+  실제 Kubernetes resource
+
+Argo CD:
+  둘을 비교하고 cluster를 Git 상태와 맞춤
+```
+
+이때 Argo CD는 production cluster에 대해 pull-based로 동작한다.
+
+```text
+GitOps repository
+  <- Argo CD가 pull
+  -> Kubernetes cluster에 sync
+```
+
+이 방식은 CI pipeline이 직접 production cluster에 `kubectl apply`를 실행하는 구조와 다르다.
+
+---
+
+## Push Model과 Pull Model 비교
+
+Tekton과 Argo CD 조합을 이해하려면 **push model**과 **pull model**의 차이를 구분해야 한다.
+
+### Push Model
+
+Push model에서는 pipeline이 cluster에 직접 변경을 밀어 넣는다.
+
+```text
+Tekton Pipeline:
+  test
+  build
+  image push
+  kubectl apply
+  production deploy
+```
+
+장점은 단순함이다.
+
+```text
+장점:
+  구조가 직관적
+  pipeline 하나에서 끝까지 처리 가능
+  별도 GitOps controller 없이 배포 가능
+```
+
+하지만 운영상 주의할 점이 있다.
+
+```text
+주의:
+  Tekton pipeline이 production cluster credential을 가져야 함
+  pipeline 실패와 cluster 상태 drift를 별도로 관리해야 함
+  누군가 cluster를 직접 수정하면 pipeline은 이를 계속 감시하지 않음
+  rollback과 audit 기준이 GitOps보다 덜 명확할 수 있음
+```
+
+### Pull Model
+
+Pull model에서는 cluster 안의 controller가 Git을 읽고 상태를 맞춘다.
+
+```text
+Argo CD:
+  GitOps repo를 감시
+  desired state와 live state 비교
+  OutOfSync 감지
+  sync 수행
+```
+
+장점은 다음과 같다.
+
+```text
+장점:
+  Git이 source of truth가 됨
+  cluster credential을 CI pipeline에 넓게 줄 필요가 줄어듦
+  drift detection이 가능함
+  수동 변경을 감지하고 되돌릴 수 있음
+  rollback을 Git revert 중심으로 처리 가능
+```
+
+따라서 Tekton과 Argo CD를 함께 쓰면 다음처럼 역할을 나눌 수 있다.
+
+```text
+Tekton:
+  build/test/image push까지 담당
+
+Argo CD:
+  GitOps repo 기준으로 cluster 반영 담당
+```
+
+---
+
+## 왜 Better GitOps인가
+
+Tekton + Argo CD 조합이 "더 나은 GitOps"가 되는 이유는 단순히 도구 두 개를 같이 쓰기 때문이 아니다.
+
+핵심은 **CI pipeline과 GitOps reconciliation의 책임을 분리하면 운영 상태가 더 명확해진다**는 점이다.
+
+Tekton만으로도 production에 배포할 수 있다.
+
+```text
+Tekton-only:
+  source clone
+  test
+  build image
+  push image
+  kubectl apply
+```
+
+하지만 이 경우 cluster의 실제 상태가 Git과 계속 일치하는지는 별도 장치가 필요하다.
+
+Argo CD를 함께 쓰면 GitOps repository가 deployment source of truth가 된다.
+
+```text
+Tekton + Argo CD:
+  Tekton:
+    image build
+    registry push
+    GitOps repo update
+
+  Argo CD:
+    GitOps repo 감시
+    cluster sync
+    drift correction
+```
+
+즉, 더 나은 GitOps라는 것은 다음 의미다.
+
+```text
+- CI pipeline은 artifact 생산에 집중
+- Deployment desired state는 Git에 저장
+- Cluster 적용은 Argo CD controller가 수행
+- 실제 cluster 상태가 Git과 다른지 계속 확인
+- 수동 변경이 생기면 감지 또는 자동 복구
+```
+
+---
+
+## Tekton이 GitOps Repository를 업데이트하는 방식
+
+Tekton과 Argo CD를 조합할 때 중요한 지점은 **Tekton이 image build 후 GitOps repo를 어떻게 업데이트할 것인가**다.
+
+예를 들어 Tekton이 새 image를 만들었다고 하자.
+
+```text
+registry.example.com/my-app:a1b2c3d
+```
+
+그러면 GitOps repo의 manifest 또는 Helm values가 업데이트되어야 한다.
+
+```yaml
+image:
+  repository: registry.example.com/my-app
+  tag: a1b2c3d
+```
+
+또는 `Deployment` manifest가 직접 수정될 수 있다.
+
+```yaml
+containers:
+  - name: my-app
+    image: registry.example.com/my-app:a1b2c3d
+```
+
+Tekton은 이 변경을 Git commit으로 남길 수 있다.
+
+```text
+Tekton update-gitops task:
+  git clone gitops-repo
+  yq로 image tag 수정
+  git commit
+  git push
+```
+
+개념적으로는 다음과 같다.
+
+```bash
+git clone https://github.com/example/gitops-repo.git
+cd gitops-repo
+
+yq -i '.image.tag = "a1b2c3d"' apps/my-app/values.yaml
+
+git add apps/my-app/values.yaml
+git commit -m "Update my-app image to a1b2c3d"
+git push
+```
+
+이제 Argo CD가 GitOps repo 변경을 감지한다.
+
+```text
+GitOps repo 변경
+  -> Argo CD OutOfSync 감지
+  -> sync
+  -> Kubernetes cluster에 새 image 반영
+```
+
+---
+
+## GitOps Repository 업데이트 방식: 자동 Commit vs PR
+
+Tekton이 image tag를 업데이트할 때는 크게 두 가지 방식이 있다.
+
+### 자동 Commit 방식
+
+```text
+Tekton:
+  image build
+  GitOps repo image tag 수정
+  main branch에 직접 commit/push
+
+Argo CD:
+  변경 감지 후 자동 sync
+```
+
+장점은 빠르다는 점이다.
+
+```text
+장점:
+  완전 자동화 가능
+  dev 환경에 적합
+  빠른 feedback 가능
+```
+
+주의할 점도 있다.
+
+```text
+주의:
+  production까지 자동 반영될 수 있음
+  잘못된 image tag가 바로 sync될 수 있음
+  GitOps repo write credential 관리가 중요함
+```
+
+### PR 방식
+
+```text
+Tekton:
+  image build
+  GitOps repo image tag 수정
+  pull request 생성
+
+Reviewer:
+  변경 확인 후 merge
+
+Argo CD:
+  merge 후 sync
+```
+
+장점은 review와 승인 흐름을 넣을 수 있다는 것이다.
+
+```text
+장점:
+  production 변경 검토 가능
+  audit trail 명확
+  release timing 통제 가능
+```
+
+단점은 lead time이 늘어날 수 있다는 것이다.
+
+```text
+단점:
+  완전 자동 배포보다는 느림
+  PR 관리 workflow 필요
+```
+
+환경별로 다르게 가져가는 것이 현실적이다.
+
+| 환경 | 추천 방식 |
+|---|---|
+| dev | 자동 commit + auto-sync 가능 |
+| staging | 자동 commit 또는 PR, 검증 결과에 따라 결정 |
+| production | PR 기반 promotion 또는 manual sync 고려 |
+| high-risk service | approval, sync window, canary 포함 |
+
+---
+
+## 전체 Workflow 예시
+
+Tekton과 Argo CD를 함께 쓰는 전체 흐름을 하나로 정리하면 다음과 같다.
+
+```text
+1. Developer가 app repo에 code push
+2. Git webhook 또는 event로 Tekton PipelineRun 실행
+3. Tekton이 source code clone
+4. Tekton이 unit test 실행
+5. Tekton이 integration test 실행
+6. Tekton이 container image build
+7. Tekton이 image registry에 push
+8. Tekton이 GitOps repo의 image tag 수정
+9. Tekton이 GitOps repo에 commit 또는 PR 생성
+10. 변경이 GitOps repo에 merge
+11. Argo CD가 GitOps repo 변경 감지
+12. Argo CD가 desired state와 live state diff 계산
+13. Application이 OutOfSync로 표시
+14. Argo CD가 manual 또는 automatic sync 수행
+15. Kubernetes Deployment rollout 진행
+16. Argo CD가 Synced/Healthy 상태 확인
+17. Prometheus/Grafana 등으로 실제 application metric 확인
+```
+
+핵심은 다음이다.
+
+```text
+Tekton은 production cluster에 직접 배포하지 않아도 된다.
+Tekton은 GitOps repo를 업데이트한다.
+Argo CD가 cluster를 GitOps repo 상태와 맞춘다.
+```
+
+---
+
+## 이 구조의 장점
+
+### Production Credential 노출 감소
+
+Push-based CD에서는 Tekton pipeline이 production cluster credential을 가져야 할 수 있다.
+
+```text
+Tekton-only deploy:
+  Tekton service account 또는 secret에 production kubeconfig 필요
+```
+
+Tekton + Argo CD 구조에서는 Tekton이 production cluster에 직접 접근하지 않아도 된다.
+
+```text
+Tekton:
+  registry credential
+  GitOps repo write credential
+
+Argo CD:
+  cluster sync 권한
+```
+
+물론 Argo CD는 cluster에 대한 권한을 갖는다. 하지만 권한의 책임이 분리된다.
+
+```text
+Tekton:
+  artifact 생산자
+
+Argo CD:
+  deployment reconciler
+```
+
+### Git이 Deployment Source of Truth가 됨
+
+Tekton이 직접 `kubectl apply`를 하면 실제 적용된 상태가 pipeline log에 남을 수는 있지만, 운영 기준이 Git에 명확히 남지 않을 수 있다.
+
+GitOps 구조에서는 다음이 Git에 남는다.
+
+```text
+- 어떤 image tag가 배포 대상인지
+- 어떤 Helm values가 적용되는지
+- 어떤 Kustomize overlay가 production인지
+- 언제 누가 manifest를 변경했는지
+- 어떤 commit으로 rollback할 수 있는지
+```
+
+### Drift Detection 가능
+
+예를 들어 운영자가 임시로 replica 수를 바꿨다고 하자.
+
+```bash
+kubectl scale deployment my-app --replicas=10
+```
+
+Git에는 여전히 다음이 선언되어 있다.
+
+```yaml
+replicas: 3
+```
+
+Argo CD는 live state와 desired state 차이를 감지한다.
+
+```text
+Git desired state:
+  replicas = 3
+
+Cluster live state:
+  replicas = 10
+
+Argo CD:
+  OutOfSync 감지
+  self-heal이 켜져 있으면 replicas를 3으로 복구
+```
+
+이것이 GitOps의 큰 장점이다. 운영 환경에서 발생한 수동 변경을 감지할 수 있다.
+
+### Rollback이 Git 중심으로 단순해짐
+
+문제가 생기면 GitOps repo의 이전 commit으로 되돌릴 수 있다.
+
+```text
+문제:
+  image tag a1b2c3d 배포 후 장애
+
+대응:
+  Git revert
+  image tag를 이전 version으로 복구
+  Argo CD sync
+```
+
+이 방식은 rollback도 Git history에 남기 때문에 감사와 추적에 유리하다.
+
+---
+
+## 이 구조의 주의점
+
+Tekton + Argo CD 조합이 좋다고 해서 모든 문제가 자동으로 해결되는 것은 아니다.
+
+### GitOps Repo Write 권한 관리
+
+Tekton이 GitOps repo를 업데이트하려면 write credential이 필요하다.
+
+```text
+Tekton이 가져야 할 권한:
+  GitOps repo 특정 branch 또는 PR 생성 권한
+```
+
+이 권한이 너무 넓으면 위험하다.
+
+```text
+위험:
+  Tekton pipeline compromise
+  GitOps repo 임의 수정
+  production deployment 변경
+```
+
+따라서 다음이 필요하다.
+
+```text
+- GitOps repo write token scope 제한
+- production branch 직접 push 제한
+- PR 기반 promotion
+- branch protection
+- required review
+- signed commit 또는 bot 계정 분리
+```
+
+### Argo CD 권한 관리
+
+Argo CD는 cluster resource를 생성/수정/삭제할 수 있다.
+
+위험한 설정은 다음이다.
+
+```text
+나쁜 예:
+  Argo CD가 cluster-admin
+  모든 Application이 default project 사용
+  모든 namespace 배포 허용
+  모든 사용자가 sync/delete 가능
+```
+
+더 나은 방향은 다음이다.
+
+```text
+- AppProject로 source repository 제한
+- destination namespace 제한
+- cluster-scoped resource 제한
+- production sync 권한 제한
+- prune/delete 권한 신중히 부여
+- SSO와 group 기반 RBAC 적용
+```
+
+### Auto-sync와 Self-heal의 양면성
+
+Argo CD의 auto-sync와 self-heal은 강력하지만 production에서는 신중해야 한다.
+
+```text
+장점:
+  Git 상태와 cluster 상태를 자동으로 맞춤
+  drift를 빠르게 복구
+  수동 변경을 줄임
+
+주의:
+  잘못된 commit이 즉시 production에 반영될 수 있음
+  incident 중 임시 수동 조치를 되돌릴 수 있음
+  prune과 결합되면 resource 삭제 risk가 있음
+```
+
+따라서 환경별 정책이 필요하다.
+
+| 환경 | sync 정책 |
+|---|---|
+| dev | auto-sync, self-heal 적극 사용 가능 |
+| staging | auto-sync + 검증 pipeline |
+| production | manual sync, sync window, approval, canary 고려 |
+| incident 중 | auto-sync 일시 중단 절차 필요 |
+
+### Image Tag는 Immutable해야 함
+
+GitOps에서 `latest` tag는 피하는 것이 좋다.
+
+```yaml
+image: my-app:latest
+```
+
+이렇게 하면 Git commit은 그대로인데 실제 image 내용은 바뀔 수 있다.
+
+더 나은 방식은 commit SHA 또는 digest다.
+
+```yaml
+image: registry.example.com/my-app:a1b2c3d
+```
+
+또는 다음처럼 digest를 사용할 수 있다.
+
+```yaml
+image: registry.example.com/my-app@sha256:...
+```
+
+Tekton이 build한 artifact와 GitOps repo에 기록된 image version이 명확히 연결되어야 한다.
+
+---
+
+## Repository 구조
+
+대표적으로 application repository와 GitOps repository를 분리할 수 있다.
+
+```text
+app-repo:
+  src/
+  tests/
+  Dockerfile
+  package.json
+  tekton/
+    pipeline.yaml
+
+gitops-repo:
+  apps/
+    my-app/
+      base/
+        deployment.yaml
+        service.yaml
+      overlays/
+        dev/
+          kustomization.yaml
+        staging/
+          kustomization.yaml
+        prod/
+          kustomization.yaml
+```
+
+역할은 다음과 같다.
+
+| Repository | 역할 |
+|---|---|
+| app-repo | application code, test, Dockerfile, CI pipeline 정의 |
+| gitops-repo | Kubernetes desired state, Helm values, Kustomize overlays |
+| registry | Tekton이 build한 container image 저장 |
+| Argo CD | gitops-repo를 감시하고 cluster에 sync |
+
+이 구조는 다음 장점이 있다.
+
+```text
+- code 변경과 deployment state 변경을 분리
+- production deployment 권한을 GitOps repo에서 통제
+- Argo CD가 감시할 repository/path가 명확
+- image promotion workflow를 설계하기 쉬움
+```
+
+단점도 있다.
+
+```text
+- repository가 늘어남
+- Tekton이 GitOps repo를 업데이트하는 로직 필요
+- app commit과 deployment commit의 연결을 추적해야 함
+```
+
+작은 팀이나 개인 homelab에서는 monorepo 방식도 가능하다.
+
+```text
+repo:
+  app/
+    src/
+    Dockerfile
+  deploy/
+    base/
+    overlays/
+      dev/
+      prod/
+  tekton/
+    pipeline.yaml
+```
+
+다만 production과 development 권한을 분리하기 어렵다는 점은 고려해야 한다.
+
+---
+
+## DevOps 관점에서의 책임 분리
+
+Tekton + Argo CD 구조는 DevOps 책임을 다음처럼 나눈다.
+
+| 영역 | 담당 도구 | 설명 |
+|---|---|---|
+| Source validation | Tekton | test, lint, build 검증 |
+| Artifact creation | Tekton | container image build |
+| Artifact registry | Registry | image 저장 |
+| Deployment state | GitOps repo | image tag, manifest, Helm values 저장 |
+| State reconciliation | Argo CD | Git desired state와 cluster live state sync |
+| Runtime scheduling | Kubernetes | Pod, Service, Ingress 등 실제 실행 |
+| Runtime validation | Observability stack | error rate, latency, SLO, logs 확인 |
+
+이 구조의 핵심은 다음이다.
+
+```text
+Tekton:
+  "이 code로 artifact를 만들 수 있는가?"
+
+Argo CD:
+  "Git에 선언된 artifact version이 cluster에 반영되었는가?"
+
+Observability:
+  "반영된 version이 실제 사용자 관점에서 정상인가?"
+```
+
+이 세 질문은 서로 다르다.
+
+---
+
+## Synced가 곧 정상은 아니다
+
+Argo CD가 GitOps repo를 sync했다고 해서 서비스가 정상이라는 뜻은 아니다.
+
+```text
+Argo CD Synced:
+  manifest가 cluster에 적용됨
+
+Kubernetes Healthy:
+  resource가 기대 상태로 보임
+
+Application 정상:
+  실제 요청이 성공하고 latency가 정상
+```
+
+예를 들어 다음 문제가 있을 수 있다.
+
+```text
+- Pod는 Running이지만 특정 API가 500 반환
+- readinessProbe는 통과하지만 DB query가 실패
+- Service selector가 잘못되어 traffic이 안 감
+- Ingress host/path가 잘못됨
+- ConfigMap 값 오류로 특정 기능 실패
+- 새 image에서 p99 latency 급증
+```
+
+따라서 Tekton + Argo CD 구조에서도 observability가 필요하다.
+
+```text
+배포 후 확인할 것:
+  error rate
+  p95/p99 latency
+  pod restart count
+  readiness/liveness failure
+  business transaction success
+  SLO burn rate
+  application logs
+```
+
+---
+
+## Canary와 Progressive Delivery까지 확장하기
+
+Tekton + Argo CD는 CI와 GitOps CD를 분리하는 구조다. 여기에 progressive delivery를 추가하면 더 안전한 배포가 가능하다.
+
+예를 들어 Argo Rollouts를 함께 사용할 수 있다.
+
+```text
+Tekton:
+  image build
+  registry push
+  GitOps repo image tag update
+
+Argo CD:
+  Rollout manifest sync
+
+Argo Rollouts:
+  canary 배포
+  traffic 5% -> 25% -> 50% -> 100%
+  metrics 확인
+  실패 시 rollback
+```
+
+이 구조에서는 각 도구가 역할을 분담한다.
+
+| 도구 | 역할 |
+|---|---|
+| Tekton | artifact 생산 |
+| Argo CD | desired state sync |
+| Argo Rollouts | progressive delivery와 metric 기반 rollout 판단 |
+| Prometheus | canary metric 제공 |
+| Grafana/Alertmanager | 관찰과 알림 |
+
+이렇게 하면 GitOps를 유지하면서도 production 전체에 한 번에 배포하는 위험을 줄일 수 있다.
+
+---
+
+## 장애 대응 시 흐름
+
+문제가 생겼을 때는 다음 순서로 볼 수 있다.
+
+```text
+1. 어떤 version이 배포되었는가?
+2. 그 version은 어떤 image tag인가?
+3. image tag는 어떤 Git commit에서 build되었는가?
+4. Tekton PipelineRun은 성공했는가?
+5. Argo CD는 언제 sync했는가?
+6. Application은 Synced/Healthy인가?
+7. 실제 metrics와 logs는 정상인가?
+8. rollback은 Git revert로 가능한가?
+```
+
+예를 들어 새 version에서 장애가 발생했다면 다음 흐름으로 확인할 수 있다.
+
+```text
+장애:
+  my-app:a1b2c3d 배포 후 5xx 증가
+
+확인:
+  Tekton build/test 결과 확인
+  Argo CD sync history 확인
+  GitOps repo commit 확인
+  Prometheus error rate 확인
+  Loki logs 확인
+
+대응:
+  GitOps repo에서 image tag를 이전 version으로 revert
+  Argo CD sync
+  rollout 상태 확인
+```
+
+이 구조의 장점은 장애 분석에 필요한 연결 고리가 명확하다는 점이다.
+
+```text
+source commit
+  -> Tekton PipelineRun
+  -> image tag
+  -> GitOps repo commit
+  -> Argo CD sync
+  -> Kubernetes rollout
+  -> runtime metrics
+```
+
+---
+
+## Kubernetes Homelab에서 적용하기
+
+개인 k3s나 homelab에서도 Tekton + Argo CD 조합을 실험할 수 있다.
+
+예를 들어 다음 구성이 가능하다.
+
+```text
+GitHub repository:
+  app source code
+
+Tekton:
+  test
+  image build
+  registry push
+
+Registry:
+  Nexus 또는 Harbor 또는 private Docker registry
+
+GitOps repository:
+  Helm values / Kustomize overlay
+
+Argo CD:
+  GitOps repository 감시
+  k3s cluster에 sync
+
+Kubernetes:
+  Traefik, Longhorn, MetalLB, application 실행
+```
+
+Homelab 예시 workflow는 다음과 같다.
+
+```text
+1. app repo에 push
+2. Tekton PipelineRun 실행
+3. image build
+4. Nexus registry에 push
+5. GitOps repo의 values.yaml image tag 변경
+6. Argo CD가 변경 감지
+7. k3s namespace에 sync
+8. Traefik IngressRoute로 접근 확인
+```
+
+이 구조의 장점은 다음이다.
+
+```text
+- CI와 CD 역할 분리 연습 가능
+- k3s에서 Kubernetes-native pipeline 이해 가능
+- Nexus registry와 연동 가능
+- Argo CD UI로 배포 상태 확인 가능
+- GitOps repo만 보면 현재 cluster desired state 확인 가능
+```
+
+주의할 점도 있다.
+
+```text
+- Tekton build pod가 cluster resource를 많이 사용할 수 있음
+- image build cache와 workspace PVC cleanup 필요
+- Nexus registry credential 관리 필요
+- Argo CD auto-sync/prune은 stateful workload에 신중히 적용
+- Longhorn PVC 삭제 risk를 반드시 고려
+- secret을 Git에 평문으로 저장하지 말 것
+```
+
+개인 환경에서는 처음부터 모든 서비스를 이 구조로 옮기기보다, stateless한 작은 서비스 하나로 시작하는 것이 좋다.
+
+---
+
+## 자칫 실수하기 쉬운 부분
+
+### Tekton과 Argo CD가 같은 일을 한다고 보는 경우
+
+둘 다 CI/CD와 관련되어 있지만 역할이 다르다.
+
+```text
+Tekton:
+  pipeline execution
+
+Argo CD:
+  GitOps reconciliation
+```
+
+Tekton은 task와 pipeline을 실행하고, Argo CD는 Git desired state와 cluster live state를 맞춘다.
+
+### Tekton이 production까지 직접 배포하면서 GitOps라고 부르는 경우
+
+Tekton이 `kubectl apply`로 production에 직접 push하는 구조는 CI/CD일 수는 있지만, Argo CD 기반 pull GitOps와는 다르다.
+
+```text
+Tekton direct deploy:
+  push-based CD
+
+Tekton + Argo CD:
+  Tekton builds
+  GitOps repo updates
+  Argo CD pulls and syncs
+```
+
+### GitOps repo에 `latest` tag를 쓰는 경우
+
+`latest`는 GitOps의 추적성과 재현성을 해친다.
+
+```text
+비추천:
+  image: my-app:latest
+
+권장:
+  image: my-app:a1b2c3d
+  image: my-app@sha256:...
+```
+
+### Argo CD self-heal이 incident 대응을 방해하는 경우
+
+운영자가 임시로 cluster를 조정했는데 self-heal이 켜져 있으면 Argo CD가 다시 Git 상태로 되돌릴 수 있다.
+
+따라서 incident 대응 runbook에 다음이 필요하다.
+
+```text
+- Git을 먼저 수정하는 원칙
+- emergency manual change 절차
+- auto-sync/self-heal 일시 중단 기준
+- incident 후 Git 상태 정리
+```
+
+### GitOps repo write token을 과도하게 주는 경우
+
+Tekton이 GitOps repo를 수정하려면 credential이 필요하다. 이 credential이 production branch에 직접 push할 수 있으면 위험할 수 있다.
+
+```text
+권장:
+  bot 계정 사용
+  branch protection
+  PR 기반 promotion
+  최소 권한 token
+  production path 변경 제한
+```
+
+### Argo CD가 Synced면 배포 성공이라고 끝내는 경우
+
+Synced는 manifest 적용 상태다. 실제 서비스 정상성은 별도 metrics와 smoke test로 봐야 한다.
+
+---
+
+## 실무 검증 포인트
+
+Tekton + Argo CD 조합을 운영할 때는 다음을 확인해야 한다.
+
+| 검증 포인트 | 확인 질문 |
+|---|---|
+| 역할 분리 | Tekton은 build/test, Argo CD는 sync/reconcile을 담당하는가? |
+| Source of truth | deployment desired state가 GitOps repo에 있는가? |
+| Image tag | commit SHA 또는 digest 기반 immutable tag를 쓰는가? |
+| GitOps repo update | Tekton이 자동 commit, PR, promotion 중 어떤 방식을 쓰는가? |
+| Credential 분리 | Tekton credential과 Argo CD cluster credential이 분리되어 있는가? |
+| Branch protection | production GitOps path 변경에 review가 필요한가? |
+| Argo CD sync policy | auto-sync, prune, self-heal 기준이 환경별로 다른가? |
+| Drift 대응 | 수동 변경 발생 시 감지와 복구 절차가 있는가? |
+| Rollback | Git revert 기반 rollback이 가능한가? |
+| Observability | sync 이후 error rate, latency, logs, SLO를 확인하는가? |
+| Secret 관리 | GitOps repo에 secret이 평문으로 들어가지 않는가? |
+| Stateful workload | PVC, DB migration, backup/restore 전략이 있는가? |
+| Homelab cleanup | Tekton workspace PVC, old PipelineRun, image cache cleanup이 있는가? |
+
+---
+
+## Mental Model
+
+Tekton + Argo CD 조합은 다음 mental model로 이해할 수 있다.
+
+```text
+Application repository:
+  source code와 test, Dockerfile 저장
+
+Tekton:
+  source clone
+  test
+  build
+  image push
+  GitOps repo update
+
+Registry:
+  immutable image artifact 저장
+
+GitOps repository:
+  deployment desired state 저장
+
+Argo CD:
+  GitOps repo를 pull
+  desired state와 live state 비교
+  sync/reconcile 수행
+
+Kubernetes:
+  실제 workload 실행
+
+Observability:
+  배포 이후 실제 user-facing health 확인
+```
+
+더 짧게 정리하면 다음과 같다.
+
+```text
+Tekton:
+  artifact production
+
+GitOps repository:
+  deployment desired state
+
+Argo CD:
+  desired state reconciliation
+
+Kubernetes:
+  workload runtime
+```
+
+---
+
+## 정리
+
+Tekton과 Argo CD는 서로 대체 관계가 아니라 역할이 다른 도구다. Tekton은 CI/CD pipeline을 실행해 code를 test하고 image를 build해 registry에 push하는 역할을 맡고, Argo CD는 GitOps repository를 source of truth로 삼아 Kubernetes cluster의 실제 상태를 pull-based로 reconcile한다.
+
+핵심은 다음과 같다.
+
+- Tekton은 pipeline execution을 담당한다.
+- Argo CD는 GitOps reconciliation을 담당한다.
+- Tekton은 source clone, test, image build, registry push, GitOps repo update에 적합하다.
+- Argo CD는 GitOps repo를 감시하고 cluster live state와 desired state를 비교한다.
+- Tekton이 production cluster에 직접 `kubectl apply`하지 않아도 된다.
+- GitOps repository가 deployment desired state의 source of truth가 된다.
+- Argo CD는 OutOfSync와 drift를 감지할 수 있다.
+- Rollback은 Git revert 중심으로 설계하는 것이 좋다.
+- `latest` tag 대신 commit SHA 또는 image digest를 사용하는 것이 좋다.
+- Production에서는 auto-sync, prune, self-heal을 신중히 적용해야 한다.
+- Synced는 manifest 적용 상태일 뿐이며, 실제 서비스 정상성은 observability로 확인해야 한다.
+- Secret은 Git에 평문으로 저장하지 않아야 한다.
+- Stateful workload는 PVC 삭제, DB migration, backup/restore 전략을 별도로 고려해야 한다.
+
+이 조합의 진짜 가치는 "자동 배포가 된다"가 아니다. 진짜 가치는 **CI pipeline, deployment state, cluster reconciliation의 책임을 분리하면서도 Git을 중심으로 배포 이력과 운영 상태를 추적 가능하게 만든다**는 점이다.
+
+```text
+Tekton은 만든다.
+Argo CD는 맞춘다.
+Git은 기준이 된다.
+```
