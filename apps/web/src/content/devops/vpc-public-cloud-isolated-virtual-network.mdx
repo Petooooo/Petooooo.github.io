@@ -1,0 +1,1003 @@
+---
+area: "Networking"
+type: "concept"
+series: "Cloud Networking"
+title: "VPC: Public Cloud 위의 Isolated Virtual Network"
+slug: "vpc-public-cloud-isolated-virtual-network"
+date: "2026-06-02"
+updated: "2026-06-02"
+draft: false
+reviewed: true
+category: "DevOps"
+tags: ["vpc", "virtual-private-cloud", "cloud-networking", "subnet", "security-group", "network-acl", "public-gateway", "floating-ip", "load-balancer", "vpn", "network-isolation"]
+description: "VPC가 public cloud 안에서 논리적으로 격리된 private network를 구성하는 방식과 subnet, security group, ACL, public gateway, floating IP, load balancer, VPN 설계 기준을 정리한 DevOps 네트워킹 개념 노트"
+---
+## 개요
+
+**VPC**(Virtual Private Cloud)는 public cloud 안에 만드는 논리적으로 격리된 private network 공간이다. 물리 인프라는 cloud provider의 shared infrastructure를 사용하지만, 네트워크 관점에서는 사용자가 직접 IP range, subnet, routing, access control, gateway, load balancer, VPN 등을 정의할 수 있다.
+
+핵심은 다음과 같다.
+
+```text
+Public Cloud Provider Infrastructure
+└── Tenant A VPC
+    ├── Subnet A
+    ├── Subnet B
+    └── Virtual Server Instances
+
+└── Tenant B VPC
+    ├── Subnet A
+    ├── Subnet B
+    └── Virtual Server Instances
+```
+
+VPC는 물리적으로 완전히 독립된 데이터센터를 새로 만드는 것이 아니다. 대신 public cloud의 multi-tenant infrastructure 위에서 software-defined networking과 isolation mechanism을 통해 tenant별 독립적인 네트워크 경계를 제공한다.
+
+---
+
+## 왜 Virtual Private Cloud인가
+
+VPC라는 이름은 세 단어로 나눠 이해할 수 있다.
+
+| 단어 | 의미 |
+|---|---|
+| `Virtual` | 물리 장비를 직접 소유하지 않고 가상화된 네트워크·컴퓨팅 자원을 사용 |
+| `Private` | 다른 tenant와 논리적으로 격리된 네트워크 공간을 가짐 |
+| `Cloud` | public cloud provider의 인프라 위에서 동적으로 생성·관리됨 |
+
+즉 VPC는 다음 성격을 동시에 가진다.
+
+```text
+Public cloud의 유연성
++ Private network처럼 보이는 격리성
++ 사용자가 제어하는 network boundary
+```
+
+VPC는 private cloud 자체와는 다르다. private cloud는 특정 조직만을 위한 single-tenant 환경으로, 보통 온프레미스 또는 전용 인프라에서 운영된다. 반면 VPC는 public cloud 위에 존재하지만, tenant별 workload와 network가 논리적으로 분리된다.
+
+```text
+Private Cloud:
+전용 인프라 + single tenant + 높은 제어권 + 높은 운영 부담
+
+Public Cloud:
+shared infrastructure + 빠른 확장 + 낮은 운영 부담 + 기본 공유 환경
+
+VPC:
+public cloud 위의 논리적 private network + 격리 + 제어권 + cloud 유연성
+```
+
+---
+
+## VPC의 기본 mental model
+
+VPC는 cloud 안에 만든 전용 네트워크 공간으로 이해할 수 있다.
+
+온프레미스 데이터센터에서는 네트워크 팀이 다음 요소를 직접 설계한다.
+
+```text
+IP 대역
+VLAN
+Subnet
+Router
+Firewall
+NAT
+VPN
+Load Balancer
+DMZ
+Private network
+```
+
+VPC에서는 이와 유사한 개념을 cloud provider의 software-defined infrastructure 위에서 구성한다.
+
+```text
+VPC
+├── IP address range
+├── Subnets
+├── Route tables
+├── Network ACLs
+├── Security groups
+├── Public gateway
+├── Floating IP
+├── Load balancer
+├── VPN connection
+└── Virtual server instances
+```
+
+따라서 VPC는 단순히 VM을 담는 폴더가 아니다. VPC는 cloud resource가 어떤 네트워크 경계 안에서 어떻게 통신할지 정의하는 기본 단위다.
+
+---
+
+## VPC가 해결하는 문제
+
+Public cloud는 빠르게 resource를 만들고 확장할 수 있다는 장점이 있다. 하지만 production 환경에서는 단순히 VM을 생성하는 것만으로 충분하지 않다. VPC는 public cloud를 운영 환경에 맞게 사용하기 위해 필요한 네트워크 문제를 해결한다.
+
+### Isolation
+
+같은 cloud provider 안에 여러 고객이 있어도 내 workload와 다른 고객의 workload가 네트워크적으로 섞이면 안 된다. VPC는 tenant별로 논리적으로 분리된 network boundary를 제공한다.
+
+```text
+Tenant A workload ≠ Tenant B workload
+```
+
+### Network Control
+
+어떤 subnet은 외부 인터넷과 통신해야 하고, 어떤 subnet은 내부에서만 접근 가능해야 한다.
+
+예를 들어 다음과 같은 요구사항이 있을 수 있다.
+
+```text
+Load Balancer:
+외부 사용자의 HTTPS 요청을 받아야 함
+
+Application Server:
+Load Balancer에서 오는 traffic만 받아야 함
+
+Database:
+Application Server에서 오는 DB traffic만 받아야 함
+
+Admin Access:
+관리자 IP 또는 VPN을 통해서만 접근 가능해야 함
+```
+
+VPC는 이러한 요구사항을 subnet, route, ACL, security group, gateway로 표현할 수 있게 한다.
+
+### Security Boundary
+
+모든 resource를 하나의 평면 네트워크에 두면 장애나 침해가 발생했을 때 blast radius가 커진다. VPC 안에서 subnet과 access control을 나누면 계층별 보안 경계를 만들 수 있다.
+
+```text
+Public Subnet
+  ↓
+Private Application Subnet
+  ↓
+Private Database Subnet
+```
+
+### Hybrid Connectivity
+
+많은 기업은 public cloud만 사용하지 않는다. 기존 on-premises network, VPN, private network, 다른 cloud environment와 연결해야 할 수 있다.
+
+```text
+On-premises Network
+  ↓ VPN 또는 전용 연결
+VPC
+  ↓
+Private Subnets
+```
+
+VPC는 hybrid network의 cloud 측 endpoint가 될 수 있다.
+
+---
+
+## VPC의 기본 구성 요소
+
+VPC를 이해하려면 VPC라는 큰 네트워크 경계 안에 어떤 요소들이 들어가는지 알아야 한다.
+
+| 구성 요소 | 역할 |
+|---|---|
+| VPC | 가장 바깥쪽 virtual network boundary |
+| Subnet | VPC 안의 IP range 분할 단위 |
+| Virtual Server Instance | VPC 안에 배치되는 compute resource |
+| Security Group | instance 또는 resource level의 virtual firewall |
+| Network ACL | subnet level traffic control |
+| Public Gateway | subnet의 outbound internet access 제공 |
+| Floating IP | 특정 instance 또는 interface의 public connectivity 제공 |
+| Load Balancer | traffic을 backend resource로 분산 |
+| VPN | VPC와 외부 network를 안전하게 연결 |
+
+---
+
+## VPC
+
+**VPC**는 가장 바깥쪽 네트워크 경계다. VPC는 특정 IP address range를 가지고, 그 안에 subnet과 cloud resource를 배치한다.
+
+예시 CIDR은 다음과 같이 표현할 수 있다.
+
+```text
+VPC CIDR: 10.0.0.0/16
+```
+
+이 private address range는 VPC 내부 resource의 주소 공간으로 사용된다.
+
+다만 실제 운영에서는 CIDR 설계가 매우 중요하다. 나중에 VPN, VPC peering, Transit Gateway, on-premises network와 연결할 계획이 있다면 IP range가 겹치면 안 된다.
+
+```text
+VPC A:        10.0.0.0/16
+On-premises: 10.0.0.0/16
+
+Result:
+CIDR overlap으로 routing 충돌 가능
+```
+
+CIDR은 한 번 정하면 나중에 바꾸기 어렵거나 영향 범위가 크므로, 초기 설계 단계에서 확장성과 연결 계획을 고려해야 한다.
+
+---
+
+## Subnet
+
+**Subnet**은 VPC 안에서 IP address range를 더 작게 나눈 단위다.
+
+```text
+VPC: 10.0.0.0/16
+
+Subnet A: 10.0.1.0/24
+Subnet B: 10.0.2.0/24
+Subnet C: 10.0.3.0/24
+```
+
+Subnet을 나누는 이유는 단순히 IP를 정리하기 위해서만은 아니다. 계층별로 routing과 보안 정책을 다르게 적용하기 위해 subnet을 나눈다.
+
+일반적인 subnet 분리 예시는 다음과 같다.
+
+```text
+Public Subnet
+├── Load Balancer
+└── Bastion Host
+
+Private App Subnet
+├── Application Server
+└── Worker Node
+
+Private DB Subnet
+└── Database
+```
+
+Subnet은 보통 zone과도 관련된다. 특정 cloud에서는 subnet이 하나의 zone에 묶이며, 여러 zone에 걸친 하나의 subnet을 만들 수 없는 경우가 있다. 이 경우 multi-zone architecture는 zone별 subnet을 따로 만들고, load balancer나 orchestration 계층에서 분산하는 방식으로 설계해야 한다.
+
+---
+
+## Virtual Server Instance
+
+**Virtual Server Instance**는 VPC 안에 배치되는 cloud VM이다.
+
+```text
+VPC
+└── Private App Subnet
+    ├── app-vsi-1
+    ├── app-vsi-2
+    └── app-vsi-3
+```
+
+이 instance들은 같은 VPC 안에서 private IP를 통해 통신할 수 있다. 외부 인터넷에 노출할지 여부는 floating IP, public gateway, load balancer, security group, ACL 설정에 따라 달라진다.
+
+운영 관점에서 중요한 점은 모든 instance가 public IP를 가질 필요가 없다는 것이다. application server와 database는 일반적으로 private subnet에 두고, 외부 ingress는 load balancer 또는 bastion으로 제한하는 편이 안전하다.
+
+---
+
+## Security Group
+
+**Security Group**은 instance 또는 resource level에서 traffic을 제어하는 virtual firewall이다.
+
+예를 들어 web tier용 security group은 다음과 같이 설계할 수 있다.
+
+```text
+Security Group: web-sg
+
+Inbound:
+- TCP 443 from 0.0.0.0/0
+- TCP 80 from 0.0.0.0/0
+
+Outbound:
+- TCP 443 to 0.0.0.0/0
+- TCP 8080 to app-sg
+```
+
+Application tier용 security group은 더 좁게 설계한다.
+
+```text
+Security Group: app-sg
+
+Inbound:
+- TCP 8080 from lb-sg
+
+Outbound:
+- TCP 5432 to db-sg
+```
+
+Database tier용 security group은 가장 엄격해야 한다.
+
+```text
+Security Group: db-sg
+
+Inbound:
+- TCP 5432 from app-sg
+
+Outbound:
+- 필요한 경우에만 허용
+```
+
+Security Group 설계의 핵심은 가능한 한 IP 대역보다 source group 또는 tier 관계를 기준으로 접근을 제한하는 것이다.
+
+```text
+좋은 방향:
+app-sg → db-sg
+
+주의할 방향:
+0.0.0.0/0 → db port
+```
+
+---
+
+## Network ACL
+
+**Network ACL**은 subnet level에서 traffic을 제어하는 rule list다. Security Group과 비슷해 보이지만 적용 위치가 다르다.
+
+| 구분 | Security Group | Network ACL |
+|---|---|---|
+| 적용 위치 | instance 또는 resource level | subnet level |
+| 주된 목적 | workload 단위 접근 제어 | subnet boundary 접근 제어 |
+| 운영 감각 | 세밀한 virtual firewall | subnet perimeter control |
+| 예시 | app server는 DB port만 접근 가능 | 특정 subnet으로 들어오는 대역 제한 |
+
+예를 들어 public subnet의 ACL에서는 외부에서 들어오는 HTTP/HTTPS traffic을 허용할 수 있고, private database subnet의 ACL에서는 application subnet에서 오는 traffic만 허용하도록 제한할 수 있다.
+
+```text
+Public Subnet ACL:
+allow inbound TCP 80/443 from internet
+
+Private DB Subnet ACL:
+allow inbound DB port from app subnet only
+deny other inbound traffic
+```
+
+Security Group과 ACL은 함께 사용할 수 있다. 다만 두 계층 중 하나라도 traffic을 막으면 연결은 실패한다.
+
+```text
+Security Group: allow TCP 443
+Network ACL: deny TCP 443
+
+Result:
+connection failed
+```
+
+따라서 역할을 분리해 설계하는 것이 좋다.
+
+```text
+Network ACL:
+subnet boundary에서 큰 범위의 허용/차단
+
+Security Group:
+application 단위의 세밀한 허용/차단
+```
+
+---
+
+## Public Gateway
+
+**Public Gateway**는 subnet 안의 instance들이 인터넷으로 나갈 수 있게 해주는 구성 요소다.
+
+중요한 점은 public gateway가 주로 outbound connectivity를 제공한다는 것이다.
+
+```text
+Private Instance
+  ↓ outbound
+Public Gateway
+  ↓
+Internet
+```
+
+예를 들어 private app server가 OS package update나 external API 호출을 해야 할 수 있다. 하지만 외부 인터넷에서 해당 app server로 직접 들어오는 inbound traffic은 허용하고 싶지 않을 수 있다. 이때 public gateway를 사용하면 private subnet의 instance가 외부로 나가는 경로를 가질 수 있다.
+
+```text
+Private App Subnet
+└── app-vsi
+    ↓ outbound only
+Public Gateway
+    ↓
+Internet
+```
+
+Public gateway를 연결했다고 해서 외부에서 instance로 직접 접속할 수 있다고 가정하면 안 된다.
+
+> Public Gateway는 일반적으로 private instance의 outbound internet access를 위한 구성으로 이해해야 한다. 외부에서 직접 들어오는 public inbound access와는 구분해야 한다.
+
+---
+
+## Floating IP
+
+**Floating IP**는 특정 instance 또는 network interface에 연결할 수 있는 public IP address다. Floating IP를 사용하면 해당 instance가 public internet에서 접근 가능한 endpoint를 가질 수 있다.
+
+```text
+Internet
+  ↕
+Floating IP
+  ↕
+Instance
+```
+
+Public Gateway와 Floating IP의 차이는 다음과 같다.
+
+| 구분 | Public Gateway | Floating IP |
+|---|---|---|
+| 적용 대상 | subnet 단위 outbound access | 특정 instance 또는 interface |
+| inbound internet access | 기본 목적 아님 | 가능 |
+| outbound internet access | 가능 | 가능 |
+| 대표 용도 | private subnet의 package update, external API call | bastion host, public server, direct SSH/RDP |
+| 보안 주의점 | egress 제어 필요 | instance가 public inbound traffic에 노출됨 |
+
+Floating IP는 편리하지만 공격 표면을 넓힌다. 따라서 모든 instance에 floating IP를 붙이는 방식은 production 설계로 적합하지 않다.
+
+좋은 방향은 다음과 같다.
+
+```text
+Internet
+  ↓
+Load Balancer 또는 Bastion
+  ↓
+Private Instance
+```
+
+---
+
+## Load Balancer
+
+VPC 안에서 **Load Balancer**는 외부 또는 내부 traffic을 여러 backend instance로 분산한다.
+
+```text
+Internet
+  ↓
+Public Load Balancer
+  ↓
+Private App Subnet
+  ├── app-vsi-1
+  ├── app-vsi-2
+  └── app-vsi-3
+```
+
+이 구조에서는 application server가 public IP를 직접 가질 필요가 없다. 외부 사용자는 load balancer로만 접근하고, load balancer가 private subnet의 backend로 traffic을 전달한다.
+
+운영 관점에서 이 방식의 장점은 다음과 같다.
+
+- backend instance를 public internet에 직접 노출하지 않는다.
+- health check를 통해 unhealthy backend를 제외할 수 있다.
+- scale-out된 여러 instance로 traffic을 분산할 수 있다.
+- TLS termination, routing policy, session persistence 등을 적용할 수 있다.
+- backend 교체나 배포 시 client 영향 범위를 줄일 수 있다.
+
+---
+
+## VPN
+
+**VPN**은 VPC와 외부 network를 암호화된 tunnel로 연결하는 방식이다. VPC가 cloud 안의 isolated network 공간이라면, VPN은 그 공간과 다른 network를 이어주는 안전한 통로다.
+
+```text
+On-premises Network
+  ↓ VPN Tunnel
+VPC
+  ↓
+Private Subnets
+```
+
+VPC와 VPN의 차이는 다음과 같다.
+
+| 구분 | VPC | VPN |
+|---|---|---|
+| 정체 | cloud 안의 virtual private network | 네트워크 간 encrypted tunnel |
+| 목적 | cloud resource를 격리된 네트워크에 배치 | VPC와 외부 network를 안전하게 연결 |
+| 예시 | `prod-vpc`, `dev-vpc` | on-premises ↔ VPC site-to-site VPN |
+| 관계 | VPN의 한쪽 endpoint가 될 수 있음 | VPC에 연결되어 hybrid network 구성 |
+
+짧게 말하면, VPC는 공간이고 VPN은 연결 통로다.
+
+---
+
+## Public Subnet과 Private Subnet
+
+VPC 설계에서 가장 중요한 구분 중 하나는 public subnet과 private subnet이다.
+
+### Public Subnet
+
+**Public subnet**은 외부 인터넷과 직접 연결되는 resource를 배치하는 subnet이다.
+
+예시는 다음과 같다.
+
+```text
+Public Subnet
+├── Public Load Balancer
+├── Bastion Host
+└── NAT 또는 egress 관련 component
+```
+
+Public subnet에는 외부에서 접근해야 하는 최소한의 component만 배치하는 것이 좋다.
+
+### Private Subnet
+
+**Private subnet**은 외부 인터넷에서 직접 접근하지 못하도록 보호하는 subnet이다.
+
+예시는 다음과 같다.
+
+```text
+Private App Subnet
+├── Application Server
+└── Worker Node
+
+Private DB Subnet
+└── Database
+```
+
+Private subnet에 있는 resource는 필요할 때만 load balancer, bastion, VPN, public gateway 등을 통해 제한적으로 통신한다.
+
+---
+
+## 기본 3-tier VPC Architecture
+
+VPC를 실무적으로 이해하기 좋은 구조는 **3-tier architecture**다.
+
+```text
+Internet
+  ↓
+Public Load Balancer
+  ↓
+Private Application Tier
+  ↓
+Private Database Tier
+```
+
+이를 VPC 안에 배치하면 다음과 같다.
+
+```text
+VPC: 10.0.0.0/16
+
+Public Subnet: 10.0.1.0/24
+└── Public Load Balancer
+
+Private App Subnet: 10.0.2.0/24
+├── app-server-1
+└── app-server-2
+
+Private DB Subnet: 10.0.3.0/24
+└── database
+```
+
+Traffic 흐름은 다음과 같다.
+
+```text
+User
+  ↓ HTTPS
+Load Balancer
+  ↓ HTTP/HTTPS or TCP
+Application Server
+  ↓ DB protocol
+Database
+```
+
+계층별 접근 제어는 다음처럼 좁혀야 한다.
+
+| Tier | Inbound 허용 | Outbound 허용 |
+|---|---|---|
+| Load Balancer | `0.0.0.0/0`에서 `443` | app tier의 service port |
+| App Server | load balancer에서 application port | DB port, 필요한 external API |
+| Database | app tier에서 DB port | 필요한 최소 traffic |
+| Bastion | 관리자 IP 또는 VPN에서 SSH/RDP | private server SSH/RDP |
+
+핵심은 외부 사용자가 application server나 database에 직접 접근하지 못하게 하는 것이다.
+
+---
+
+## VPC와 Public Cloud의 관계
+
+VPC는 public cloud와 반대되는 개념이 아니다. VPC는 public cloud를 더 안전하고 제어 가능하게 사용하기 위한 기본 네트워크 단위다.
+
+| 구분 | Public Cloud 일반 사용 | VPC 기반 사용 |
+|---|---|---|
+| 네트워크 경계 | provider 기본 네트워크에 의존 | 사용자가 virtual network 정의 |
+| IP 설계 | 제한적 또는 provider managed | custom IP range, subnet 구성 |
+| 접근 제어 | resource별 기본 설정 중심 | subnet, ACL, security group 조합 |
+| 격리 수준 | multi-tenant cloud 기본 격리 | tenant별 logical isolation 강화 |
+| 운영 제어 | 상대적으로 단순 | 더 세밀한 network control |
+
+VPC는 public cloud의 장점을 유지하면서도 온프레미스 네트워크 설계와 유사한 통제권을 제공한다.
+
+---
+
+## VPC와 Private Cloud의 차이
+
+VPC와 private cloud는 이름이 비슷해 혼동하기 쉽지만 같은 개념이 아니다.
+
+| 구분 | VPC | Private Cloud |
+|---|---|---|
+| 기반 인프라 | public cloud의 shared infrastructure | single-tenant dedicated infrastructure |
+| 격리 방식 | logical isolation | physical 또는 dedicated isolation |
+| 운영 주체 | cloud provider가 infrastructure 운영 | 조직 또는 전담 provider가 운영 |
+| 비용 구조 | public cloud 기반 사용량 과금 | 더 큰 고정 비용 가능 |
+| 확장성 | cloud resource를 빠르게 확장 | 인프라 규모에 따라 제약 |
+| 대표 목적 | public cloud 안의 private-like network | 전용 환경, 높은 통제권, 규제 요구 |
+
+VPC는 private cloud의 일부 성격을 public cloud 위에서 제공하는 모델에 가깝다.
+
+---
+
+## VPC와 VPN의 차이
+
+VPC와 VPN도 자주 혼동된다.
+
+```text
+VPC:
+cloud 안에 만든 isolated virtual network
+
+VPN:
+두 network를 연결하는 encrypted tunnel
+```
+
+비교하면 다음과 같다.
+
+| 구분 | VPC | VPN |
+|---|---|---|
+| 정체 | 네트워크 공간 | 연결 방식 |
+| 위치 | cloud provider 내부 | VPC와 외부 network 사이 |
+| 목적 | resource 격리와 네트워크 제어 | 안전한 site-to-site 또는 client-to-site 연결 |
+| 예시 | production VPC | on-premises와 VPC를 연결하는 VPN tunnel |
+
+따라서 VPC와 VPN은 대체 관계가 아니라 조합 관계다.
+
+---
+
+## VPC 보안의 핵심: Defense in Depth
+
+VPC 보안은 하나의 firewall rule로 끝나지 않는다. 여러 계층에서 방어하는 **defense in depth** 구조가 필요하다.
+
+```text
+Internet Exposure 최소화
+  ↓
+Public/Private Subnet 분리
+  ↓
+Network ACL로 subnet boundary 제어
+  ↓
+Security Group으로 instance-level 제어
+  ↓
+Load Balancer를 통한 controlled ingress
+  ↓
+Bastion 또는 VPN을 통한 admin access
+  ↓
+Logging과 monitoring
+```
+
+운영 관점에서 좋은 VPC 보안 설계는 다음 원칙을 따른다.
+
+- database는 public subnet에 두지 않는다.
+- application server에 public IP를 직접 붙이지 않는다.
+- 외부 ingress는 load balancer 또는 bastion으로 제한한다.
+- SSH/RDP는 관리자 IP, VPN, bastion, session manager 등으로 제한한다.
+- security group rule은 broad CIDR보다 source group 기반으로 좁힌다.
+- subnet ACL은 coarse-grained boundary로 사용한다.
+- outbound traffic도 필요한 범위로 제한한다.
+- flow log와 audit log를 통해 traffic을 추적한다.
+
+---
+
+## VPC에서 인터넷 연결을 설계하는 방식
+
+VPC 내부 resource가 인터넷과 통신하는 방식은 크게 두 가지로 나눌 수 있다.
+
+### Floating IP를 통한 직접 연결
+
+특정 instance가 직접 public inbound/outbound connectivity를 가져야 하는 경우 floating IP를 사용할 수 있다.
+
+```text
+Internet
+  ↕
+Floating IP
+  ↕
+Bastion Host or Public Server
+```
+
+이 방식은 외부에서 직접 접근해야 하는 bastion host나 public server에 사용할 수 있다. 다만 instance가 public traffic에 노출되므로 security group, ACL, OS firewall을 엄격히 관리해야 한다.
+
+### Public Gateway를 통한 outbound 연결
+
+Private instance가 외부로 나가기만 하면 되는 경우 public gateway를 사용할 수 있다.
+
+```text
+Private Instance
+  ↓ outbound
+Public Gateway
+  ↓
+Internet
+```
+
+예를 들어 private app server가 package update나 external API 호출이 필요하지만 외부에서 직접 접근할 필요는 없는 경우에 적합하다.
+
+| 요구사항 | 적절한 구성 |
+|---|---|
+| 외부 사용자가 접속해야 하는 public web endpoint | Load Balancer 또는 floating IP |
+| private instance가 package update만 필요 | Public Gateway |
+| 관리자 SSH/RDP 접근 | Bastion + floating IP 또는 VPN |
+| database 보호 | public IP 없음, inbound 차단 |
+| 외부 API 호출 | public gateway 또는 NAT 성격의 egress 구성 |
+
+---
+
+## Cloud-Native Architecture에서 VPC의 의미
+
+Cloud-native 환경에서는 workload가 계속 생성, 삭제, 교체된다. 따라서 network boundary와 접근 제어가 명확하지 않으면 운영이 복잡해진다.
+
+VPC는 다음 역할을 한다.
+
+```text
+Cloud account 또는 project 안의 기본 network boundary
+  ↓
+Subnet 단위의 network segmentation
+  ↓
+Security Group과 ACL 기반 access control
+  ↓
+Load Balancer, Gateway, VPN을 통한 controlled connectivity
+```
+
+Kubernetes cluster를 VPC 위에 올리는 경우를 생각할 수 있다.
+
+```text
+VPC
+├── Public Subnet
+│   └── Ingress Load Balancer
+│
+├── Private Worker Subnet
+│   ├── worker-node-1
+│   ├── worker-node-2
+│   └── worker-node-3
+│
+└── Private Service Subnet
+    └── database or managed service endpoint
+```
+
+이 구조에서 사용자는 ingress endpoint로만 들어오고, worker node나 database는 직접 public internet에 노출되지 않는다.
+
+---
+
+## Multi-Zone VPC 설계
+
+Production VPC에서는 zone 장애에 대비해야 한다. 특정 cloud에서는 subnet이 하나의 zone에 묶이므로, multi-zone architecture를 만들려면 zone별 subnet을 따로 설계해야 한다.
+
+```text
+VPC: 10.0.0.0/16
+
+Zone 1
+├── public-subnet-z1: 10.0.1.0/24
+└── app-subnet-z1:    10.0.11.0/24
+
+Zone 2
+├── public-subnet-z2: 10.0.2.0/24
+└── app-subnet-z2:    10.0.12.0/24
+
+Zone 3
+├── public-subnet-z3: 10.0.3.0/24
+└── app-subnet-z3:    10.0.13.0/24
+```
+
+이렇게 구성하면 한 zone에 문제가 생겨도 다른 zone의 resource가 계속 동작할 수 있다.
+
+주의할 점은 고가용성이 “하나의 subnet을 여러 zone에 펼치는 방식”이 아닐 수 있다는 점이다. zone별 subnet을 만들고, load balancer나 orchestration 계층에서 traffic을 분산하는 방식으로 설계해야 한다.
+
+---
+
+## VPC 설계에서 자주 하는 실수
+
+### CIDR을 너무 작게 잡는 경우
+
+처음에는 instance 몇 개만 필요해 보여서 작은 CIDR을 선택할 수 있다.
+
+```text
+VPC: 10.0.0.0/24
+```
+
+하지만 나중에 subnet을 여러 zone, 여러 tier로 나누고, Kubernetes node와 pod network, VPN, peering까지 고려하면 주소가 부족할 수 있다.
+
+초기 CIDR 설계에서는 다음을 고려해야 한다.
+
+- 현재 필요한 instance 수
+- 향후 scale-out 가능성
+- zone 수
+- subnet tier 수
+- Kubernetes 또는 container network 사용 여부
+- on-premises CIDR과의 중복 여부
+- 다른 VPC와 연결 가능성
+
+---
+
+### 모든 instance를 public subnet에 두는 경우
+
+초기 테스트에서는 모든 instance에 public IP를 붙이는 방식이 편하다. 하지만 production에서는 위험하다.
+
+```text
+Internet
+  ↓
+App Server with Public IP
+  ↓
+Database with Public IP
+```
+
+이 구조는 공격 표면이 크다. 더 나은 구조는 public endpoint를 Load Balancer 또는 bastion으로 제한하고, application과 database는 private subnet에 두는 것이다.
+
+```text
+Internet
+  ↓
+Load Balancer
+  ↓
+Private App Server
+  ↓
+Private Database
+```
+
+---
+
+### Security Group과 ACL을 중복·충돌시키는 경우
+
+Security Group과 ACL을 모두 사용하면 보안은 강화될 수 있지만, 규칙이 충돌하면 troubleshooting이 어려워진다.
+
+예를 들어 Security Group에서는 port를 열었지만 subnet ACL에서 막고 있으면 traffic은 흐르지 않는다.
+
+```text
+Security Group: TCP 443 allow
+Network ACL: TCP 443 deny
+Result: connection failed
+```
+
+따라서 rule을 설계할 때는 역할을 나누는 것이 좋다.
+
+```text
+Network ACL:
+subnet boundary에서 큰 범위의 허용/차단
+
+Security Group:
+application 단위의 세밀한 허용/차단
+```
+
+---
+
+### Public Gateway와 Floating IP를 혼동하는 경우
+
+Public Gateway와 Floating IP는 모두 internet connectivity와 관련되지만 목적이 다르다.
+
+```text
+Public Gateway:
+subnet에 outbound internet path 제공
+
+Floating IP:
+특정 instance 또는 interface에 public IP 제공
+```
+
+자주 발생하는 오해는 다음과 같다.
+
+```text
+public gateway를 붙였는데 외부에서 instance로 접속이 안 된다.
+```
+
+이 경우 public gateway는 outbound access용으로 봐야 한다. 외부에서 특정 instance로 접근하려면 floating IP, load balancer, VPN, bastion 같은 별도 설계가 필요하다.
+
+---
+
+## VPC Troubleshooting 관점
+
+VPC 문제는 보통 다음과 같은 증상으로 나타난다.
+
+```text
+서버가 서로 통신하지 못한다.
+private instance에서 인터넷이 안 된다.
+floating IP가 있는데 접속이 안 된다.
+VPN은 연결됐는데 실제 traffic이 흐르지 않는다.
+Load Balancer health check가 실패한다.
+특정 subnet에서만 통신이 안 된다.
+```
+
+문제를 해결하려면 VPC의 여러 계층을 분리해 확인해야 한다.
+
+---
+
+## Private Instance에서 인터넷이 안 되는 경우
+
+Private subnet의 instance에서 외부 인터넷으로 나가지 못한다면 다음을 확인한다.
+
+| 확인 항목 | 검증 질문 |
+|---|---|
+| Public Gateway | subnet에 public gateway가 연결되어 있는가? |
+| Route | default route 또는 egress path가 있는가? |
+| Security Group | outbound가 허용되어 있는가? |
+| Network ACL | outbound와 return traffic이 허용되어 있는가? |
+| DNS | domain resolution이 되는가? |
+| OS Firewall | instance 내부 firewall이 막고 있지 않은가? |
+
+중요한 점은 private subnet이 기본적으로 public internet access를 갖는다고 가정하면 안 된다는 것이다. 별도의 egress 경로가 필요하다.
+
+---
+
+## Floating IP가 있는데 접속이 안 되는 경우
+
+Floating IP를 붙였다고 해서 모든 traffic이 자동으로 허용되는 것은 아니다.
+
+확인할 항목은 다음과 같다.
+
+```text
+1. floating IP가 올바른 instance/interface에 연결되어 있는가?
+2. security group inbound rule이 열려 있는가?
+3. network ACL inbound/outbound rule이 허용되어 있는가?
+4. instance 내부 service가 listen 중인가?
+5. OS firewall이 막고 있지 않은가?
+6. application이 올바른 interface에 bind되어 있는가?
+```
+
+특히 application이 `localhost`에만 bind되어 있으면 외부에서 접근할 수 없다.
+
+```text
+잘못된 예:
+127.0.0.1:8080 listen
+
+외부 접근 가능하게 하려면:
+0.0.0.0:8080 또는 적절한 interface에 bind
+```
+
+---
+
+## VPC와 On-Premises 간 통신이 안 되는 경우
+
+VPN 또는 hybrid connectivity 문제가 있을 때는 다음을 확인해야 한다.
+
+| 확인 항목 | 검증 질문 |
+|---|---|
+| CIDR overlap | VPC와 on-premises IP range가 겹치지 않는가? |
+| VPN tunnel | tunnel status가 up인가? |
+| Route | 양쪽 route table에 상대 network 경로가 있는가? |
+| Firewall | on-premises firewall이 허용하는가? |
+| Security Group | VPC instance의 inbound/outbound가 허용되는가? |
+| Network ACL | subnet ACL이 traffic을 허용하는가? |
+| Return path | 응답 packet이 원래 경로로 돌아갈 수 있는가? |
+
+VPN tunnel이 up이라고 해서 application traffic이 자동으로 되는 것은 아니다. routing, firewall, security group, ACL, return path를 모두 확인해야 한다.
+
+---
+
+## Load Balancer Health Check가 실패하는 경우
+
+VPC 안의 load balancer가 backend instance를 unhealthy로 판단할 수 있다. 이 경우 다음을 확인한다.
+
+| 확인 항목 | 검증 질문 |
+|---|---|
+| Backend service | application이 health check port에서 listen 중인가? |
+| Health check path | HTTP health check path가 올바른가? |
+| Security Group | load balancer에서 backend port로 inbound 허용되어 있는가? |
+| Network ACL | subnet level에서 traffic과 return traffic이 허용되는가? |
+| Route | load balancer와 backend 사이 routing이 가능한가? |
+| Application status | 실제 application dependency가 정상인가? |
+
+Health check는 단순히 port가 열려 있는지만 보는 것이 아니라, 실제 service readiness를 반영해야 한다.
+
+---
+
+## 운영 설계 원칙
+
+VPC를 production 수준으로 설계할 때는 다음 원칙을 적용하는 것이 좋다.
+
+| 원칙 | 설명 |
+|---|---|
+| Least privilege | 필요한 traffic만 허용 |
+| Public exposure 최소화 | public IP는 최소 component에만 부여 |
+| Tier 분리 | public, app, database subnet을 분리 |
+| Multi-zone 구성 | zone 장애에 대비해 subnet과 workload를 분산 |
+| CIDR 사전 계획 | VPN, peering, future scale을 고려 |
+| Egress 제어 | outbound traffic도 관리 대상 |
+| 중앙 ingress | 외부 traffic은 Load Balancer, API Gateway, Ingress로 집중 |
+| 감사 가능성 | flow log, audit log, security event 수집 |
+| IaC 관리 | VPC, subnet, route, SG, ACL을 코드로 관리 |
+
+VPC는 한 번 만들고 끝나는 resource가 아니라 cloud architecture의 기반이다. CIDR, subnet, route, security boundary는 나중에 바꾸기 어렵거나 영향 범위가 크므로 초기 설계가 중요하다.
+
+---
+
+## 정리
+
+VPC는 public cloud의 shared infrastructure 위에서 사용자가 직접 정의한 isolated virtual network를 만들고, 그 안에 cloud resource를 배치할 수 있게 하는 cloud networking의 기본 단위다.
+
+핵심 정리는 다음과 같다.
+
+| 항목 | 정리 |
+|---|---|
+| 기본 역할 | public cloud 안에 논리적으로 격리된 private-like network 제공 |
+| 핵심 가치 | isolation, network control, security boundary, hybrid connectivity |
+| 주요 구성 요소 | subnet, route, security group, ACL, gateway, floating IP, load balancer, VPN |
+| public subnet | 외부 traffic을 받아야 하는 최소 component 배치 |
+| private subnet | application, worker, database 등 직접 노출하면 안 되는 resource 배치 |
+| security group | instance 또는 resource level traffic 제어 |
+| network ACL | subnet level traffic 제어 |
+| public gateway | private subnet의 outbound internet access 제공 |
+| floating IP | 특정 instance의 public inbound/outbound connectivity 제공 |
+| 운영 주의점 | CIDR overlap, public exposure, SG/ACL 충돌, gateway와 floating IP 혼동 |
+
+VPC를 이해할 때 가장 중요한 관점은 “cloud 안에 VM을 넣는 공간”이 아니라 “cloud resource의 network boundary와 traffic policy를 정의하는 기반”으로 보는 것이다. 실제 운영에서는 subnet 분리, access control, ingress/egress 경로, hybrid connectivity, multi-zone availability, logging까지 함께 설계해야 안정적인 cloud network를 만들 수 있다.
