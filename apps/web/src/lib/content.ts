@@ -21,14 +21,25 @@ export async function getPublishedCollectionEntries(collection: RoutedCollection
   return entries.filter(isPublishedEntry).sort(byDateDesc);
 }
 
-export function byDateDesc(a: RoutedEntry, b: RoutedEntry) {
-  const dateOrder = b.data.date.valueOf() - a.data.date.valueOf();
-  if (dateOrder !== 0) return dateOrder;
-
+function byTitleAsc(a: RoutedEntry, b: RoutedEntry) {
   const titleOrder = naturalTitleCollator.compare(a.data.title, b.data.title);
   if (titleOrder !== 0) return titleOrder;
 
   return naturalTitleCollator.compare(a.slug, b.slug);
+}
+
+export function byDateAsc(a: RoutedEntry, b: RoutedEntry) {
+  const dateOrder = a.data.date.valueOf() - b.data.date.valueOf();
+  if (dateOrder !== 0) return dateOrder;
+
+  return byTitleAsc(a, b);
+}
+
+export function byDateDesc(a: RoutedEntry, b: RoutedEntry) {
+  const dateOrder = b.data.date.valueOf() - a.data.date.valueOf();
+  if (dateOrder !== 0) return dateOrder;
+
+  return byTitleAsc(a, b);
 }
 
 export function getCollectionUrl(entry: RoutedEntry) {

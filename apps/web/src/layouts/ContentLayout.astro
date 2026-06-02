@@ -1,7 +1,7 @@
 ---
 import BaseLayout from "./BaseLayout.astro";
 import AreaPostIndex from "@/components/AreaPostIndex.astro";
-import { formatDate, getEntryArea, getPublishedCollectionEntries, normalizeTags } from "@/lib/content";
+import { byDateAsc, formatDate, getEntryArea, getPublishedCollectionEntries, normalizeTags } from "@/lib/content";
 import { withBase } from "@/lib/urls";
 
 const { entry } = Astro.props;
@@ -11,7 +11,9 @@ const tags = normalizeTags(entry.data.tags as string[]);
 const showSource = entry.data.source && entry.data.sensitivity !== "private-source";
 const writingType = entry.data.type ?? entry.data.contentType;
 const areaEntries = entry.data.area
-  ? (await getPublishedCollectionEntries(entry.collection)).filter((candidate) => getEntryArea(candidate) === getEntryArea(entry))
+  ? (await getPublishedCollectionEntries(entry.collection))
+      .filter((candidate) => getEntryArea(candidate) === getEntryArea(entry))
+      .sort(byDateAsc)
   : [];
 const collectionLabels: Record<string, string> = {
   projects: "Projects",

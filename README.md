@@ -1,160 +1,133 @@
-# Self-Hosted AI-Powered Engineering Knowledge Platform
+# Petooooo.github.io
 
-This repository is a personal portfolio, technical blog, research archive, DevOps operation journal, and automation-ready content platform. GitHub Pages is the primary public hosting target, while the Raspberry Pi 4 Docker/Caddy setup remains available as an optional self-hosted deployment mode.
+This repository contains the public site for my personal engineering notebook. It is a static Astro/MDX site for projects, study notes, DevOps records, research-oriented writing, paper reviews, and archived drafts.
 
-## Architecture
+The site is intentionally simple: write in Markdown or MDX, review changes in Git, push to `main`, and let GitHub Pages publish the static build. A Raspberry Pi 4 Docker/Caddy path is kept as optional self-hosting documentation, but GitHub Pages is the primary public deployment for this repository.
 
-- `apps/web`: Astro, TypeScript, Tailwind CSS, MDX, content collections, Decap CMS admin.
-- `infra`: Caddy config, deployment scripts, backup scripts.
-- `automation`: n8n notes, prompt templates, draft-generation script.
-- `docs`: deployment, content workflow, architecture, and automation documentation.
+## What This Repo Is
 
-GitHub is the source of truth. Content is stored as Markdown or MDX files and can be edited manually through `/admin` or directly in an editor.
+- A public technical notebook and archive.
+- A place for engineering notes, implementation records, infrastructure writeups, and study material.
+- A static-first site built with Astro content collections.
+- A Git-backed writing workflow with optional Decap CMS editing under `/admin`.
+- A deployable site that can run on GitHub Pages or, optionally, behind Caddy on a Raspberry Pi 4.
+
+This repository is not the private Workbench itself. Some writing and experiments may start in a local Workbench or RP4 setup, but the material that lands here is the reviewed, public-facing MDX content and the site code that presents it.
+
+## Structure
+
+- `apps/web`: Astro app, Tailwind CSS, MDX content collections, layouts, components, and Decap CMS admin files.
+- `apps/web/src/content`: public content collections.
+- `docs`: architecture, deployment, content workflow, and troubleshooting notes.
+- `infra`: optional Docker, Caddy, deploy, and backup scripts for RP4/self-hosted operation.
+- `automation`: helper notes and draft utilities for organizing raw technical notes before manual review.
+
+## Content Areas
+
+- `projects`: larger implementations and project-level records.
+- `notes`: study notes and conceptual learning material.
+- `devops`: infrastructure, deployment, operations, and troubleshooting notes.
+- `research`: computer science and electrical/electronic engineering research notes.
+- `paper-reviews`: concise paper reading notes.
+- `archive`: old drafts, temporary material, and lower-confidence notes that should not crowd the main sections.
+
+Drafts use `draft: true` and are excluded from public routes. Published content should avoid secrets, private hostnames, internal IPs, tokens, and sensitive operational details.
 
 ## Local Development
 
-Use Node.js 20 or newer. The repository includes `.nvmrc` and `.node-version` pins for Node 20.
+Use Node.js 20 or newer. The repository includes `.nvmrc` and `.node-version` pins.
 
 ```bash
 npm install --prefix apps/web
-npm run dev
+npm run dev --prefix apps/web
 ```
 
 Open `http://localhost:4321`.
 
-Useful commands:
+Useful checks:
 
 ```bash
-npm run check
-npm run build
-npm run preview
+npm run check --prefix apps/web
+npm run build --prefix apps/web
+npm run preview --prefix apps/web
 ```
 
-## Docker
+## GitHub Pages Deployment
 
-```bash
-cp .env.example .env
-${EDITOR:-nano} .env
-docker compose build
-docker compose up -d
-```
+GitHub Pages is the primary deployment target for `Petooooo/Petooooo.github.io`.
 
-The container builds `apps/web` with Astro and serves the static output from Caddy. Set `SITE_URL`, `SITE_DOMAIN`, and `CADDY_EMAIL` before production builds so canonical URLs, RSS, sitemap, and HTTPS behavior are correct.
-
-## Deployment Modes
-
-### GitHub Pages Production
-
-GitHub Pages is the primary production hosting mode for `Petooooo/Petooooo.github.io`.
-
-The workflow at `.github/workflows/deploy-pages.yml` builds `apps/web` with Node 20 and deploys `apps/web/dist` to Pages using:
+The workflow in `.github/workflows/deploy-pages.yml` builds `apps/web` and publishes `apps/web/dist` with:
 
 ```bash
 SITE_URL=https://petooooo.github.io/
 ```
 
-Configure the repository:
+Repository settings should use **Pages -> Build and deployment -> GitHub Actions**. Pushing to `main` runs the deployment workflow.
 
-1. Open GitHub repository settings for `Petooooo/Petooooo.github.io`.
-2. Go to **Pages**.
-3. Set **Build and deployment** source to **GitHub Actions**.
-4. Push to `main` or run the `Deploy GitHub Pages` workflow manually.
+See `docs/deployment-github-pages.md` for verification and troubleshooting.
 
-See `docs/deployment-github-pages.md` for verification steps.
+## Optional RP4 Self-Hosting
 
-### Raspberry Pi 4 Optional Self-Hosting
-
-On the RP4:
+The RP4 path is kept for self-hosting practice and operational ownership. It builds the same static Astro site and serves it with Caddy through Docker Compose.
 
 ```bash
-ssh rp4
+cp .env.example .env
+docker compose build
+docker compose up -d
+```
+
+For the Raspberry Pi:
+
+```bash
 git clone https://github.com/Petooooo/Petooooo.github.io.git ~/Petooooo.github.io
 cd ~/Petooooo.github.io
 cp .env.example .env
-```
-
-Edit `.env`, then deploy from the clone directory:
-
-```bash
 chmod +x infra/scripts/deploy.sh infra/scripts/backup.sh
 ./infra/scripts/deploy.sh
 ```
 
-`./infra/scripts/deploy.sh` resolves the repository root from its own location, so it works from any clone directory name. Set `REPO_DIR=/path/to/repo` only when you intentionally want to override that behavior.
+Set `SITE_URL`, `SITE_DOMAIN`, and `CADDY_EMAIL` before production-style RP4 builds. `SITE_URL` affects canonical URLs, RSS, Open Graph metadata, and sitemap output. `SITE_DOMAIN` is used by Caddy.
 
-For later updates:
-
-```bash
-ssh rp4
-cd ~/Petooooo.github.io
-./infra/scripts/deploy.sh
-```
-
-## ipTIME DDNS and Caddy
-
-Set `SITE_DOMAIN` in `.env` to your ipTIME DDNS domain, for example:
-
-```bash
-SITE_DOMAIN=your-name.iptime.org
-```
-
-Forward ports `80` and `443` from your router to the Raspberry Pi. Caddy can request HTTPS certificates automatically once DNS and port forwarding are correct.
+See `docs/deployment-rp4.md` for the longer runbook.
 
 ## Decap CMS
 
-The admin interface lives at `/admin`.
+The admin interface lives at `/admin` and edits the same Git-backed MDX files. It is a convenience layer, not a separate content store.
 
-Before production use, edit `apps/web/public/admin/config.yml`:
-
-- Replace `Petooooo/Petooooo.github.io`.
-- Configure the GitHub OAuth backend appropriate for Decap CMS.
-- Keep `publish_mode: editorial_workflow` if you want draft review.
-
-Local CMS development can use Decap's local backend.
-
-For local CMS editing, run Decap's local backend in a separate terminal if you choose to use it:
+Before production use, review `apps/web/public/admin/config.yml` and configure the GitHub OAuth backend for Decap CMS. Local CMS editing can use Decap's local backend:
 
 ```bash
 npx decap-server
 ```
 
-## Content Workflow
+## Writing Workflow
 
-Collections:
+The normal flow is:
 
-- `projects`
-- `notes`
-- `devops`
-- `research`
-- `auto-archive`
+1. Write or collect notes locally.
+2. Convert useful material into MDX under `apps/web/src/content`.
+3. Keep unfinished material as `draft: true`.
+4. Review the diff.
+5. Run `npm run check --prefix apps/web` and `npm run build --prefix apps/web`.
+6. Commit and push to `main`.
+7. GitHub Pages publishes the static site.
 
-Draft content uses `draft: true` and is not published by the Astro routes. Auto-generated posts must also include `autoGenerated: true`, `generatedAt`, `reviewed: false`, and source metadata until a human reviews them.
+The `automation` directory is for helper scripts and draft organization. It should support note cleanup and structure, not replace manual review or turn the site into bulk publishing.
 
-## Automation Roadmap
+## Backups
 
-Future n8n workflows should:
+GitHub is the primary backup. The optional RP4 script `infra/scripts/backup.sh` can create a timestamped backup containing a Git bundle, content files, admin config, infrastructure files, Docker files, a redacted `.env`, and recent container diagnostics when available.
 
-1. Collect source data.
-2. Summarize and classify it.
-3. Generate MDX with safe frontmatter.
-4. Commit generated drafts to GitHub.
-5. Let a human review and publish.
-6. Trigger RP4 deployment only after review, unless explicitly configured otherwise.
+Recommended operational habits:
 
-## Backup Strategy
-
-The primary backup is GitHub. The `infra/scripts/backup.sh` script also creates a timestamped RP4 backup tarball containing a Git bundle, content files, admin config, infrastructure files, Docker files, a redacted `.env`, and recent container diagnostics when available.
-
-Recommended additions:
-
-- Scheduled Git bundle backups.
-- Off-device encrypted backup copy.
-- Periodic restore test.
+- Keep important content in Git.
+- Test restore steps occasionally.
+- Store sensitive local notes outside the public repository.
 
 ## Troubleshooting
 
-- Build fails: run `npm run check` and inspect content frontmatter.
-- Caddy does not get HTTPS: confirm DDNS, router forwarding, and ISP port restrictions.
-- Admin cannot commit: verify GitHub OAuth and repository permissions.
-- Draft appears missing: confirm `draft: false`; drafts are intentionally excluded from public routes.
-- `trap: ERR: bad trap`: run the latest script directly as `./infra/scripts/deploy.sh` after `chmod +x`; it uses bash because `ERR` traps are not POSIX `sh` compatible.
+- Build fails: run `npm run check --prefix apps/web` and inspect frontmatter.
+- Draft is missing from the site: confirm `draft: false`.
+- GitHub Pages does not update: check the Actions run and Pages settings.
+- Caddy cannot issue HTTPS: confirm DNS, router forwarding, and inbound port availability.
+- RP4 deploy script fails with shell errors: run `./infra/scripts/deploy.sh` directly after `chmod +x`; the script expects bash behavior.
