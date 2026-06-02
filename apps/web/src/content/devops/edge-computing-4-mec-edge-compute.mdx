@@ -1,0 +1,1110 @@
+---
+area: "Edge Computing"
+type: "concept"
+series: "Edge Computing"
+title: "Edge Computing 4장: MEC와 통신망 Edge Compute"
+slug: "edge-computing-4-mec-edge-compute"
+date: "2026-06-02"
+updated: "2026-06-02"
+draft: false
+reviewed: true
+category: "DevOps"
+tags: ["mec", "multi-access-edge-computing", "edge-computing", "5g", "telco-edge", "traffic-steering", "edge-ai", "cloud-gaming", "private-5g", "observability"]
+description: "Multi-access Edge Computing의 개념, 5G와의 관계, MEC architecture, traffic steering, DevOps 운영 포인트를 정리한다."
+---
+## 개요
+
+**MEC**(Multi-access Edge Computing)는 Edge Computing을 통신망의 edge까지 확장하는 architecture다. 일반적인 Edge Computing이 공장, 매장, 병원, 차량, 창고처럼 data source 가까이에 compute를 배치하는 개념이라면, MEC는 5G, LTE, Wi-Fi, fixed access 같은 access network 가까이에 cloud-like compute environment를 배치하는 개념이다.
+
+핵심은 다음과 같다.
+
+```text
+MEC = 통신망 가장자리에서 실행되는 cloud-like compute environment
+```
+
+조금 더 풀면 다음처럼 정리할 수 있다.
+
+```text
+사용자 단말 가까이
++ 5G / LTE / Wi-Fi / fixed access network 가까이
++ cloud와 유사한 compute / storage / network service 제공
++ real-time 또는 near-real-time application 실행
+= MEC
+```
+
+MEC는 단순히 "기지국 근처에 server를 둔다"는 수준의 개념이 아니다. 사용자 traffic을 가까운 edge application으로 steering하고, local traffic processing을 수행하며, radio/network context를 활용하고, central cloud와 역할을 나눠 low-latency application을 운영하는 architecture다.
+
+---
+
+## MEC가 등장하는 맥락
+
+Edge Computing의 흐름을 단계적으로 보면 MEC의 위치가 명확해진다.
+
+```text
+1. Edge Computing
+   → 데이터를 생성 지점 가까이에서 처리한다.
+
+2. Edge Computing 도입 이유
+   → latency, cost, data control, continuous operations 때문에 필요하다.
+
+3. Edge Computing의 확장
+   → retail, banking, telco 등 산업 전반으로 확장된다.
+
+4. MEC
+   → 특히 telco / mobile network의 edge에 cloud-like compute를 배치한다.
+```
+
+즉 MEC는 Edge Computing의 하위 개념이면서, 특히 **통신망 edge**에 초점을 둔다.
+
+일반 Edge Computing이 "비즈니스 현장 가까이 compute를 둔다"라면, MEC는 "통신망 사용자 가까이 compute를 둔다"에 가깝다.
+
+---
+
+## 기본 정의
+
+**MEC**는 **Multi-access Edge Computing**의 약자다.
+
+MEC를 한 문장으로 정의하면 다음과 같다.
+
+> MEC는 5G, LTE, Wi-Fi, fixed access 등 다양한 access network 가까이에 cloud-like compute와 IT service environment를 배치해, low latency와 local context가 필요한 application을 사용자 가까이에서 실행하는 Edge Computing architecture다.
+
+여기서 중요한 단어는 세 가지다.
+
+| 용어 | 의미 |
+| --- | --- |
+| Multi-access | 5G만이 아니라 LTE, Wi-Fi, fixed access 등 여러 access network를 포함 |
+| Edge | central cloud가 아니라 사용자와 가까운 network edge |
+| Computing | 단순 routing이 아니라 application workload 실행 |
+
+MEC는 network 장비만의 개념도 아니고, 단순 CDN도 아니다. MEC는 network edge에서 application이 실행되는 compute platform에 가깝다.
+
+---
+
+## “Multi-access”의 의미
+
+MEC를 처음 접하면 **Mobile Edge Computing**과 **Multi-access Edge Computing**을 혼동하기 쉽다. 실제로 초기에는 mobile network 중심 의미가 강했다. 그러나 현재는 cellular network뿐 아니라 여러 access technology를 포함하는 방향으로 확장되었다.
+
+### Mobile Edge Computing
+
+초기 의미는 주로 LTE나 5G 같은 mobile network 근처에 compute를 배치하는 개념에 가까웠다.
+
+```text
+Mobile Edge Computing
+→ mobile network 중심
+→ cellular user 가까이 compute 배치
+```
+
+### Multi-access Edge Computing
+
+현재의 의미는 mobile network에만 제한되지 않는다.
+
+```text
+Multi-access Edge Computing
+→ 5G / LTE
+→ Wi-Fi
+→ fixed access
+→ enterprise private network
+→ 여러 access network를 포함
+```
+
+따라서 “multi-access”는 특정 mobile network 하나에 묶인 edge가 아니라, 여러 access technology를 통해 들어오는 user와 device를 위한 edge compute environment를 의미한다.
+
+중요한 구분은 다음과 같다.
+
+```text
+5G = access network technology
+MEC = network edge compute architecture
+```
+
+5G가 없어도 Edge Computing은 가능하다. 다만 5G는 MEC의 가치를 크게 높이는 access technology다.
+
+---
+
+## 기존 Cloud 경로와 MEC 경로의 차이
+
+MEC를 이해하려면 user traffic이 어디까지 이동하는지 비교해야 한다.
+
+기존 cloud 중심 구조에서는 사용자의 요청이 멀리 있는 cloud region까지 이동할 수 있다.
+
+```text
+User Device
+  ↓
+Radio Access Network
+  ↓
+Transport Network
+  ↓
+Mobile Core
+  ↓
+Internet / Cloud Backbone
+  ↓
+Central Cloud Region
+  ↓
+Application Server
+```
+
+이 구조는 일반적인 web service, backend API, batch workload에는 적합할 수 있다. 그러나 AR/VR, cloud gaming, connected vehicle, real-time video analytics처럼 latency에 민감한 workload에는 불리할 수 있다.
+
+MEC 구조에서는 application server 또는 일부 workload를 network edge에 배치한다.
+
+```text
+User Device
+  ↓
+Radio Access Network
+  ↓
+MEC / Telco Edge
+  ↓
+Application Processing
+```
+
+중앙 cloud까지 가지 않고, 사용자와 가까운 network edge에서 처리하므로 end-to-end latency를 줄일 수 있다.
+
+---
+
+## 5G만으로는 충분하지 않은 이유
+
+MEC를 이해할 때 자주 생기는 오해가 있다.
+
+> 5G는 빠르니까 MEC가 없어도 되는 것 아닌가?
+
+그렇지 않다. 5G는 주로 **무선 구간**의 성능을 개선한다. 하지만 사용자가 체감하는 지연시간은 무선 구간만으로 결정되지 않는다.
+
+End-to-end latency는 대략 다음 요소가 합쳐진 값이다.
+
+```text
+End-to-end latency
+= device processing
++ radio access latency
++ transport latency
++ core network latency
++ internet/backbone latency
++ cloud region processing latency
++ response path latency
+```
+
+5G가 radio access latency를 줄여도 application server가 멀리 있는 cloud region에 있다면 전체 latency는 여전히 커질 수 있다.
+
+MEC는 여기서 application processing 위치를 사용자 가까이로 옮긴다.
+
+```text
+5G:
+  device ↔ radio network 구간을 빠르게 만든다.
+
+MEC:
+  application compute 자체를 사용자 가까이 배치한다.
+```
+
+따라서 5G와 MEC는 경쟁 관계가 아니다. 둘은 보완 관계다.
+
+```text
+5G + MEC
+= 빠른 access network
++ 가까운 compute
++ 낮은 end-to-end latency
+```
+
+---
+
+## MEC의 핵심 특징
+
+MEC의 핵심 특징은 다음과 같이 정리할 수 있다.
+
+| 특징 | 의미 |
+| --- | --- |
+| **Close proximity** | user, device, data source 가까이에 compute 배치 |
+| **Real-time / near-real-time** | 즉각적 판단이 필요한 workload 처리 |
+| **Low latency** | 중앙 cloud 왕복을 줄여 반응속도 개선 |
+| **High bandwidth** | local network 가까이에서 대용량 data 처리 |
+| **Context awareness** | radio network 정보, 위치, network 상태 등 local context 활용 |
+| **Backhaul reduction** | 모든 traffic을 core/cloud로 보내지 않고 local 처리 |
+| **Cloud-like environment** | edge 위치에서 cloud와 유사한 compute/storage/service 제공 |
+
+여기서 특히 중요한 것은 **context awareness**다.
+
+일반 cloud는 사용자의 radio condition이나 access network 상태를 자세히 알기 어렵다. 반면 MEC는 RAN 또는 access network 가까이에 있으므로 다음 정보를 application이 활용할 수 있다.
+
+```text
+radio signal quality
+cell congestion
+user location proximity
+network latency
+available bandwidth
+mobility pattern
+local traffic condition
+```
+
+예를 들어 AR/VR application은 network 상태가 나빠지면 rendering quality를 낮추거나, streaming bitrate를 조정하거나, nearby MEC node로 session을 옮기는 방식의 최적화를 할 수 있다.
+
+---
+
+## MEC Architecture Mental Model
+
+MEC 구조를 간단히 표현하면 다음과 같다.
+
+```text
+User Equipment
+  ↓
+Access Network
+  ↓
+MEC Host / Edge Cloud
+  ↓
+Local Application
+  ↓
+Central Cloud / Core System
+```
+
+Telco 관점으로 조금 더 풀면 다음과 같다.
+
+```text
+UE
+  ↓
+RAN
+  ↓
+Transport
+  ↓
+UPF / Local Breakout
+  ↓
+MEC Platform
+  ↓
+MEC Application
+  ↓
+Central Cloud / Data Center
+```
+
+이 구조에서 중요한 것은 application이 단순히 central cloud에만 있는 것이 아니라, user traffic이 지나가는 network edge 가까이에 배치된다는 점이다.
+
+---
+
+## 구성요소
+
+### UE
+
+**UE**는 User Equipment를 의미한다. 사용자가 직접 들고 있거나 현장에 배치된 network endpoint다.
+
+예시는 다음과 같다.
+
+- smartphone
+- tablet
+- AR/VR headset
+- connected vehicle
+- industrial robot
+- IoT device
+- camera
+- wearable device
+
+UE는 MEC application을 직접 사용하거나 sensor data를 edge로 전송한다.
+
+### Access Network
+
+Access network는 user가 network에 접속하는 구간이다.
+
+예시는 다음과 같다.
+
+- 5G
+- LTE
+- Wi-Fi
+- fixed broadband
+- private 5G
+- enterprise wireless network
+
+MEC가 “multi-access”인 이유는 access network가 하나로 고정되지 않기 때문이다.
+
+### RAN
+
+**RAN**은 Radio Access Network다. 5G에서는 gNodeB 같은 기지국 영역이 여기에 해당한다.
+
+MEC는 RAN 가까이에 위치할 수 있다. 이때 application은 user와 가까운 위치에서 traffic을 처리할 수 있다.
+
+```text
+UE
+→ RAN
+→ nearby MEC
+→ local application
+```
+
+### UPF / Local Breakout
+
+5G Core에서 **UPF**(User Plane Function)는 user traffic을 처리하고 forwarding하는 핵심 구성요소다.
+
+MEC에서는 user traffic을 중앙 cloud까지 보내지 않고 가까운 edge application으로 보내기 위해 local breakout 구조가 중요하다.
+
+간단히 말하면 다음과 같다.
+
+```text
+기존:
+User traffic → Core network → Internet / Cloud
+
+MEC:
+User traffic → Local UPF → MEC Application
+```
+
+이 구조를 통해 latency와 backhaul traffic을 줄일 수 있다.
+
+### MEC Host
+
+**MEC Host**는 실제 compute resource가 있는 곳이다.
+
+여기에는 다음이 포함될 수 있다.
+
+- CPU
+- memory
+- storage
+- GPU / NPU
+- container runtime
+- virtualization layer
+- local network function
+- edge storage
+- service discovery
+- monitoring agent
+
+DevOps 관점에서는 MEC Host를 “통신망 가까이에 위치한 작은 cloud node 또는 edge cluster”로 생각하면 이해하기 쉽다.
+
+### MEC Platform
+
+MEC Platform은 application이 edge 환경에서 실행될 수 있도록 공통 기능을 제공한다.
+
+역할은 다음과 같다.
+
+- application lifecycle management
+- service discovery
+- traffic routing
+- network information exposure
+- DNS / local routing integration
+- policy enforcement
+- resource management
+- monitoring integration
+
+즉 MEC는 단순히 server를 설치하는 것이 아니라, application이 network edge에서 동작할 수 있는 platform을 제공하는 개념이다.
+
+### MEC Application
+
+MEC Application은 실제 business logic이다.
+
+예시는 다음과 같다.
+
+- AR rendering service
+- cloud gaming server
+- video analytics engine
+- V2X coordination service
+- smart factory control application
+- private 5G enterprise application
+- local AI inference service
+- CDN cache
+- security inspection service
+
+---
+
+## 일반 Edge Computing과 MEC의 차이
+
+MEC는 Edge Computing의 한 형태다. 하지만 일반적인 Edge Computing과 초점이 다르다.
+
+| 구분 | 일반 Edge Computing | MEC |
+| --- | --- | --- |
+| 위치 | 공장, 매장, 병원, 차량, 창고 등 data source 근처 | access network 또는 telco network edge |
+| 주요 주체 | enterprise, 제조사, retail, 병원, cloud provider | telco, cloud provider, enterprise, application provider |
+| 핵심 목표 | local processing, data control, offline operation | low latency, backhaul reduction, network-aware service |
+| network 관계 | 일반 IP network 또는 local network 중심 | 5G/LTE/Wi-Fi/fixed access와 밀접 |
+| 특징 | 현장 application 중심 | RAN/Core/network function과 결합 |
+| 대표 use case | smart factory, retail analytics, hospital edge | AR/VR, cloud gaming, V2X, private 5G, telco edge service |
+
+일반 Edge Computing이 "비즈니스 현장 가까이 compute를 둔다"라면, MEC는 "통신망 사용자 가까이 compute를 둔다"는 점이 핵심이다.
+
+---
+
+## MEC가 해결하는 문제
+
+### Latency 감소
+
+MEC의 가장 직접적인 효과는 latency 감소다.
+
+중앙 cloud 경로는 길 수 있다.
+
+```text
+Device
+→ RAN
+→ Core
+→ Internet
+→ Cloud Region
+→ Application
+→ 다시 Device
+```
+
+MEC 경로는 짧다.
+
+```text
+Device
+→ RAN
+→ MEC
+→ Application
+→ Device
+```
+
+이 차이는 AR/VR, cloud gaming, remote control, connected vehicle 같은 use case에서 중요하다.
+
+### Backhaul Traffic 감소
+
+모든 traffic을 core network나 central cloud로 보내면 transport/backhaul 부담이 커진다.
+
+MEC는 대용량 데이터를 local에서 처리하거나 cache할 수 있다.
+
+```text
+Before MEC:
+대용량 traffic 전체 → core/cloud 전송
+
+After MEC:
+대용량 traffic → local edge 처리
+필요한 event/summary만 central system 전송
+```
+
+예를 들어 경기장, 콘서트장, 대형 쇼핑몰처럼 특정 장소에서 traffic이 폭증하는 상황에서는 local MEC가 content delivery, video processing, user guidance 등을 처리할 수 있다.
+
+### User Experience 개선
+
+MEC는 latency를 줄이고, bandwidth를 가까운 곳에서 제공하므로 사용자 경험을 개선할 수 있다.
+
+대표 예시는 다음과 같다.
+
+- cloud gaming의 input lag 감소
+- AR/VR의 motion-to-photon latency 감소
+- live streaming delay 감소
+- nearby content cache로 buffering 감소
+- 현장 맞춤형 content delivery
+- connected vehicle의 빠른 coordination
+
+### Local Context 활용
+
+MEC는 network edge에 있으므로 user와 network 상황을 더 잘 이해할 수 있다.
+
+예시는 다음과 같다.
+
+```text
+이 사용자는 어느 cell 근처에 있는가?
+현재 cell congestion은 어떤가?
+available bandwidth는 어느 정도인가?
+user mobility pattern은 어떤가?
+근처에 같은 application user가 많은가?
+local event가 발생했는가?
+```
+
+이 정보는 cloud region에서는 실시간으로 활용하기 어렵다. MEC는 이 local context를 application logic에 반영할 수 있다.
+
+### Data Locality와 Compliance
+
+MEC는 data를 특정 지역 또는 network edge 안에서 처리할 수 있다.
+
+다음 상황에서 유리하다.
+
+- 특정 국가 또는 지역 밖으로 raw data를 보내면 안 되는 경우
+- enterprise private 5G 환경에서 공장 데이터를 외부로 보내기 어려운 경우
+- 병원, 항만, 공항, 금융 지점처럼 민감 데이터가 많은 경우
+- 실시간 분석 결과만 중앙으로 보내고 raw data는 local에 유지해야 하는 경우
+
+---
+
+## 대표 Use Case
+
+### Cloud Gaming
+
+Cloud gaming은 MEC를 설명하기 좋은 대표 사례다.
+
+Cloud gaming에서는 사용자의 input이 server로 가고, server가 game frame을 rendering한 뒤 video stream을 다시 사용자에게 보낸다.
+
+중앙 cloud만 사용하면 경로가 길어질 수 있다.
+
+```text
+Controller input
+→ Central Cloud
+→ Game rendering
+→ Video stream
+→ User device
+```
+
+MEC를 사용하면 game server를 사용자 가까이에 배치할 수 있다.
+
+```text
+Controller input
+→ MEC game server
+→ Rendering
+→ Low-latency video stream
+→ User device
+```
+
+여기서 latency가 낮아지면 input lag가 줄고 사용자 경험이 좋아진다.
+
+### AR/VR
+
+AR/VR은 latency에 매우 민감하다.
+
+사용자가 고개를 돌렸는데 화면이 늦게 반응하면 멀미, 어지러움, 몰입감 저하가 발생할 수 있다.
+
+MEC는 무거운 rendering 또는 spatial computing 일부를 edge로 offload할 수 있다.
+
+```text
+AR headset
+→ camera / sensor data
+→ MEC rendering or object recognition
+→ result stream
+→ AR overlay
+```
+
+이 구조는 device 자체의 battery와 compute 부담도 줄일 수 있다.
+
+### Connected Vehicle / V2X
+
+Connected vehicle에서는 차량이 주변 차량, 도로 인프라, traffic signal, pedestrian sensor와 통신할 수 있다.
+
+중앙 cloud만으로 처리하기에는 시간이 오래 걸릴 수 있다.
+
+```text
+Vehicle
+→ Roadside Unit
+→ MEC
+→ collision warning / traffic coordination
+```
+
+MEC는 차량 가까이에서 다음을 수행할 수 있다.
+
+- collision risk analysis
+- traffic light coordination
+- road hazard alert
+- local HD map update
+- platooning coordination
+- emergency vehicle priority
+
+### Smart Factory / Private 5G
+
+MEC는 enterprise private 5G와도 잘 맞는다.
+
+공장 내부에 private 5G network와 MEC node를 함께 구성하면 다음 구조가 가능하다.
+
+```text
+Industrial Device
+→ Private 5G
+→ On-premise MEC
+→ Local AI / Control System
+→ Factory Equipment
+```
+
+이 구조에서는 공장 데이터가 외부 cloud로 나가지 않고도 local inference와 control이 가능하다.
+
+가능한 use case는 다음과 같다.
+
+- robot control
+- visual inspection
+- predictive maintenance
+- worker safety monitoring
+- AGV / AMR fleet coordination
+- digital twin synchronization
+- local video analytics
+
+### Stadium / Large Venue
+
+대형 경기장, 콘서트장, 전시장에서는 특정 공간에 사용자가 몰린다.
+
+MEC는 이런 환경에서 다음을 처리할 수 있다.
+
+- localized content delivery
+- crowd flow analysis
+- emergency route guidance
+- AR event experience
+- live replay streaming
+- local notification delivery
+- network congestion-aware service
+
+이 경우 MEC의 가치는 단순히 latency가 아니라, **특정 장소의 local context를 활용하는 것**이다.
+
+### Video Analytics
+
+도시 CCTV, 공항, 항만, 공장, 매장, 도로의 camera는 매우 큰 데이터를 생성한다.
+
+MEC는 video stream을 central cloud로 모두 보내지 않고 가까운 edge에서 분석할 수 있다.
+
+```text
+Camera stream
+→ MEC video analytics
+→ object detection / anomaly detection
+→ event metadata upload
+```
+
+이 구조는 bandwidth를 줄이고, real-time alert를 가능하게 한다.
+
+---
+
+## DevOps 관점에서 보는 MEC
+
+DevOps 관점에서 MEC는 “edge에 server가 있다”가 아니라, **통신망 가까이에 분산된 cloud-like execution environment가 생긴다**는 뜻이다.
+
+운영자는 다음을 고민해야 한다.
+
+```text
+application을 어느 MEC site에 배포할 것인가?
+사용자 위치에 따라 traffic을 어느 MEC로 보낼 것인가?
+MEC site 간 session migration은 필요한가?
+edge node가 부족하면 central cloud로 fallback할 것인가?
+container image는 어느 registry에서 pull할 것인가?
+MEC site가 offline 또는 degraded 상태이면 어떻게 할 것인가?
+observability data는 중앙으로 어떻게 모을 것인가?
+```
+
+### MEC Deployment는 Site-aware 해야 한다
+
+일반 cloud에서는 region과 availability zone 정도를 고려한다. MEC에서는 더 세밀한 위치가 중요하다.
+
+```text
+country
+→ region
+→ city
+→ metro edge
+→ cell site 근처
+→ enterprise premises
+```
+
+Application placement는 다음 조건을 고려해야 한다.
+
+| 조건 | 설명 |
+| --- | --- |
+| User proximity | user와 가장 가까운 MEC site인가 |
+| Latency budget | application이 허용하는 latency를 만족하는가 |
+| Compute capacity | CPU/GPU/memory가 충분한가 |
+| Network status | congestion이나 packet loss가 심하지 않은가 |
+| Data policy | data locality 요구를 만족하는가 |
+| Service availability | 해당 MEC site가 정상 상태인가 |
+| Cost | edge resource 비용이 적절한가 |
+
+---
+
+## MEC와 Kubernetes
+
+실제 MEC platform은 container와 Kubernetes 계열 기술과 결합될 가능성이 크다.
+
+다만 중앙 cloud의 Kubernetes cluster와 MEC의 Kubernetes cluster는 조건이 다르다.
+
+| 항목 | Central Kubernetes | MEC / Edge Kubernetes |
+| --- | --- | --- |
+| 위치 | cloud region, data center | network edge, telco edge, enterprise edge |
+| node 수 | 상대적으로 크고 안정적 | 작거나 site별로 분산 |
+| network | 안정적인 backbone | access network와 사용자 traffic에 밀접 |
+| workload | general backend, batch, API | low-latency app, inference, local processing |
+| 운영 | 중앙화된 SRE/DevOps | fleet management와 site-aware rollout 필요 |
+| failure mode | zone/region 장애 중심 | site offline, network degradation, local resource shortage |
+
+MEC에서 Kubernetes를 쓴다면 다음이 중요하다.
+
+- cluster lifecycle management
+- edge site별 resource inventory
+- local image registry 또는 registry mirror
+- application placement policy
+- GPU/NPU scheduling
+- service discovery
+- traffic steering
+- observability aggregation
+- security patch automation
+- offline 또는 degraded mode 처리
+
+---
+
+## MEC Rollout Strategy
+
+MEC application 배포는 일반적인 rolling update보다 더 조심해야 한다.
+
+```text
+1. lab MEC environment에서 검증
+2. representative edge site에서 검증
+3. 소수 city / metro edge에 canary 배포
+4. latency, packet loss, error rate 측정
+5. user traffic 일부만 routing
+6. 문제가 없으면 site group 단위 확장
+7. 실패 site는 자동 제외
+8. 필요 시 central cloud fallback
+9. 전체 fleet state reconciliation
+```
+
+이런 절차가 필요한 이유는 MEC site마다 network condition, hardware, traffic pattern, user density가 다르기 때문이다.
+
+---
+
+## Traffic Steering
+
+MEC에서 핵심은 workload를 edge에 띄우는 것만이 아니다. 사용자 traffic을 적절한 MEC application으로 보내야 한다.
+
+예를 들어 서울의 사용자는 서울 근처 MEC로, 부산의 사용자는 부산 근처 MEC로 보내야 한다.
+
+```text
+User A in Seoul
+→ Seoul MEC
+
+User B in Busan
+→ Busan MEC
+
+User C moving from Seoul to Daejeon
+→ session continuity 또는 handoff 고려
+```
+
+Traffic steering에는 다음 요소가 관련될 수 있다.
+
+- DNS
+- Anycast
+- 5G Core routing
+- UPF selection
+- local breakout
+- service mesh
+- application-level routing
+- policy-based routing
+
+MEC의 어려움은 사용자가 이동한다는 점이다. 고정된 공장 edge나 매장 edge와 달리 mobile user는 계속 위치가 바뀔 수 있다.
+
+따라서 MEC는 mobility와 session continuity를 고려해야 한다.
+
+---
+
+## MEC와 Cloud의 역할 분리
+
+MEC가 있다고 해서 모든 것을 MEC에서 처리하는 것은 아니다.
+
+역할 분리가 중요하다.
+
+| 역할 | MEC | Central Cloud |
+| --- | --- | --- |
+| Real-time inference | 적합 | 가능하지만 latency 불리 |
+| Long-term storage | 제한적 | 적합 |
+| Model training | 제한적 | 적합 |
+| User-local service | 적합 | 지역에 따라 불리 |
+| Global analytics | 제한적 | 적합 |
+| Local traffic optimization | 적합 | 제한적 |
+| Fleet management | agent 역할 | central control 적합 |
+| Large-scale batch processing | 부적합 | 적합 |
+
+일반적인 구조는 다음과 같다.
+
+```text
+Central Cloud:
+  - model training
+  - global analytics
+  - long-term storage
+  - policy management
+  - application artifact management
+
+MEC:
+  - low-latency inference
+  - local session handling
+  - video analytics
+  - traffic optimization
+  - local event generation
+```
+
+즉 MEC는 cloud의 대체재가 아니라, **cloud workload 중 latency-sensitive하고 location-sensitive한 부분을 network edge로 내리는 구조**다.
+
+---
+
+## MEC가 어려운 이유
+
+MEC는 장점이 크지만 운영 난도도 높다.
+
+### 분산된 Site 수
+
+MEC는 중앙 cloud region 몇 개가 아니라, 도시, 통신망 지점, enterprise site, 기지국 근처 등 여러 위치에 분산될 수 있다.
+
+```text
+central cloud region: 수 개 ~ 수십 개
+MEC site: 수십 개 ~ 수천 개 가능
+```
+
+이렇게 되면 fleet management가 매우 중요해진다.
+
+### Resource 제약
+
+MEC site는 central cloud region보다 resource가 제한될 수 있다.
+
+따라서 workload placement가 중요하다.
+
+```text
+GPU가 필요한 workload인가?
+CPU-only edge에서도 동작 가능한가?
+memory footprint는 어느 정도인가?
+local storage는 충분한가?
+동시 사용자 수가 얼마나 되는가?
+```
+
+### Mobility
+
+Mobile user는 계속 이동한다.
+
+MEC application은 다음을 고려해야 한다.
+
+- user가 다른 cell로 이동하는 경우
+- MEC site가 바뀌는 경우
+- session을 유지해야 하는 경우
+- state를 migrate해야 하는 경우
+- central cloud fallback이 필요한 경우
+
+### Multi-tenant Isolation
+
+Telco MEC는 여러 enterprise나 application provider가 함께 사용할 수 있다.
+
+따라서 tenant isolation이 중요하다.
+
+- compute isolation
+- network isolation
+- storage isolation
+- identity and access control
+- policy enforcement
+- billing / metering
+
+### Security
+
+MEC는 network edge에 있기 때문에 attack surface가 넓다.
+
+고려해야 할 항목은 다음과 같다.
+
+- workload identity
+- signed image
+- secure boot
+- certificate rotation
+- mutual TLS
+- zero trust network access
+- tenant isolation
+- API access control
+- supply chain security
+- local data encryption
+- remote attestation
+
+### Observability
+
+MEC에서는 latency와 network 상태가 핵심 metric이다.
+
+일반 application metric만으로는 부족하다.
+
+| Metric | 의미 |
+| --- | --- |
+| end-to-end latency | 사용자 체감 지연 |
+| radio/network latency | access network 품질 |
+| MEC processing latency | edge application 처리 시간 |
+| packet loss | real-time service 품질 |
+| jitter | gaming, AR/VR, video 품질 |
+| session handoff failure | 이동성 처리 실패 |
+| local resource saturation | CPU/GPU/memory 한계 |
+| fallback rate | edge 처리 실패 후 cloud 우회 비율 |
+
+---
+
+## MEC와 Edge AI
+
+MEC는 Edge AI와 강하게 결합된다.
+
+중앙 cloud에서 model을 학습하고, MEC에 inference workload를 배포하는 구조가 자연스럽다.
+
+```text
+Cloud:
+  training
+  validation
+  model registry
+  version policy
+
+MEC:
+  inference
+  real-time decision
+  local event generation
+  user-specific optimization
+```
+
+Video analytics use case에서는 다음처럼 동작할 수 있다.
+
+```text
+Camera stream
+→ MEC inference
+→ object detection
+→ event metadata
+→ central analytics
+```
+
+AR use case에서는 다음처럼 동작할 수 있다.
+
+```text
+AR device sensor data
+→ MEC scene understanding
+→ object recognition
+→ rendered overlay
+→ AR device
+```
+
+핵심은 AI inference가 사용자 가까이에서 수행된다는 점이다. 이를 통해 latency를 줄이고 device의 compute 부담도 줄일 수 있다.
+
+---
+
+## MEC 설계 질문
+
+MEC를 도입할 때는 “edge에 workload를 올리면 좋아진다” 정도로 접근하면 안 된다.
+
+다음 질문을 구체적으로 확인해야 한다.
+
+### Workload Placement
+
+```text
+이 workload는 왜 MEC에 있어야 하는가?
+central cloud로 처리하면 어떤 문제가 생기는가?
+허용 가능한 latency budget은 얼마인가?
+```
+
+### Traffic Routing
+
+```text
+사용자 traffic을 어떤 MEC site로 보낼 것인가?
+사용자가 이동하면 session은 어떻게 유지할 것인가?
+MEC 장애 시 어디로 fallback할 것인가?
+```
+
+### Data Policy
+
+```text
+raw data를 MEC 밖으로 보낼 수 있는가?
+event와 metadata만 중앙으로 보내도 되는가?
+local retention 기간은 얼마인가?
+```
+
+### Resource Management
+
+```text
+MEC site의 CPU/GPU/memory는 충분한가?
+동시 사용자 증가 시 scale-out이 가능한가?
+resource 부족 시 central cloud로 넘길 수 있는가?
+```
+
+### Security
+
+```text
+MEC application image는 서명되어 있는가?
+tenant isolation은 보장되는가?
+MEC와 cloud 사이 통신은 암호화되는가?
+certificate lifecycle은 관리되는가?
+```
+
+### Observability
+
+```text
+edge latency를 측정하고 있는가?
+jitter와 packet loss를 보고 있는가?
+MEC site별 error rate를 구분할 수 있는가?
+fallback 비율을 추적하는가?
+```
+
+---
+
+## 자칫 실수하기 쉬운 부분
+
+### MEC를 단순 CDN으로 보는 것
+
+CDN은 MEC use case 중 하나와 비슷할 수 있지만, MEC 전체를 CDN으로만 보면 부족하다.
+
+CDN은 주로 content caching과 delivery에 집중한다.
+
+MEC는 다음까지 포함할 수 있다.
+
+```text
+real-time inference
+interactive application
+local traffic routing
+radio/network context 활용
+private 5G application
+V2X coordination
+AR/VR rendering
+industrial control
+```
+
+### MEC를 5G와 동일시하는 것
+
+MEC는 5G와 강하게 연결되지만 5G 그 자체는 아니다.
+
+```text
+5G = access network technology
+MEC = network edge compute architecture
+```
+
+5G가 없어도 edge computing은 가능하고, MEC도 access-agnostic한 방향을 갖는다. 하지만 5G는 MEC의 가치를 크게 높이는 access technology다.
+
+### MEC가 Cloud를 대체한다고 보는 것
+
+MEC는 cloud를 대체하지 않는다.
+
+```text
+MEC:
+  low-latency local processing
+
+Cloud:
+  global control, training, storage, analytics
+```
+
+둘은 같이 설계해야 한다.
+
+### Edge에 배포만 하면 latency가 줄어든다고 보는 것
+
+MEC에 application을 배포해도 traffic routing이 제대로 되지 않으면 latency가 줄지 않는다.
+
+확인해야 할 것은 다음이다.
+
+```text
+사용자 traffic이 실제로 가까운 MEC로 가는가?
+local breakout이 되는가?
+DNS 또는 routing이 edge-aware한가?
+application이 central dependency를 계속 호출하지 않는가?
+database가 멀리 있지는 않은가?
+```
+
+특히 application이 MEC에 떠 있어도 매 요청마다 central database를 호출한다면 latency 이점이 줄어든다.
+
+---
+
+## DevOps 관점의 검증 포인트
+
+MEC application을 production으로 운영하려면 다음을 검증해야 한다.
+
+| 검증 항목 | 확인할 내용 |
+| --- | --- |
+| Latency | central cloud 대비 end-to-end latency가 실제로 줄었는가 |
+| Routing | user traffic이 가장 가까운 MEC site로 가는가 |
+| Local dependency | MEC app이 central DB/API에 과도하게 의존하지 않는가 |
+| Failover | MEC site 장애 시 cloud 또는 다른 MEC로 fallback 가능한가 |
+| Mobility | user 이동 시 session continuity가 필요한가 |
+| Capacity | edge site별 CPU/GPU/memory가 충분한가 |
+| Rollout | canary, site group rollout, rollback 전략이 있는가 |
+| Observability | latency, jitter, packet loss, fallback rate를 추적하는가 |
+| Security | image signing, mTLS, tenant isolation, certificate rotation이 있는가 |
+| Data policy | raw data와 metadata의 위치가 명확히 분리되어 있는가 |
+
+---
+
+## 요약
+
+MEC는 cloud-like compute와 IT service environment를 5G, LTE, Wi-Fi, fixed access 같은 network edge 가까이에 배치해, low latency와 local context가 필요한 application을 사용자 가까이에서 실행하도록 만드는 Edge Computing architecture다.
+
+핵심은 다음과 같다.
+
+```text
+MEC = 통신망 가장자리로 내려온 Cloud
+```
+
+다만 이것을 단순히 "cloud server를 기지국 옆에 둔다"로만 이해하면 부족하다.
+
+MEC의 본질은 다음을 함께 만족하는 architecture다.
+
+```text
+가까운 compute
++ 빠른 response
++ local traffic processing
++ radio/network context 활용
++ cloud와의 역할 분리
++ distributed DevOps 운영
+```
+
+MEC는 특히 다음 분야와 강하게 연결된다.
+
+- telco edge
+- 5G
+- private network
+- AR/VR
+- cloud gaming
+- connected vehicle
+- smart factory
+- real-time video analytics
+- edge AI
+- traffic steering
+
+결국 MEC는 Edge Computing 중에서도 **network edge에서 실행되는 latency-sensitive, location-sensitive workload를 위한 운영 모델**이다.
