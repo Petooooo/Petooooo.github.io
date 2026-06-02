@@ -1,0 +1,1533 @@
+---
+area: "DevOps"
+type: "concept"
+series: "DevOps Explained"
+title: "Argo CD: Kubernetes GitOps Continuous Delivery Controller 이해하기"
+slug: "argo-cd-kubernetes-gitops-continuous-delivery-controller"
+date: "2026-06-02"
+updated: "2026-06-02"
+draft: false
+reviewed: true
+category: "DevOps"
+tags: ["Argo CD", "GitOps", "Kubernetes", "CI/CD", "Continuous Delivery", "Helm", "Kustomize", "Drift Detection"]
+description: "Argo CD를 Kubernetes GitOps Continuous Delivery controller로 이해하고, Application, Project, ApplicationSet, sync, OutOfSync, prune, self-heal, RBAC, secret 관리, homelab 적용 방식을 정리한다."
+---
+## 개요
+
+**Argo CD**는 Kubernetes 환경에서 GitOps를 실제로 구현해주는 Continuous Delivery controller다.
+
+GitOps의 핵심은 다음과 같다.
+
+```text
+GitOps:
+  Git에 원하는 상태를 선언하고,
+  cluster 안의 controller가 실제 상태를 그 선언과 맞춘다.
+```
+
+Argo CD는 이 원칙을 Kubernetes 위에서 구현한다. Git repository에 저장된 Kubernetes manifest, Helm chart, Kustomize overlay 등을 읽고, 실제 cluster 상태와 비교한 뒤, 차이가 있으면 sync하여 원하는 상태로 맞춘다.
+
+짧게 정리하면 다음과 같다.
+
+```text
+Argo CD = Kubernetes용 GitOps CD controller
+
+Git에 선언된 desired state와
+cluster의 live state를 비교하고,
+차이가 있으면 sync/reconcile한다.
+```
+
+Argo CD는 단순한 배포 버튼이 아니다. 핵심은 **Git desired state**와 **Kubernetes live state** 사이의 차이를 지속적으로 비교하고 조정하는 reconciliation loop다.
+
+---
+
+## Argo CD가 필요한 이유
+
+Kubernetes에서 애플리케이션을 배포할 때는 container image 하나만 올리는 것이 아니다. 보통 여러 Kubernetes resource가 함께 움직인다.
+
+```text
+Deployment
+Service
+Ingress
+ConfigMap
+Secret
+PersistentVolumeClaim
+HorizontalPodAutoscaler
+NetworkPolicy
+ServiceAccount
+Role / RoleBinding
+```
+
+작은 테스트 환경에서는 사람이 직접 `kubectl apply`를 실행해도 된다.
+
+```bash
+kubectl apply -f deployment.yaml
+kubectl apply -f service.yaml
+kubectl apply -f ingress.yaml
+```
+
+하지만 운영 환경에서는 다음 질문이 중요해진다.
+
+```text
+누가 어떤 manifest를 적용했는가?
+현재 cluster 상태가 Git에 있는 manifest와 같은가?
+운영 중 누군가 직접 수정한 값이 남아 있지 않은가?
+rollback하려면 어떤 commit으로 돌아가야 하는가?
+dev, staging, production 환경 차이는 의도된 것인가?
+```
+
+Argo CD는 이 문제를 GitOps 방식으로 해결한다.
+
+```text
+Git repository:
+  원하는 Kubernetes 상태 저장
+
+Argo CD:
+  Git repository를 감시
+  cluster live state와 비교
+  OutOfSync 상태 감지
+  sync를 통해 desired state 반영
+
+Kubernetes:
+  실제 workload 실행
+```
+
+즉, 운영자는 cluster에 직접 명령을 반복해서 실행하기보다, Git에 원하는 상태를 선언하고 Argo CD가 cluster를 그 상태와 맞추도록 만들 수 있다.
+
+---
+
+## Argo CD와 GitOps의 관계
+
+GitOps는 운영 모델이고, Argo CD는 그 모델을 Kubernetes에서 구현하는 도구다.
+
+| 구분 | 의미 |
+|---|---|
+| GitOps | Git을 source of truth로 삼고 desired state와 actual state를 reconcile하는 운영 방식 |
+| Argo CD | GitOps 원칙을 Kubernetes에서 구현하는 Continuous Delivery controller |
+
+즉, GitOps는 개념이고 Argo CD는 구현체다.
+
+```text
+GitOps:
+  Git에 선언하고 controller가 맞춘다.
+
+Argo CD:
+  그 controller 역할을 Kubernetes에서 수행한다.
+```
+
+이 점에서 Argo CD는 일반적인 push-based CI/CD와 다르다.
+
+```text
+Push-based CD:
+  CI server가 kubectl apply 실행
+
+Argo CD:
+  cluster 안의 controller가 Git을 읽고 cluster 상태를 맞춤
+```
+
+Argo CD를 도입한다는 것은 단순히 배포 도구를 하나 추가하는 것이 아니다. 운영 환경의 기준을 사람의 수동 명령이 아니라 Git에 선언된 desired state로 옮기는 것이다.
+
+---
+
+## Push-based CD와 Argo CD 방식의 차이
+
+기존 CI/CD pipeline에서는 다음처럼 동작하는 경우가 많다.
+
+```text
+Git push
+  -> CI pipeline
+  -> test
+  -> image build
+  -> registry push
+  -> kubectl apply
+  -> production cluster 변경
+```
+
+이 방식에서는 CI server가 production cluster credential을 가지고 있어야 한다. 또한 cluster에 직접 적용한 결과가 Git과 다를 수도 있다.
+
+Argo CD 방식에서는 보통 다음처럼 흐른다.
+
+```text
+Git push
+  -> CI pipeline
+  -> test
+  -> image build
+  -> registry push
+  -> GitOps repo image tag update
+  -> Argo CD가 변경 감지
+  -> cluster sync
+```
+
+차이를 정리하면 다음과 같다.
+
+| 구분 | Push-based CD | Argo CD / GitOps |
+|---|---|---|
+| 배포 실행 주체 | CI server | Argo CD controller |
+| Cluster credential | CI server가 보유 | Argo CD가 cluster 내부에서 관리 |
+| Source of truth | pipeline 실행 결과 또는 Git | Git repository |
+| Drift detection | 별도 구현 필요 | Argo CD가 OutOfSync 감지 |
+| Rollback | pipeline 재실행 또는 수동 조치 | Git revert 또는 이전 revision sync |
+| Multi-cluster | CI가 여러 cluster credential 관리 | Argo CD가 여러 cluster/application 관리 가능 |
+
+Push 방식이 무조건 나쁜 것은 아니다. 단순한 환경에서는 직관적이고 빠르다. 하지만 Kubernetes cluster가 많아지고, 팀이 많아지고, 운영 환경의 변경 이력을 명확히 관리해야 할수록 Argo CD 같은 GitOps controller가 주는 이점이 커진다.
+
+---
+
+## Argo CD의 핵심 Mental Model
+
+Argo CD를 이해하는 가장 좋은 방식은 **desired state와 live state 비교 도구**로 보는 것이다.
+
+```text
+Desired state:
+  Git repository에 선언된 상태
+
+Live state:
+  Kubernetes cluster에 실제 존재하는 상태
+
+Argo CD:
+  desired state와 live state를 비교
+  같으면 Synced
+  다르면 OutOfSync
+  필요하면 Sync 수행
+```
+
+이 구조에서 중요한 상태는 두 가지다.
+
+| 상태 | 의미 |
+|---|---|
+| Sync status | Git의 desired state와 cluster live state가 일치하는가 |
+| Health status | Kubernetes resource가 정상적으로 동작하고 있는가 |
+
+예를 들어 Argo CD에서 `Synced`라고 표시된다는 것은 Git에 있는 manifest가 cluster에 적용되었다는 뜻이다. 하지만 그것만으로 application이 사용자 관점에서 정상이라는 뜻은 아니다.
+
+```text
+Synced:
+  Git 상태와 cluster manifest 상태가 일치
+
+Healthy:
+  Kubernetes resource가 정상 상태
+
+User-facing healthy:
+  실제 요청 성공률, latency, business metric이 정상
+```
+
+따라서 Argo CD의 sync/health 상태와 Prometheus, Grafana, Loki, Alertmanager 같은 observability stack을 함께 봐야 한다.
+
+---
+
+## Argo CD의 주요 구성 요소
+
+Argo CD는 여러 component로 구성된다.
+
+| Component | 역할 |
+|---|---|
+| API Server | Web UI, CLI, API 요청을 처리하는 진입점 |
+| Repository Server | Git/Helm/Kustomize source에서 manifest를 생성 |
+| Application Controller | desired state와 live state를 비교하고 sync/reconcile 수행 |
+| Redis | cache layer |
+| Dex | OIDC 기반 인증 연동에 사용 가능 |
+| Web UI | Application 상태, diff, sync, health 확인 |
+| CLI | `argocd app sync`, `argocd app diff` 등 운영 명령 |
+| ApplicationSet Controller | 여러 Application을 template 기반으로 생성 |
+| Notifications Controller | sync, failure, health 상태를 외부 알림으로 전달 |
+
+### API Server
+
+**API Server**는 사용자가 Argo CD와 상호작용하는 입구다.
+
+```text
+사용자 / CLI / UI / CI system
+  -> Argo CD API Server
+  -> Application 상태 조회
+  -> Sync 실행
+  -> Rollback 실행
+  -> Repository 등록
+  -> Cluster 등록
+```
+
+API Server는 Web UI와 CLI, 외부 automation이 Argo CD 기능을 사용할 수 있게 해준다. 또한 인증, RBAC, repository/cluster credential 관리와도 연결된다.
+
+### Repository Server
+
+**Repository Server**는 Git repository나 Helm repository, OCI source에서 manifest를 생성하는 역할을 한다.
+
+```text
+Git repo / Helm chart / Kustomize overlay
+  -> Repo Server
+  -> Kubernetes manifest 생성
+  -> Application Controller에 전달
+```
+
+즉, repo server는 "Git에 있는 파일을 실제 Kubernetes manifest로 렌더링하는 역할"을 한다.
+
+### Application Controller
+
+**Application Controller**는 Argo CD의 핵심이다.
+
+```text
+Application Controller:
+  Git desired state 확인
+  Kubernetes live state 확인
+  diff 계산
+  OutOfSync 감지
+  sync 수행
+  health 상태 확인
+```
+
+실제 GitOps reconciliation loop는 Application Controller가 담당한다.
+
+---
+
+## Argo CD Application
+
+Argo CD에서 가장 중요한 resource는 **Application**이다.
+
+Application은 다음 정보를 묶는다.
+
+```text
+어떤 Git repository의
+어떤 path/revision을
+어떤 Kubernetes cluster의
+어떤 namespace에
+어떤 방식으로 sync할 것인가
+```
+
+개념적으로는 다음과 같다.
+
+```yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: my-app
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/example/gitops-repo.git
+    targetRevision: main
+    path: apps/my-app
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: my-app
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+```
+
+각 필드의 의미는 다음과 같다.
+
+| 필드 | 의미 |
+|---|---|
+| `metadata.name` | Argo CD에서 관리할 application 이름 |
+| `spec.project` | Application이 속한 Argo CD Project |
+| `spec.source.repoURL` | desired state가 있는 Git/Helm/OCI source |
+| `spec.source.targetRevision` | branch, tag, commit 등 target revision |
+| `spec.source.path` | repository 안에서 manifest가 있는 path |
+| `spec.destination.server` | 배포 대상 Kubernetes API server |
+| `spec.destination.namespace` | 배포 대상 namespace |
+| `spec.syncPolicy` | 자동 sync, prune, self-heal 설정 |
+
+이 Application resource가 Argo CD의 배포 단위다.
+
+```text
+Application = Git source + target cluster/namespace + sync policy
+```
+
+---
+
+## Sync
+
+**Sync**는 Git의 desired state를 cluster에 반영하는 동작이다.
+
+```text
+Git desired state:
+  image: my-app:v2
+  replicas: 3
+
+Cluster live state:
+  image: my-app:v1
+  replicas: 3
+
+Argo CD:
+  OutOfSync 감지
+  sync 수행
+  cluster를 v2로 변경
+```
+
+Sync는 수동으로 실행할 수도 있고 자동으로 실행할 수도 있다.
+
+```text
+Manual sync:
+  운영자가 UI나 CLI에서 sync 실행
+
+Auto-sync:
+  Git 변경이 감지되면 Argo CD가 자동 sync
+```
+
+CLI 관점에서는 다음처럼 볼 수 있다.
+
+```bash
+argocd app sync my-app
+```
+
+Auto-sync를 켜면 Git에 merge된 변경이 자동으로 cluster에 반영된다. 이는 편리하지만 production 환경에서는 신중해야 한다.
+
+| 환경 | Sync 정책 예시 |
+|---|---|
+| dev | auto-sync 적극 사용 가능 |
+| staging | auto-sync와 검증 pipeline을 함께 사용 가능 |
+| production | manual sync, sync window, approval, progressive delivery 고려 |
+
+GitOps는 무조건 자동 배포를 의미하지 않는다. Git을 source of truth로 삼고 controller가 reconcile한다는 것이 핵심이며, 자동 sync 여부는 환경별 risk에 맞게 정해야 한다.
+
+---
+
+## Prune과 Self-Heal
+
+Argo CD에서 자주 등장하는 옵션이 **prune**과 **self-heal**이다.
+
+### Prune
+
+Prune은 Git에서 제거된 resource를 cluster에서도 제거하는 동작이다.
+
+```text
+Git:
+  old-config.yaml 삭제
+
+Cluster:
+  old ConfigMap이 아직 남아 있음
+
+Prune enabled:
+  Argo CD가 cluster의 old ConfigMap 삭제
+```
+
+Prune이 없으면 Git에서 manifest를 삭제해도 cluster에는 resource가 계속 남을 수 있다. 이 경우 orphan resource가 생긴다.
+
+하지만 prune은 위험할 수 있다.
+
+```text
+주의:
+  Git에서 실수로 manifest 삭제
+  prune이 켜져 있으면 실제 production resource 삭제 가능
+```
+
+따라서 production에서는 prune 정책을 조심해야 한다. 특히 PVC, database 관련 resource, stateful workload는 삭제 영향이 크므로 더 신중해야 한다.
+
+### Self-Heal
+
+Self-heal은 누군가 cluster에서 직접 변경한 값을 Git 상태로 되돌리는 기능이다.
+
+```text
+Git:
+  replicas: 3
+
+운영자가 직접 수정:
+  kubectl scale deployment my-app --replicas=5
+
+Self-heal enabled:
+  Argo CD가 다시 replicas: 3으로 복구
+```
+
+Self-heal은 drift를 줄이는 데 유용하지만, incident 대응 중에는 주의해야 한다.
+
+```text
+장애 대응:
+  운영자가 임시로 replicas를 10으로 올림
+
+Self-heal:
+  Git에는 replicas 3이므로 다시 3으로 되돌림
+
+결과:
+  의도한 긴급 조치가 유지되지 않음
+```
+
+따라서 긴급 수동 변경이 필요하면 Git을 먼저 수정하거나, 임시로 sync/self-heal 정책을 조정하는 runbook이 필요하다.
+
+---
+
+## OutOfSync와 Drift Detection
+
+Argo CD에서 중요한 상태가 **OutOfSync**다.
+
+OutOfSync는 Git에 선언된 desired state와 cluster live state가 다르다는 뜻이다.
+
+예를 들어 다음 상황이다.
+
+```text
+Git:
+  image: my-app:a1b2c3d
+
+Cluster:
+  image: my-app:d4e5f6
+```
+
+또는 다음처럼 replica 수가 다를 수도 있다.
+
+```text
+Git:
+  replicas: 3
+
+Cluster:
+  replicas: 5
+```
+
+이런 차이를 Argo CD가 감지하면 Application이 OutOfSync로 표시된다.
+
+Drift가 발생하는 원인은 다양하다.
+
+| 원인 | 설명 |
+|---|---|
+| 수동 변경 | `kubectl edit`, `kubectl scale`, dashboard 수정 |
+| emergency patch | 장애 대응 중 임시 수정 |
+| controller mutation | 다른 controller가 field 수정 |
+| defaulting | Kubernetes API server가 기본값 추가 |
+| Helm rendering 차이 | values 변경 또는 chart version 차이 |
+| CRD behavior | custom controller가 status/spec 일부를 변경 |
+
+Argo CD의 장점은 이런 차이를 보여주고, 필요하면 desired state로 되돌릴 수 있다는 점이다.
+
+```text
+GitOps 운영 원칙:
+  cluster를 직접 수정하지 않는다.
+  변경은 Git으로 한다.
+  live state가 Git과 다르면 OutOfSync로 감지한다.
+```
+
+다만 모든 OutOfSync가 반드시 잘못은 아니다. 다른 controller가 자동으로 field를 조정하는 경우도 있다. 이때는 diff customization이나 ignore differences 설정이 필요할 수 있다. 그러나 ignore rule을 남용하면 중요한 drift를 놓칠 수 있다.
+
+---
+
+## Health Status와 Sync Status는 다르다
+
+Argo CD를 처음 사용할 때 자주 헷갈리는 것이 **Synced**와 **Healthy**다.
+
+| 상태 | 의미 |
+|---|---|
+| Synced | Git desired state와 cluster resource spec이 일치 |
+| OutOfSync | Git desired state와 cluster resource spec이 다름 |
+| Healthy | Kubernetes resource가 정상으로 판단됨 |
+| Degraded | Kubernetes resource가 비정상으로 판단됨 |
+| Progressing | rollout 또는 reconciliation 진행 중 |
+| Missing | Git에는 있는데 cluster에는 resource가 없음 |
+
+중요한 점은 Synced가 곧 정상 서비스를 의미하지 않는다는 것이다.
+
+```text
+Synced:
+  manifest 적용은 됨
+
+하지만:
+  Pod가 CrashLoopBackOff일 수 있음
+  readinessProbe가 실패할 수 있음
+  Ingress routing이 깨졌을 수 있음
+  DB migration이 실패했을 수 있음
+  사용자 요청이 500을 반환할 수 있음
+```
+
+따라서 Argo CD는 deployment state를 보는 도구이고, application-level reliability는 observability 도구와 함께 봐야 한다.
+
+---
+
+## Manifest Source 관리
+
+Argo CD는 다양한 방식으로 Kubernetes manifest를 정의할 수 있다.
+
+| Source 유형 | 설명 |
+|---|---|
+| Plain YAML | Kubernetes manifest를 그대로 저장 |
+| Kustomize | base와 overlay로 환경별 차이 관리 |
+| Helm | chart와 values로 application package 관리 |
+| Jsonnet | programmable configuration 구성 |
+| OCI source | OCI artifact 기반 배포 source |
+| Config Management Plugin | 조직 내부 도구나 custom renderer 연동 |
+
+실무에서는 보통 다음 방식이 많다.
+
+```text
+작고 단순한 서비스:
+  plain YAML 또는 Kustomize
+
+환경별 차이가 있는 서비스:
+  Kustomize base/overlays
+
+패키징이 필요한 서비스:
+  Helm chart + values
+
+공통 platform component:
+  Helm chart + environment values
+
+복잡한 generated manifest:
+  Jsonnet 또는 custom plugin
+```
+
+---
+
+## Argo CD와 Helm
+
+Argo CD는 Helm chart를 source로 사용할 수 있다.
+
+예를 들어 Git repository에 다음 구조가 있을 수 있다.
+
+```text
+charts/
+  my-app/
+    Chart.yaml
+    values.yaml
+    templates/
+      deployment.yaml
+      service.yaml
+```
+
+또는 외부 Helm repository의 chart를 참조하고 values만 Git에 둘 수도 있다.
+
+```text
+source:
+  repoURL: https://charts.example.com
+  chart: my-app
+  targetRevision: 1.2.3
+  helm:
+    valueFiles:
+      - values-prod.yaml
+```
+
+Argo CD와 Helm을 함께 쓸 때 중요한 점은 Argo CD가 Helm release manager처럼 동작한다기보다, Helm chart를 render해서 나온 Kubernetes manifest를 GitOps 방식으로 cluster에 적용한다는 점이다.
+
+```text
+Helm 단독:
+  helm install / helm upgrade 중심
+
+Argo CD + Helm:
+  Helm chart render
+  desired manifest 생성
+  live state와 diff
+  sync/reconcile
+```
+
+주의할 점은 다음이다.
+
+```text
+- values 파일 변경이 Git에 명확히 남아야 한다.
+- chart version을 고정해야 재현성이 좋아진다.
+- Helm hook과 Argo CD sync hook의 차이를 이해해야 한다.
+- production에서는 values drift를 피해야 한다.
+```
+
+---
+
+## Argo CD와 Kustomize
+
+Kustomize는 GitOps와 잘 맞는다.
+
+대표적인 구조는 다음과 같다.
+
+```text
+apps/
+  my-app/
+    base/
+      deployment.yaml
+      service.yaml
+      kustomization.yaml
+    overlays/
+      dev/
+        kustomization.yaml
+        patch.yaml
+      staging/
+        kustomization.yaml
+        patch.yaml
+      prod/
+        kustomization.yaml
+        patch.yaml
+```
+
+이 구조에서는 공통 manifest를 `base`에 두고, 환경별 차이만 `overlays`에서 관리한다.
+
+```text
+base:
+  공통 Deployment, Service
+
+dev overlay:
+  replicas: 1
+  debug logging
+
+prod overlay:
+  replicas: 3
+  resource requests/limits
+  HPA
+```
+
+Argo CD Application은 환경별 overlay path를 바라보게 할 수 있다.
+
+```text
+dev application:
+  path: apps/my-app/overlays/dev
+
+prod application:
+  path: apps/my-app/overlays/prod
+```
+
+이 방식의 장점은 Git diff로 환경 차이를 확인하기 쉽다는 것이다.
+
+---
+
+## Argo CD Project
+
+Argo CD에서는 **Project**를 사용해 Application의 권한과 범위를 제한할 수 있다.
+
+Project는 다음을 제한할 수 있다.
+
+```text
+어떤 source repository를 사용할 수 있는가?
+어떤 cluster에 배포할 수 있는가?
+어떤 namespace에 배포할 수 있는가?
+어떤 Kubernetes resource kind를 사용할 수 있는가?
+어떤 사용자가 어떤 action을 할 수 있는가?
+```
+
+예를 들어 platform team과 application team을 분리할 수 있다.
+
+```text
+platform project:
+  cert-manager
+  ingress-nginx
+  prometheus
+  longhorn
+
+application project:
+  team-a services
+  team-b services
+```
+
+Project를 잘 설계하면 multi-team 환경에서 Argo CD를 안전하게 사용할 수 있다.
+
+```text
+나쁜 예:
+  모든 application이 default project 사용
+  모든 repository 허용
+  모든 namespace 허용
+  모든 cluster 허용
+
+좋은 방향:
+  team/project별 sourceRepo 제한
+  destination namespace 제한
+  production sync 권한 제한
+  cluster-scoped resource 사용 제한
+```
+
+---
+
+## App of Apps Pattern
+
+Argo CD에서 자주 사용하는 pattern 중 하나가 **App of Apps**다.
+
+App of Apps는 상위 Application이 여러 하위 Application manifest를 관리하는 방식이다.
+
+```text
+root-app
+  -> app-a
+  -> app-b
+  -> app-c
+  -> monitoring
+  -> ingress
+  -> storage
+```
+
+예를 들어 Git repository 구조는 다음과 같을 수 있다.
+
+```text
+clusters/
+  prod/
+    root-app.yaml
+    apps/
+      app-a.yaml
+      app-b.yaml
+      prometheus.yaml
+      grafana.yaml
+      ingress.yaml
+```
+
+상위 Application은 `clusters/prod/apps` 경로를 sync하고, 그 안에 있는 Application manifest들이 각각 실제 서비스를 관리한다.
+
+이 방식의 장점은 cluster bootstrap이 단순해진다는 것이다.
+
+```text
+1. Argo CD 설치
+2. root-app 하나 생성
+3. root-app이 나머지 Application을 생성
+4. 나머지 application들이 각각 sync
+```
+
+주의할 점은 Application 간 dependency와 sync order다.
+
+```text
+예:
+  namespace가 먼저 필요
+  CRD가 먼저 필요
+  operator가 먼저 필요
+  그 다음 custom resource 적용 가능
+```
+
+이런 경우 sync wave, hook, 별도 bootstrap 단계 등을 고려해야 한다.
+
+---
+
+## ApplicationSet
+
+**ApplicationSet**은 여러 Application을 template 기반으로 생성하는 기능이다.
+
+예를 들어 여러 cluster에 같은 application을 배포해야 한다고 하자.
+
+```text
+cluster-dev
+cluster-staging
+cluster-prod
+```
+
+수동으로 Application을 3개 만들 수도 있지만, cluster가 많아지면 관리가 어렵다.
+
+ApplicationSet을 사용하면 generator와 template으로 Application을 자동 생성할 수 있다.
+
+```text
+ApplicationSet:
+  generator:
+    clusters 목록 또는 Git directory 목록
+  template:
+    Application spec template
+
+결과:
+  cluster별 Application 자동 생성
+```
+
+사용 예시는 다음과 같다.
+
+```text
+- 여러 cluster에 공통 platform component 배포
+- Git directory마다 Application 생성
+- team별 namespace에 동일한 template 적용
+- dev/staging/prod 환경별 Application 자동 생성
+```
+
+ApplicationSet은 multi-cluster와 multi-environment GitOps에서 특히 유용하다.
+
+---
+
+## Multi-cluster 운영
+
+Argo CD는 하나의 control plane에서 여러 Kubernetes cluster를 관리할 수 있다.
+
+구조는 크게 두 가지다.
+
+| 구조 | 설명 |
+|---|---|
+| Cluster별 Argo CD | 각 cluster 안에 Argo CD 설치 |
+| Central Argo CD | 하나의 management cluster에서 여러 target cluster 관리 |
+
+### Cluster별 Argo CD
+
+```text
+dev cluster:
+  Argo CD 설치
+
+staging cluster:
+  Argo CD 설치
+
+prod cluster:
+  Argo CD 설치
+```
+
+장점은 다음과 같다.
+
+```text
+- cluster 간 격리가 명확함
+- 각 cluster가 자기 상태를 직접 관리
+- 하나의 Argo CD 장애가 전체 cluster에 영향 주지 않음
+```
+
+단점은 다음과 같다.
+
+```text
+- Argo CD 인스턴스가 많아짐
+- 설정과 업그레이드 관리가 반복됨
+- 전체 상태를 한 화면에서 보기 어려울 수 있음
+```
+
+### Central Argo CD
+
+```text
+management cluster:
+  Argo CD 설치
+
+target:
+  dev cluster
+  staging cluster
+  prod cluster
+```
+
+장점은 다음과 같다.
+
+```text
+- 중앙 UI에서 여러 cluster 관리
+- 운영자가 보기 편함
+- 공통 정책과 credential 관리가 집중됨
+```
+
+단점은 다음과 같다.
+
+```text
+- management cluster가 중요해짐
+- target cluster credential 보안이 중요
+- network connectivity가 필요
+- blast radius가 커질 수 있음
+```
+
+어떤 방식이 맞는지는 조직의 보안 정책, cluster 수, 네트워크 구조, 운영팀 규모에 따라 달라진다.
+
+---
+
+## CI와 Argo CD의 역할 분리
+
+Argo CD는 보통 CI 전체를 대체하지 않는다.
+
+CI는 다음을 담당한다.
+
+```text
+source code checkout
+unit test
+integration test
+container image build
+image scan
+image push
+SBOM/provenance 생성
+GitOps repo image tag update
+```
+
+Argo CD는 다음을 담당한다.
+
+```text
+GitOps repo 감시
+manifest render
+desired/live diff
+sync
+health 확인
+drift detection
+rollback 지원
+```
+
+Tekton, GitHub Actions, GitLab CI, Jenkins 같은 도구가 CI를 담당하고, Argo CD가 CD/GitOps를 담당하는 구조가 자연스럽다.
+
+```text
+CI:
+  artifact를 만든다.
+
+Argo CD:
+  Git에 선언된 artifact version을 cluster에 반영한다.
+```
+
+이 역할 분리가 중요한 이유는 production cluster credential을 CI에 직접 두지 않아도 되기 때문이다.
+
+---
+
+## Tekton과 Argo CD의 조합
+
+Tekton과 Argo CD는 자연스럽게 연결된다.
+
+```text
+Tekton:
+  Git clone
+  test
+  build
+  image push
+  GitOps repo update
+
+Argo CD:
+  GitOps repo 감시
+  sync
+  health 확인
+  drift correction
+```
+
+예시 흐름은 다음과 같다.
+
+```text
+1. 개발자가 app repo에 push
+2. Tekton PipelineRun 실행
+3. test 통과
+4. image build
+5. registry push
+6. GitOps repo의 image tag 변경
+7. Argo CD가 변경 감지
+8. target namespace에 sync
+9. health 확인
+```
+
+이 구조에서는 Tekton이 production cluster에 직접 `kubectl apply`하지 않아도 된다. Tekton은 GitOps repo를 바꾸고, Argo CD가 cluster를 맞춘다.
+
+---
+
+## Rollback
+
+Argo CD에서 rollback은 크게 두 방식으로 생각할 수 있다.
+
+```text
+1. Git revert
+2. Argo CD에서 이전 revision sync
+```
+
+GitOps 원칙에 더 잘 맞는 방식은 Git revert다.
+
+```text
+문제 발생:
+  Git commit C에서 image tag가 v2로 변경됨
+
+rollback:
+  commit C revert
+  image tag가 다시 v1로 변경됨
+  Argo CD가 Git 변경 감지
+  cluster sync
+```
+
+이 방식은 rollback도 Git history에 남는다.
+
+하지만 Argo CD UI/CLI에서 이전 revision으로 sync할 수도 있다. 다만 이 경우 Git 상태와 live state의 관계를 주의해야 한다.
+
+```text
+Git에는 v2가 남아 있는데
+cluster만 v1로 되돌리면
+Argo CD는 다시 OutOfSync를 감지할 수 있음
+```
+
+따라서 운영 원칙은 다음처럼 잡는 것이 좋다.
+
+```text
+일반 rollback:
+  Git revert 기반
+
+긴급 rollback:
+  Argo CD revision rollback 가능
+  이후 반드시 Git 상태 정리
+```
+
+또한 database schema migration, event schema 변경, persistent data 변경이 포함된 배포는 image rollback만으로 복구되지 않을 수 있다. Argo CD rollback을 믿기 전에 application과 data compatibility를 함께 설계해야 한다.
+
+---
+
+## Argo CD가 해결하지 않는 문제
+
+Argo CD는 강력한 GitOps CD 도구지만, 모든 배포 문제를 해결하지는 않는다.
+
+Argo CD가 잘하는 것은 다음이다.
+
+```text
+- Git desired state와 cluster live state 비교
+- OutOfSync 감지
+- sync
+- health visualization
+- rollback 지원
+- multi-cluster application 관리
+- manifest render와 diff
+```
+
+Argo CD만으로 충분하지 않은 것은 다음이다.
+
+```text
+- application code test
+- image build
+- vulnerability scan
+- database migration safety
+- feature flag 관리
+- canary metric analysis
+- SLO 기반 rollback
+- runtime observability
+- secret rotation
+```
+
+예를 들어 Argo CD가 `Deployment`를 성공적으로 sync했다고 해도, 새 application version이 특정 API에서 500 error를 낼 수 있다. 따라서 Argo CD는 CI, testing, observability, progressive delivery와 함께 써야 한다.
+
+---
+
+## Progressive Delivery
+
+Argo CD는 기본적으로 desired state를 cluster에 반영하는 도구다. Canary, blue-green, traffic shifting 같은 progressive delivery는 별도 controller와 함께 구성하는 경우가 많다.
+
+예를 들어 Argo Rollouts와 함께 사용할 수 있다.
+
+```text
+Argo CD:
+  Rollout resource를 Git에서 cluster로 sync
+
+Argo Rollouts:
+  canary 또는 blue-green 전략 수행
+  metric 분석
+  실패 시 rollback
+```
+
+흐름은 다음과 같다.
+
+```text
+Git:
+  Rollout manifest image: v2
+
+Argo CD:
+  cluster에 Rollout resource sync
+
+Argo Rollouts:
+  v2를 5% traffic에 배포
+  metrics 확인
+  정상일 때 25% -> 50% -> 100%
+  비정상일 때 abort/rollback
+```
+
+이 구조에서 Argo CD는 desired state를 배포하고, Argo Rollouts는 rollout 전략과 metric 기반 판단을 담당한다.
+
+---
+
+## Secret 관리
+
+GitOps에서 가장 조심해야 하는 부분이 secret이다.
+
+Argo CD는 Git repository를 source of truth로 사용하지만, secret을 Git에 평문으로 넣으면 안 된다.
+
+```text
+넣으면 안 되는 것:
+  password
+  token
+  private key
+  kubeconfig
+  database credential
+  cloud access key
+```
+
+Kubernetes `Secret`은 base64 encoding일 뿐 암호화가 아니다.
+
+```yaml
+apiVersion: v1
+kind: Secret
+data:
+  password: cGFzc3dvcmQ=
+```
+
+이 값은 쉽게 decode할 수 있다.
+
+GitOps 환경에서 secret 관리 방식은 다음과 같다.
+
+| 방식 | 설명 |
+|---|---|
+| External Secrets | 외부 secret manager에서 Kubernetes Secret 생성 |
+| Sealed Secrets | 암호화된 Secret을 Git에 저장하고 cluster에서 복호화 |
+| SOPS | YAML 안의 secret 값을 암호화 |
+| Vault 연동 | runtime 또는 controller가 Vault에서 secret 조회 |
+| CI/CD secret store | pipeline 단계에서 필요한 credential만 주입 |
+
+Argo CD 자체의 repository credential, cluster credential도 Kubernetes Secret으로 관리되므로 접근 권한을 신중히 설계해야 한다.
+
+---
+
+## RBAC와 Project 분리
+
+Argo CD는 Kubernetes resource를 생성·수정·삭제할 권한을 가질 수 있기 때문에 RBAC 설계가 중요하다.
+
+특히 production 환경에서 다음은 위험하다.
+
+```text
+나쁜 예:
+  모든 application이 default project 사용
+  Argo CD가 cluster-admin 권한 보유
+  모든 사용자가 sync/delete 가능
+  모든 repository와 namespace 허용
+```
+
+더 나은 방향은 다음이다.
+
+```text
+좋은 방향:
+  AppProject로 source/destination 제한
+  team별 project 분리
+  production sync 권한 제한
+  delete/prune 권한 신중히 부여
+  cluster-scoped resource는 platform project에서만 관리
+  SSO와 group 기반 RBAC 적용
+```
+
+Argo CD는 GitOps controller이기 때문에, 권한을 잘못 주면 Git commit 하나가 production cluster 전체를 바꿀 수 있다.
+
+---
+
+## Sync Window
+
+운영 환경에서는 언제든지 sync가 일어나면 안 되는 경우가 있다.
+
+예를 들어 다음 상황이 있을 수 있다.
+
+```text
+- 업무 시간 중 production 변경 금지
+- 특정 change window에만 배포 허용
+- incident 중 자동 sync 중단
+- 월말 정산 기간 변경 제한
+```
+
+이런 경우 Argo CD의 sync policy와 운영 절차를 조합해야 한다.
+
+```text
+dev:
+  auto-sync 허용
+
+staging:
+  auto-sync 허용, prune 가능
+
+production:
+  manual sync 또는 sync window 사용
+  high-risk 변경은 approval 필요
+```
+
+중요한 것은 GitOps가 무조건 자동 배포를 의미하지 않는다는 점이다. GitOps는 Git을 source of truth로 삼고 controller가 reconcile하는 방식이다. 자동 sync 여부는 환경과 risk에 맞게 정해야 한다.
+
+---
+
+## Observability
+
+Argo CD 자체도 운영 대상이다.
+
+확인할 지표는 다음과 같다.
+
+| 영역 | 확인할 것 |
+|---|---|
+| Application sync | Synced / OutOfSync 비율 |
+| Application health | Healthy / Degraded / Progressing |
+| Sync 실패 | manifest error, permission error, resource conflict |
+| Repo server | manifest render latency, Git access error |
+| API server | login, RBAC, request error |
+| Controller | reconciliation delay, queue backlog |
+| Redis | cache 문제 |
+| Kubernetes API | rate limit, permission, network issue |
+
+또한 application observability와 연결해야 한다.
+
+```text
+Argo CD:
+  Git desired state가 적용되었는가?
+
+Prometheus/Grafana:
+  error rate와 latency가 정상인가?
+
+Loki/ELK:
+  application log에 error가 증가했는가?
+
+Alertmanager:
+  SLO burn rate가 증가했는가?
+```
+
+Argo CD가 `Healthy`라고 해도 사용자 요청이 실패할 수 있다. 따라서 GitOps 상태와 service-level metric을 함께 봐야 한다.
+
+---
+
+## 운영 중 자주 만나는 문제
+
+### Application은 Synced인데 서비스가 안 되는 경우
+
+가능한 원인은 다음과 같다.
+
+```text
+- readinessProbe는 통과하지만 application logic이 깨짐
+- Service selector가 잘못됨
+- Ingress host/path 설정 오류
+- TLS certificate 문제
+- ConfigMap/Secret 값 오류
+- DB 연결 실패
+- NetworkPolicy로 traffic 차단
+```
+
+Argo CD는 manifest 적용 상태를 보여주지만, application-level 검증은 별도 smoke test와 observability가 필요하다.
+
+### OutOfSync가 계속 발생하는 경우
+
+가능한 원인은 다음과 같다.
+
+```text
+- 누군가 cluster에서 직접 수정
+- 다른 controller가 field를 계속 변경
+- Helm chart render 결과가 매번 달라짐
+- default value나 generated field 차이
+- CRD status/spec 처리 문제
+```
+
+이 경우 diff customization이나 ignore differences 설정이 필요할 수 있다. 다만 ignore rule을 남용하면 중요한 drift를 놓칠 수 있다.
+
+### Sync가 실패하는 경우
+
+가능한 원인은 다음과 같다.
+
+```text
+- RBAC 권한 부족
+- namespace 없음
+- CRD가 먼저 설치되지 않음
+- resource quota 초과
+- webhook admission 거부
+- immutable field 변경 시도
+- Helm/Kustomize render 실패
+```
+
+특히 operator나 CRD 기반 workload는 sync order가 중요하다.
+
+```text
+1. CRD 설치
+2. operator 설치
+3. custom resource 적용
+```
+
+---
+
+## Kubernetes Homelab에서 Argo CD 적용하기
+
+개인 k3s나 homelab 환경에서도 Argo CD는 유용하다.
+
+특히 다음처럼 여러 component를 운영한다면 GitOps 관리 효과가 크다.
+
+```text
+Traefik
+Longhorn
+MetalLB
+Nexus
+Prometheus
+Grafana
+Loki
+개인 서비스
+내부 API
+registry
+```
+
+Argo CD로 관리할 수 있는 대상은 다음과 같다.
+
+| 영역 | 관리 대상 |
+|---|---|
+| Networking | Traefik, IngressRoute, MetalLB |
+| Storage | Longhorn, StorageClass, backup target |
+| Registry | Nexus, Harbor, Docker Registry |
+| Observability | Prometheus, Grafana, Loki, Alertmanager |
+| App | Deployment, Service, ConfigMap, HPA |
+| Security | RBAC, ServiceAccount, NetworkPolicy |
+| Platform | cert-manager, external-dns, sealed-secrets |
+
+추천 구조는 다음과 같다.
+
+```text
+homelab-gitops/
+  clusters/
+    k3s-main/
+      bootstrap/
+        root-app.yaml
+      infrastructure/
+        metallb/
+        longhorn/
+        traefik/
+      platform/
+        prometheus/
+        grafana/
+        loki/
+      apps/
+        nexus/
+        blog/
+        internal-api/
+```
+
+처음에는 다음 정도만 해도 충분하다.
+
+```text
+1. Argo CD 설치
+2. GitOps repo 생성
+3. root-app 또는 app-of-apps 구성
+4. Traefik/Ingress부터 Git에 정리
+5. Longhorn/Nexus 같은 stateful workload는 신중히 GitOps화
+6. Secret은 Sealed Secrets, SOPS, External Secrets 중 하나로 관리
+7. auto-sync는 dev/internal app부터 적용
+```
+
+Stateful workload에는 주의가 필요하다.
+
+```text
+주의:
+  PVC 삭제 위험
+  prune 설정 신중히 사용
+  backup/restore 전략 필요
+  Helm values 변경이 storage에 미치는 영향 확인
+```
+
+---
+
+## Argo CD를 도입하기 좋은 경우
+
+Argo CD는 다음 상황에서 특히 잘 맞는다.
+
+```text
+- Kubernetes manifest가 Git에 정리되어 있다.
+- GitOps 방식으로 배포 이력을 관리하고 싶다.
+- 여러 cluster와 여러 application을 운영한다.
+- 배포 상태를 UI로 쉽게 확인하고 싶다.
+- dev/staging/prod 환경 차이를 Git diff로 관리하고 싶다.
+- CI가 production cluster credential을 직접 갖지 않게 하고 싶다.
+- drift detection과 self-healing이 필요하다.
+- Helm/Kustomize 기반 배포가 많다.
+```
+
+특히 Kubernetes 운영자가 여러 service의 배포 상태를 한눈에 보고 싶을 때 Argo CD UI의 효과가 크다.
+
+---
+
+## Argo CD가 맞지 않을 수 있는 경우
+
+다음 상황에서는 Argo CD 도입 효과가 제한적일 수 있다.
+
+```text
+- Kubernetes를 거의 사용하지 않는다.
+- application 배포가 대부분 VM/legacy 방식이다.
+- manifest가 선언형으로 정리되어 있지 않다.
+- Git workflow가 정착되어 있지 않다.
+- 작은 단일 서비스만 수동으로 가끔 배포한다.
+- platform 운영자가 Argo CD 자체를 관리할 여력이 없다.
+```
+
+Argo CD는 Kubernetes declarative model과 GitOps workflow가 있을 때 가장 큰 효과를 낸다.
+
+---
+
+## 자칫 실수하기 쉬운 부분
+
+### Argo CD를 CI 도구로 오해하는 경우
+
+Argo CD는 test, image build, vulnerability scan을 수행하는 CI 도구가 아니다. CI는 별도로 필요하다.
+
+```text
+CI:
+  test
+  build
+  scan
+  image push
+
+Argo CD:
+  Git desired state를 cluster에 sync
+```
+
+### `latest` image tag를 사용하는 경우
+
+`latest`는 GitOps의 재현성을 해친다. Git commit은 그대로인데 실제 image 내용이 바뀔 수 있다.
+
+```text
+비추천:
+  image: my-app:latest
+
+권장:
+  image: my-app:a1b2c3d
+  image: my-app@sha256:...
+```
+
+### Secret을 Git에 평문으로 넣는 경우
+
+Kubernetes Secret의 base64는 암호화가 아니다. secret은 SOPS, Sealed Secrets, External Secrets, Vault 등을 사용해야 한다.
+
+### Auto-sync와 prune을 무조건 켜는 경우
+
+Auto-sync와 prune은 편리하지만 production에서는 위험할 수 있다. 특히 Git에서 잘못 삭제된 resource가 실제 cluster에서도 삭제될 수 있다.
+
+### Argo CD가 Healthy면 서비스도 정상이라고 생각하는 경우
+
+Argo CD의 health는 Kubernetes resource 기준이다. 실제 user-facing reliability는 metrics, logs, traces, synthetic test로 확인해야 한다.
+
+### Bootstrap 문제를 잊는 경우
+
+Argo CD도 cluster 안에 설치되는 도구다. cluster를 새로 만들 때 Argo CD 자체를 어떻게 설치하고 root application을 어떻게 연결할지 bootstrap 절차가 필요하다.
+
+---
+
+## 실무 검증 포인트
+
+Argo CD를 운영할 때는 다음을 확인해야 한다.
+
+| 검증 포인트 | 확인 질문 |
+|---|---|
+| Source of truth | Git repository가 desired state의 기준인가? |
+| Application 구조 | Application, AppProject, ApplicationSet 역할이 명확한가? |
+| Sync 정책 | manual/auto sync 기준이 환경별로 정리되어 있는가? |
+| Prune 정책 | resource 삭제가 안전하게 통제되는가? |
+| Self-heal | drift 자동 복구가 incident 대응을 방해하지 않는가? |
+| Image tag | immutable tag 또는 digest를 사용하는가? |
+| Secret 관리 | secret이 Git에 평문으로 저장되지 않는가? |
+| RBAC | Argo CD와 사용자 권한이 최소 권한인가? |
+| Project 분리 | team/env별 source/destination 제한이 있는가? |
+| Observability | Argo CD 상태와 application metric을 함께 보는가? |
+| Rollback | Git revert 기반 rollback 절차가 있는가? |
+| Migration | DB/schema 변경이 rollback과 호환되는가? |
+| Bootstrap | Argo CD 자체 설치와 root-app 복구 절차가 있는가? |
+| Multi-cluster | central 또는 per-cluster Argo CD 전략이 명확한가? |
+
+---
+
+## Mental Model
+
+Argo CD는 다음 mental model로 이해할 수 있다.
+
+```text
+Git repository:
+  Kubernetes desired state 저장
+
+Argo CD Repo Server:
+  Git/Helm/Kustomize source를 manifest로 render
+
+Argo CD Application Controller:
+  desired state와 live state를 비교
+
+Kubernetes cluster:
+  실제 resource 실행
+
+Argo CD Sync:
+  OutOfSync 상태를 desired state로 맞춤
+
+Observability:
+  sync 이후 실제 user-facing health 검증
+```
+
+더 짧게 표현하면 다음과 같다.
+
+```text
+Argo CD = GitOps를 Kubernetes에서 실제로 돌리는 controller
+```
+
+운영 관점에서는 다음처럼 정리할 수 있다.
+
+```text
+CI는 image와 artifact를 만들고,
+Argo CD는 Git에 선언된 배포 상태를 cluster에 맞춘다.
+```
+
+---
+
+## 정리
+
+Argo CD는 Git repository에 선언된 Kubernetes desired state와 cluster의 live state를 지속적으로 비교하고 sync하여, Kubernetes 환경에서 GitOps 기반 Continuous Delivery를 구현하는 도구다.
+
+핵심은 다음과 같다.
+
+- Argo CD는 Kubernetes용 GitOps Continuous Delivery controller다.
+- Argo CD는 CI 도구가 아니며, test/build/image scan은 별도 CI에서 수행해야 한다.
+- `Application`은 Git source, target cluster/namespace, sync policy를 묶는 배포 단위다.
+- `Project`는 source repository, destination cluster/namespace, resource kind, 사용자 권한을 제한하는 경계다.
+- `ApplicationSet`은 여러 Application을 template 기반으로 생성하는 데 유용하다.
+- `Sync`는 Git desired state를 cluster에 반영하는 동작이다.
+- `OutOfSync`는 Git desired state와 cluster live state가 다르다는 뜻이다.
+- `Prune`은 Git에서 제거된 resource를 cluster에서도 삭제한다.
+- `Self-heal`은 cluster 수동 변경을 Git 상태로 되돌린다.
+- `Synced`와 `Healthy`는 다르며, 실제 사용자 관점의 정상성은 observability로 확인해야 한다.
+- Helm, Kustomize, plain YAML 등 다양한 manifest source를 사용할 수 있다.
+- Secret은 Git에 평문으로 저장하면 안 되며, SOPS, Sealed Secrets, External Secrets, Vault 같은 전략이 필요하다.
+- Production에서는 auto-sync, prune, self-heal을 무조건 켜기보다 risk에 맞게 설계해야 한다.
+- Stateful workload는 PVC 삭제, migration, backup/restore 전략을 반드시 고려해야 한다.
+- Argo CD 자체도 bootstrap, RBAC, observability, backup 대상이다.
+
+Argo CD의 본질은 배포 버튼이 아니라 reconciliation loop다.
+
+```text
+Git desired state
+  -> Argo CD diff
+  -> OutOfSync 감지
+  -> Sync
+  -> Kubernetes live state 정렬
+```
+
+따라서 Argo CD를 제대로 쓰려면 Git repository 구조, sync policy, RBAC, secret 관리, rollback, observability, bootstrap 절차까지 함께 설계해야 한다.
