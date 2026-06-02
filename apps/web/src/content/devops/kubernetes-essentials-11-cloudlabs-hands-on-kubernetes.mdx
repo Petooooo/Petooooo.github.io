@@ -1,0 +1,868 @@
+---
+area: "Kubernetes"
+type: "concept"
+series: "Kubernetes Essentials"
+title: "Kubernetes Essentials 11장: CloudLabs와 Hands-on Kubernetes 실습"
+slug: "kubernetes-essentials-11-cloudlabs-hands-on-kubernetes"
+date: "2026-06-02"
+updated: "2026-06-02"
+draft: false
+reviewed: true
+category: "DevOps"
+tags: ["Kubernetes", "CloudLabs", "Hands-on Lab", "IBM Cloud", "kubectl", "Deployment", "Service", "Scaling", "Logging", "Monitoring"]
+description: "브라우저 기반 임시 Kubernetes cluster를 활용해 Deployment, Service, scaling, logs, monitoring을 직접 실습하는 CloudLabs 학습 흐름과 운영 관점의 검증 포인트를 정리한다."
+---
+Kubernetes는 개념만 읽는 것보다 실제 cluster에서 직접 명령을 실행해볼 때 훨씬 빠르게 이해된다. `Deployment`, `ReplicaSet`, `Pod`, `Service`, `logs`, `monitoring`, `scaling` 같은 개념은 서로 연결되어 있기 때문이다.
+
+하지만 Kubernetes를 처음 배우는 입장에서는 실습 환경을 준비하는 것부터 장벽이 된다.
+
+```text
+kubectl 설치
+Docker 설치
+local cluster 구성
+cloud account 설정
+cluster 생성
+kubeconfig 설정
+networking 설정
+비용 관리
+실습 후 resource 정리
+```
+
+**CloudLabs**는 이런 진입장벽을 줄이기 위한 browser-based hands-on 학습 환경으로 이해할 수 있다. 로컬에 Kubernetes 환경을 직접 설치하지 않고도, 브라우저 안에서 임시 Kubernetes cluster를 사용해 guided lab을 수행하는 방식이다.
+
+```text
+Browser
+  ↓
+CloudLabs
+  ↓
+Temporary Kubernetes cluster
+  ↓
+Guided hands-on lab
+  ↓
+Quiz / Badge
+```
+
+---
+
+## 핵심 요약
+
+CloudLabs는 Kubernetes 입문자가 로컬 설치와 비용 부담을 줄이고, 브라우저에서 임시 Kubernetes cluster를 사용해 배포·확장·로그·상태 확인을 실습할 수 있게 해주는 hands-on 학습 환경이다.
+
+학습 흐름은 다음처럼 정리할 수 있다.
+
+```text
+개념 이해
+  ↓
+hands-on 실습
+  ↓
+실제 cluster에서 명령 실행
+  ↓
+배포, scaling, logging, monitoring 경험
+  ↓
+quiz 또는 badge로 학습 완료 확인
+```
+
+CloudLabs의 핵심 목적은 production cluster를 대체하는 것이 아니라, Kubernetes 핵심 object와 운영 흐름을 빠르게 체험할 수 있는 sandbox를 제공하는 것이다.
+
+```text
+CloudLabs cluster
+  → 교육용
+  → 제한 시간 존재
+  → 실습 시나리오 중심
+  → 장기 운영용 아님
+
+Production cluster
+  → 실제 서비스 운영
+  → IAM, network, backup, security, monitoring, cost 관리 필요
+```
+
+---
+
+## CloudLabs가 해결하려는 문제
+
+### 1. Kubernetes 학습의 첫 번째 장벽: 환경 구축
+
+Kubernetes를 처음 배우는 사람에게 가장 큰 문제는 Kubernetes 개념 자체가 아니라 **실습 환경 구축**일 수 있다.
+
+로컬에서 Kubernetes를 실습하려면 다음 중 하나를 설치해야 한다.
+
+```text
+minikube
+kind
+k3d
+Docker Desktop Kubernetes
+MicroK8s
+k3s
+```
+
+각 방식마다 설치 조건과 오류가 있다.
+
+```text
+Docker daemon 문제
+가상화 설정 문제
+Windows WSL2 문제
+kubectl context 문제
+image pull 문제
+resource 부족
+networking 문제
+```
+
+cloud에서 하려면 또 다른 장벽이 있다.
+
+```text
+cloud account 생성
+billing 설정
+IAM 권한
+cluster 생성 대기
+worker node 비용
+kubeconfig 다운로드
+kubectl 연결
+resource cleanup
+```
+
+학습자는 `Pod`를 배우기도 전에 환경 구축에서 지칠 수 있다.
+
+CloudLabs는 이 과정을 줄인다.
+
+```text
+브라우저 접속
+  ↓
+guided lab 시작
+  ↓
+temporary cluster 제공
+  ↓
+브라우저 기반 터미널/실습 환경
+  ↓
+명령 실행
+```
+
+### 2. 비용과 resource 정리 부담
+
+Kubernetes를 cloud에서 직접 만들면 비용 관리도 중요하다.
+
+Managed Kubernetes cluster를 만들면 다음 resource가 함께 생길 수 있다.
+
+```text
+worker node VM
+public IP
+load balancer
+block storage
+container registry
+logging/monitoring resource
+```
+
+초보자는 실습 후 resource를 지우지 않아 비용이 발생할 수 있다.
+
+CloudLabs 같은 temporary lab 환경은 학습 목적에 맞게 제한된 시간 동안 cluster를 제공하고, 실습 종료 후 resource lifecycle을 통제하는 방식으로 이 위험을 줄인다.
+
+> 제공되는 cluster 사용 시간은 서비스 정책에 따라 달라질 수 있으므로, 실제 사용 시점의 UI에서 확인 필요.
+
+### 3. 무엇을 실습해야 할지 모르는 문제
+
+Kubernetes는 범위가 넓다.
+
+```text
+Pod
+Deployment
+Service
+Ingress
+ConfigMap
+Secret
+Volume
+Namespace
+RBAC
+HPA
+Logging
+Monitoring
+Troubleshooting
+```
+
+초보자는 무엇부터 실습해야 할지 모를 수 있다.
+
+CloudLabs에서 제시하는 Kubernetes 학습 흐름은 다음처럼 이해할 수 있다.
+
+```text
+1. Containers and Kubernetes Essentials
+2. Scalable Web Applications on Kubernetes
+3. Analyze Logs and Monitor Application Health
+```
+
+즉 학습 순서는 다음과 같다.
+
+```text
+기본 개념
+  ↓
+web application 배포와 scaling
+  ↓
+log와 health monitoring
+```
+
+이 순서는 Kubernetes 입문자에게 자연스럽다. 먼저 container와 Kubernetes 기본 object를 이해하고, 그다음 web application을 배포하고 확장한 뒤, 마지막으로 배포된 application의 log와 health를 확인하는 흐름이다.
+
+---
+
+## CloudLabs 학습 흐름
+
+CloudLabs를 이용한 Kubernetes hands-on 학습 흐름은 다음처럼 정리할 수 있다.
+
+```text
+1. Cloud 계정 생성 또는 로그인
+2. CloudLabs에서 Kubernetes tutorial 시작
+3. browser 기반 실습 환경 접속
+4. free temporary Kubernetes cluster 생성
+5. guided lab instruction을 따라 실습
+6. quiz 응시
+7. badge 획득
+```
+
+여기서 중요한 점은 **실습 환경이 일시적**이라는 것이다. 실습 중 만든 cluster와 resource를 장기 보관용으로 생각하면 안 된다.
+
+실습을 진행할 때는 다음을 기록해두는 것이 좋다.
+
+```text
+실행한 kubectl 명령
+생성한 YAML
+오류 메시지
+Pod 상태 변화
+Service endpoint 변화
+scaling 전후 Pod 수
+log와 event에서 확인한 내용
+```
+
+이렇게 기록해두면 나중에 기술 블로그나 포트폴리오 글로 확장하기 좋다.
+
+---
+
+## 이론과 실제 명령 사이의 간극 줄이기
+
+Kubernetes는 개념적으로 이해해도 실제 명령을 실행해보지 않으면 감이 잘 안 잡힌다.
+
+예를 들어 `Deployment`를 배웠다고 하자.
+
+이론:
+
+```text
+Deployment는 ReplicaSet을 만들고,
+ReplicaSet은 Pod replica 수를 유지한다.
+```
+
+실습:
+
+```bash
+kubectl apply -f deployment.yaml
+kubectl get deployment
+kubectl get rs
+kubectl get pods
+```
+
+실제로 보면 다음 구조가 눈에 들어온다.
+
+```text
+deployment/api
+  ↓
+replicaset/api-7f9d8c9c8
+  ↓
+pod/api-7f9d8c9c8-abcde
+```
+
+이론과 실습이 연결되는 순간이다.
+
+CloudLabs의 가장 큰 의미는 이 연결을 guided lab 형태로 제공한다는 데 있다.
+
+---
+
+## Lab 1: Containers and Kubernetes Essentials
+
+첫 번째 lab은 container와 Kubernetes의 기본 개념을 다루는 흐름으로 볼 수 있다.
+
+여기서 핵심은 다음이다.
+
+```text
+container image란 무엇인가?
+container는 어떻게 실행되는가?
+Kubernetes에서 Pod는 무엇인가?
+Deployment는 Pod를 어떻게 관리하는가?
+Service는 왜 필요한가?
+kubectl은 Kubernetes API와 어떻게 상호작용하는가?
+```
+
+이 lab에서 익혀야 할 mental model은 다음과 같다.
+
+```text
+Container image
+  ↓
+Container
+  ↓
+Pod
+  ↓
+Deployment
+  ↓
+Service
+```
+
+가장 중요한 것은 Docker와 Kubernetes의 역할 차이다.
+
+```text
+Docker / container tooling
+  → image build, local container 실행
+
+Kubernetes
+  → cluster에서 containerized workload 배치, 복구, 확장, 네트워킹
+```
+
+초보자가 자주 헷갈리는 부분은 다음이다.
+
+```text
+Kubernetes가 image를 build하는가?
+Pod와 container는 같은가?
+Deployment와 Pod는 같은가?
+Service가 Pod를 만드는가?
+kubectl은 어디에 명령을 보내는가?
+```
+
+정리하면 다음과 같다.
+
+```text
+image는 registry에 있다.
+Pod는 container를 감싸는 Kubernetes 실행 단위다.
+Deployment는 Pod template과 replica 수를 선언한다.
+Service는 Pod 집합 앞의 stable endpoint다.
+kubectl은 API Server에 요청을 보낸다.
+```
+
+---
+
+## Lab 2: Scalable Web Applications on Kubernetes
+
+두 번째 lab은 Kubernetes에서 scalable web application을 배포하고 확장하는 기초를 다루는 흐름으로 이해할 수 있다.
+
+여기서 핵심은 다음이다.
+
+```text
+web application을 Deployment로 배포한다.
+Service로 traffic endpoint를 만든다.
+replica 수를 늘려 scale out한다.
+load balancing이 어떻게 동작하는지 본다.
+rolling update의 개념을 이해한다.
+```
+
+예상되는 실습 흐름은 다음과 비슷하다.
+
+```bash
+kubectl apply -f deployment.yaml
+kubectl expose deployment web --type=LoadBalancer --port=80 --target-port=8080
+kubectl get service
+kubectl scale deployment web --replicas=3
+kubectl get pods
+kubectl set image deployment/web web=example/web:v2
+kubectl rollout status deployment/web
+```
+
+여기서 중요한 포인트는 “scale”이 단순히 Pod를 많이 띄우는 것이 아니라는 점이다.
+
+```text
+replica 증가
+  ↓
+새 Pod scheduling
+  ↓
+Pod Ready
+  ↓
+Service endpoint에 추가
+  ↓
+traffic 분산
+```
+
+즉 scalable web app을 이해하려면 `Deployment`, `Pod`, `Service`, `Endpoint`, `readiness`가 연결되어야 한다.
+
+운영 관점에서는 다음 질문을 던져야 한다.
+
+```text
+Pod가 늘어났을 때 Service endpoint도 늘어났는가?
+application은 stateless하게 scale 가능한가?
+session state는 어디에 있는가?
+DB connection pool은 replica 증가를 감당하는가?
+readinessProbe가 정확한가?
+rollout 중 old/new version이 동시에 떠도 괜찮은가?
+```
+
+실습에서는 단순히 `replicas: 3`을 확인하지만, production에서는 이 질문들이 중요하다.
+
+---
+
+## Lab 3: Analyze Logs and Monitor Application Health
+
+세 번째 lab은 log 분석과 application health monitoring을 다루는 흐름으로 볼 수 있다.
+
+Kubernetes를 운영할 때 가장 중요한 능력 중 하나는 상태를 읽는 것이다.
+
+```text
+Pod가 죽었는가?
+왜 restart되었는가?
+image pull이 실패했는가?
+application log에 error가 있는가?
+node resource가 부족한가?
+readinessProbe가 실패했는가?
+```
+
+기본적으로 다음 명령을 사용할 수 있다.
+
+```bash
+kubectl get pods
+kubectl describe pod <pod-name>
+kubectl logs <pod-name>
+kubectl logs <pod-name> --previous
+kubectl get events --sort-by=.metadata.creationTimestamp
+```
+
+실제 managed Kubernetes 환경에서는 cloud provider의 logging/monitoring 도구와도 연결된다.
+
+```text
+cluster metrics
+node metrics
+pod metrics
+container logs
+application logs
+event stream
+alerting
+dashboard
+```
+
+학습자는 여기서 “배포가 끝”이 아니라는 점을 배운다.
+
+```text
+Deploy
+  ↓
+Observe
+  ↓
+Debug
+  ↓
+Fix
+  ↓
+Redeploy
+```
+
+DevOps 관점에서는 이 lab이 중요하다. Kubernetes 운영에서 단순히 manifest를 적용하는 능력보다, 실패했을 때 어디를 봐야 하는지 아는 능력이 더 중요하기 때문이다.
+
+---
+
+## CloudLabs와 실제 Kubernetes 운영의 차이
+
+CloudLabs는 실습에 유용하지만 production 운영과는 다르다.
+
+| 구분 | CloudLabs | Production Kubernetes |
+|---|---|---|
+| 목적 | 학습과 실습 | 실제 서비스 운영 |
+| cluster 수명 | 제한 시간, 임시 환경 | 장기 운영 |
+| resource 규모 | 제한적 | workload 요구에 따라 설계 |
+| 보안 | 교육용 기본 설정 중심 | IAM, RBAC, NetworkPolicy, Secret 관리 필수 |
+| 비용 | 무료/제한적 실습 목적 | 지속 비용 발생 |
+| 장애 대응 | guided troubleshooting | 운영자가 직접 분석 |
+| observability | lab 범위 중심 | metric, log, trace, alert 통합 |
+| storage | 실습 중심 | backup, restore, HA 설계 필요 |
+| network | 단순화 | ingress, DNS, TLS, firewall, private network 고려 |
+
+따라서 CloudLabs에서 배운 것을 production에 그대로 옮기면 안 된다.
+
+예를 들어 실습에서는 다음처럼 단순히 Service를 노출할 수 있다.
+
+```bash
+kubectl expose deployment web --type=LoadBalancer --port=80
+```
+
+하지만 production에서는 다음을 함께 봐야 한다.
+
+```text
+public exposure가 필요한가?
+Ingress 또는 Gateway를 쓸 것인가?
+TLS termination은 어디서 할 것인가?
+WAF나 rate limit이 필요한가?
+private subnet에서만 접근해야 하는가?
+DNS record는 누가 관리하는가?
+LoadBalancer 비용은 어떻게 관리하는가?
+```
+
+CloudLabs의 목적은 production 설계를 완성하는 것이 아니라, Kubernetes object와 workflow를 빠르게 체험하는 것이다.
+
+---
+
+## Browser-based lab의 장점
+
+### 로컬 환경 의존성 감소
+
+브라우저 기반 lab에서는 로컬에 다음을 설치하지 않아도 된다.
+
+```text
+Docker
+kubectl
+minikube
+kind
+cloud CLI
+IDE plugin
+VPN
+```
+
+이것은 입문자에게 큰 장점이다.
+
+특히 Windows 환경에서는 WSL2, Docker Desktop, Hyper-V, network adapter 문제로 실습 진입이 막히는 경우가 있다. Browser-based lab은 이런 문제를 상당 부분 줄인다.
+
+### 동일한 학습 환경 제공
+
+교육을 여러 명에게 제공할 때는 환경 일관성이 중요하다.
+
+```text
+강사 화면에서는 되는데 학습자 PC에서는 안 됨
+OS별 명령 차이
+kubectl version 차이
+Docker Desktop 설정 차이
+proxy/network 차이
+```
+
+CloudLabs는 같은 browser environment를 제공하므로 교육 진행이 더 안정적이다.
+
+### 실패해도 안전한 sandbox
+
+초보자는 실습 중 resource를 잘못 만들 수 있다.
+
+```bash
+kubectl delete deployment --all
+kubectl scale deployment web --replicas=100
+kubectl apply -f wrong.yaml
+```
+
+Production에서는 위험하지만, 실습용 임시 cluster에서는 학습 경험으로 처리할 수 있다.
+
+물론 실습 환경이라도 credential, token, secret을 노출하지 않는 습관은 필요하다.
+
+---
+
+## 실습에서 반드시 익혀야 할 명령 세트
+
+CloudLabs 같은 hands-on 환경에서 Kubernetes를 배운다면, 단순히 안내를 따라가는 데서 끝내지 말고 다음 명령들을 몸에 익혀야 한다.
+
+### Cluster와 namespace 확인
+
+```bash
+kubectl config current-context
+kubectl get namespaces
+kubectl get nodes
+```
+
+의미:
+
+```text
+현재 어떤 cluster에 연결되어 있는가?
+어떤 namespace가 있는가?
+node는 Ready 상태인가?
+```
+
+### Workload 확인
+
+```bash
+kubectl get deployments
+kubectl get replicasets
+kubectl get pods
+```
+
+의미:
+
+```text
+Deployment가 생성되었는가?
+ReplicaSet이 만들어졌는가?
+Pod가 Running/Ready 상태인가?
+```
+
+### 상세 진단
+
+```bash
+kubectl describe deployment <name>
+kubectl describe pod <pod-name>
+kubectl get events --sort-by=.metadata.creationTimestamp
+```
+
+의미:
+
+```text
+controller가 어떤 event를 남겼는가?
+scheduling이나 image pull 문제가 있는가?
+probe가 실패했는가?
+```
+
+### 로그 확인
+
+```bash
+kubectl logs <pod-name>
+kubectl logs <pod-name> --previous
+```
+
+의미:
+
+```text
+application이 어떤 error를 냈는가?
+재시작 이전 container는 왜 종료되었는가?
+```
+
+### Scaling과 rollout
+
+```bash
+kubectl scale deployment <name> --replicas=3
+kubectl set image deployment/<name> <container>=<image>
+kubectl rollout status deployment/<name>
+kubectl rollout history deployment/<name>
+kubectl rollout undo deployment/<name>
+```
+
+의미:
+
+```text
+replica 수를 바꿀 수 있는가?
+image update가 rollout으로 이어지는가?
+문제가 생기면 rollback할 수 있는가?
+```
+
+이 명령들을 CloudLabs에서 반복해보는 것이 중요하다.
+
+---
+
+## CloudLabs 실습을 DevOps 관점으로 해석하기
+
+CloudLabs는 단순 교육 도구지만, DevOps 관점에서는 다음 lifecycle을 축약해서 보여준다.
+
+```text
+Build or use container image
+  ↓
+Deploy to Kubernetes
+  ↓
+Expose service
+  ↓
+Scale application
+  ↓
+Observe logs and health
+  ↓
+Troubleshoot issue
+  ↓
+Validate learning
+```
+
+실제 DevOps pipeline과 비교하면 다음과 같다.
+
+| CloudLabs 실습 | 실제 운영 |
+|---|---|
+| sample image 사용 | CI에서 image build |
+| guided manifest 적용 | GitOps/Helm/Kustomize로 manifest 관리 |
+| 임시 cluster | dev/staging/prod cluster |
+| 간단한 scale | HPA/KEDA/Knative 등으로 autoscaling |
+| 기본 log 확인 | centralized logging |
+| 기본 health 확인 | Prometheus/Grafana/alerting |
+| quiz/badge | 운영 runbook, SLO, postmortem |
+
+즉 CloudLabs는 production workflow의 축소판으로 볼 수 있다.
+
+---
+
+## CloudLabs를 공부할 때 주의할 점
+
+### 안내를 따라가기만 하면 기억에 덜 남는다
+
+Guided lab은 친절하지만, 그대로 따라가기만 하면 명령이 머리에 남지 않을 수 있다.
+
+좋은 학습 방식은 다음이다.
+
+```text
+1. 안내대로 한 번 수행
+2. 각 명령이 어떤 Kubernetes object를 바꾸는지 확인
+3. 일부 값을 바꿔 다시 실행
+4. 일부러 오류를 만들어 troubleshooting
+5. resource 삭제 후 처음부터 재현
+```
+
+예를 들어 Deployment를 배포했다면 다음을 직접 바꿔본다.
+
+```text
+replicas: 1 → 3
+image tag 변경
+containerPort 변경
+Service targetPort를 일부러 틀리게 변경
+readinessProbe path를 틀리게 변경
+```
+
+그 후 다음을 확인한다.
+
+```bash
+kubectl get pods
+kubectl describe pod <pod-name>
+kubectl get endpoints
+kubectl logs <pod-name>
+```
+
+이렇게 해야 troubleshooting 감각이 생긴다.
+
+### cluster 시간이 제한되어 있다는 점을 고려해야 한다
+
+제한 시간이 있는 실습에서는 다음이 중요하다.
+
+```text
+실습 전에 목표 파악
+명령과 결과 기록
+중요 YAML 저장
+오류 메시지 캡처
+badge 또는 quiz 조건 확인
+```
+
+시간이 끝나면 cluster가 사라질 수 있으므로, 실습 중 만든 resource를 장기 보관용으로 생각하면 안 된다.
+
+### 실습 계정과 실제 운영 계정을 구분해야 한다
+
+CloudLabs는 교육용 흐름이다. 실제 cloud 운영 계정과 연결되는 경우라면, 권한과 resource 생성 범위를 확인해야 한다.
+
+주의할 점:
+
+```text
+실습용 credential을 public repo에 올리지 않기
+API key나 token을 복사해 공유하지 않기
+실습 후 남은 resource 확인
+namespace와 cluster context 확인
+```
+
+명령 실행 전에는 항상 context를 확인하는 습관이 좋다.
+
+```bash
+kubectl config current-context
+kubectl get nodes
+```
+
+특히 여러 cluster를 쓰는 사람은 실습 cluster와 production cluster를 혼동하지 않아야 한다.
+
+---
+
+## CloudLabs와 managed Kubernetes 학습의 연결
+
+CloudLabs는 managed Kubernetes 기반 학습 경험으로 이해할 수 있다.
+
+Managed Kubernetes에서는 cloud provider가 control plane과 일부 cluster lifecycle을 관리한다.
+
+```text
+Cloud provider가 관리하는 것:
+  control plane
+  API server availability
+  cluster provisioning workflow
+  일부 upgrade path
+  cloud load balancer integration
+  IAM integration
+  logging/monitoring integration 일부
+
+사용자가 관리하는 것:
+  application manifest
+  namespace/RBAC
+  workload resource
+  Service/Ingress 설계
+  image와 registry
+  security policy
+  observability 설정
+  cost와 scaling
+```
+
+CloudLabs를 통해 학습자는 managed Kubernetes의 사용 경험을 간접적으로 맛볼 수 있다.
+
+```text
+직접 etcd cluster를 구성하지 않는다.
+API server를 직접 설치하지 않는다.
+worker node와 cluster endpoint가 준비된 상태에서 workload를 배포한다.
+```
+
+이것은 Kubernetes 입문 단계에서 적절하다. 처음부터 control plane 설치에 매몰되기보다, application deployment와 troubleshooting을 먼저 경험할 수 있기 때문이다.
+
+---
+
+## 실습 내용을 기술 블로그로 확장하는 법
+
+CloudLabs 실습을 제대로 수행하면 기술 블로그나 포트폴리오 소재로 확장할 수 있다.
+
+예를 들어 다음 주제로 정리할 수 있다.
+
+```text
+Kubernetes에서 Deployment와 Service로 web application 배포하기
+Replica scaling과 Service endpoint 변화 관찰
+Kubernetes에서 Pod log와 event로 장애 원인 찾기
+Managed Kubernetes에서 browser-based lab으로 기본 운영 흐름 익히기
+```
+
+단순히 “CloudLabs를 해봤다”보다 다음 구조로 정리하는 것이 좋다.
+
+```text
+목표
+  → web app을 Kubernetes에 배포하고 scale한다.
+
+환경
+  → browser-based temporary Kubernetes cluster.
+
+수행한 작업
+  → Deployment 생성, Service 노출, replica scaling, log 확인.
+
+관찰한 결과
+  → Pod 수 변화, endpoint 변화, rollout 상태 변화.
+
+문제와 해결
+  → image pull, readiness, selector mismatch 같은 failure case 실험.
+
+정리
+  → Kubernetes workload 운영에서 중요한 검증 포인트.
+```
+
+이렇게 정리하면 단순 수료 기록보다 훨씬 실무적인 학습 기록이 된다.
+
+---
+
+## 전체 mental model
+
+CloudLabs를 Kubernetes 학습 환경으로 이해하는 흐름은 다음과 같다.
+
+```text
+1. Kubernetes를 배우려면 hands-on 실습이 필요하다.
+
+2. 하지만 초보자에게는 local cluster 설치, cloud account 설정,
+   kubectl 연결, 비용 관리가 진입장벽이 될 수 있다.
+
+3. CloudLabs는 브라우저 기반 interactive lab으로 이 장벽을 낮춘다.
+
+4. 사용자는 temporary Kubernetes cluster를 제공받고,
+   안내에 따라 Kubernetes 핵심 실습을 수행한다.
+
+5. 실습은 container/Kubernetes essentials,
+   scalable web application,
+   log 분석과 health monitoring 흐름으로 구성된다.
+
+6. 완료 후 quiz와 badge를 통해 학습 완료를 확인할 수 있다.
+
+7. CloudLabs는 production cluster가 아니라 학습용 sandbox다.
+
+8. 따라서 실습에서 익힌 명령과 troubleshooting 흐름을
+   실제 운영 환경에 맞게 확장해 이해해야 한다.
+```
+
+---
+
+## 요약
+
+Kubernetes는 개념 설명만으로 충분하지 않다. 실제 cluster에서 `kubectl`을 실행해보고, `Deployment`, `Service`, scaling, logs, monitoring을 직접 확인해야 한다.
+
+CloudLabs는 이 과정을 browser-based sandbox로 제공한다.
+
+```text
+Kubernetes 개념 이해
+  ↓
+임시 cluster에서 실습
+  ↓
+Deployment와 Service 배포
+  ↓
+replica scaling
+  ↓
+logs와 health 확인
+  ↓
+troubleshooting 흐름 습득
+```
+
+다만 CloudLabs는 production cluster가 아니다. 실습용 임시 환경이므로 실제 운영에서는 IAM, RBAC, NetworkPolicy, TLS, Ingress, storage, backup, monitoring, alerting, cost control까지 별도로 고려해야 한다.
+
+한 문장으로 정리하면 다음과 같다.
+
+**CloudLabs는 Kubernetes 입문자가 로컬 설치와 비용 부담을 줄이고, 브라우저에서 임시 Kubernetes cluster를 사용해 배포·확장·로그·상태 확인을 실습할 수 있게 해주는 hands-on 학습 환경이다.**
