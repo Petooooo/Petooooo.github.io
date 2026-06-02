@@ -1,0 +1,982 @@
+---
+area: "DevOps"
+type: "concept"
+series: "DevOps Explained"
+title: "Continuous Testing: CI/CD Pipeline의 지속적 품질 Feedback 설계"
+slug: "continuous-testing-cicd-pipeline-feedback"
+date: "2026-06-02"
+updated: "2026-06-02"
+draft: false
+reviewed: true
+category: "DevOps"
+tags: ["Continuous Testing", "CI/CD", "DevOps", "Test Automation", "Kubernetes", "Shift Left", "Canary", "Observability"]
+description: "Continuous Testing을 CI/CD와 DevOps 관점에서 정리하고, 테스트 피라미드, shift left/right, quality gate, test data, flaky test, Kubernetes 검증까지 설명한다."
+---
+## 개요
+
+**Continuous Testing**은 테스트를 개발 마지막 단계의 일회성 검문소로 두지 않고, SDLC 전체에 자동화된 테스트와 feedback을 지속적으로 배치하는 DevOps practice다.
+
+전통적인 테스트 흐름은 보통 개발 후반부에 집중된다.
+
+```text
+요구사항 정리
+  -> 개발
+  -> 기능 구현 완료
+  -> QA 팀 전달
+  -> 수동 테스트
+  -> 결함 발견
+  -> 개발팀 수정
+  -> 재테스트
+  -> release 지연
+```
+
+이 방식은 release 주기가 길고 변경량이 적을 때는 어느 정도 동작할 수 있다. 그러나 CI/CD 환경에서는 작은 변경이 자주 build되고, test되고, deploy된다. 이런 상황에서 테스트를 마지막에 몰아서 수행하면 feedback이 늦어지고, QA 단계가 병목이 되며, 결함 수정 비용이 커진다.
+
+Continuous Testing의 핵심은 다음과 같다.
+
+```text
+Continuous Testing:
+  SDLC 여러 단계에 자동화된 테스트와 feedback을 배치하여
+  code quality, release confidence, deployment speed를 함께 높이는 방식
+```
+
+즉, Continuous Testing은 테스트를 많이 하는 것이 아니라 **적절한 테스트를 적절한 시점에 자동화된 feedback으로 제공하는 것**이다.
+
+---
+
+## Continuous Testing이 필요한 이유
+
+DevOps의 목표는 software delivery를 빠르고 안정적으로 만드는 것이다. 하지만 빠른 배포만 있고 테스트와 검증이 부족하면 잘못된 변경도 빠르게 production에 도달한다.
+
+```text
+DevOps without testing:
+  빠르게 build
+  빠르게 deploy
+  빠르게 장애 발생
+```
+
+Continuous Testing은 DevOps의 속도와 품질 사이의 균형을 잡는다.
+
+```text
+DevOps with continuous testing:
+  작은 변경
+    -> 빠른 자동 검증
+    -> 결함 조기 발견
+    -> 안전한 delivery
+    -> production feedback
+```
+
+Continuous Testing이 중요한 이유는 다음과 같다.
+
+| 이유 | 설명 |
+|---|---|
+| 결함 조기 발견 | 개발 후반이나 production 직전이 아니라 초기 단계에서 문제를 발견한다. |
+| 수정 비용 감소 | 문제가 작을 때 수정할 수 있다. |
+| release bottleneck 감소 | QA 단계에 모든 검증이 몰리지 않는다. |
+| CI/CD 신뢰도 향상 | pipeline이 배포 가능한 artifact인지 판단할 수 있다. |
+| feedback loop 단축 | 개발자가 context를 잃기 전에 실패 원인을 확인할 수 있다. |
+| 운영 risk 감소 | 배포 전후 검증으로 장애 가능성을 줄인다. |
+| 협업 개선 | 개발, QA, 운영, 보안이 같은 품질 signal을 공유한다. |
+
+Continuous Testing은 CI/CD pipeline의 속도를 늦추기 위한 장치가 아니다. 오히려 큰 결함을 늦게 발견하는 일을 줄여 delivery flow를 더 예측 가능하게 만든다.
+
+---
+
+## 전통적 테스트 방식의 한계
+
+### Feedback이 너무 늦다
+
+개발자가 2주 전에 작성한 code에서 결함이 발견되면, 해당 개발자는 이미 다른 작업을 하고 있을 가능성이 높다. 다시 context를 회복하고 원인을 찾는 데 시간이 걸린다.
+
+```text
+늦은 테스트:
+  code 작성
+    -> 며칠 또는 몇 주 뒤 테스트 실패
+    -> context switching
+    -> 원인 분석 지연
+    -> 수정 비용 증가
+```
+
+Continuous Testing은 feedback을 code 변경 직후에 가깝게 제공하려고 한다.
+
+### QA가 병목이 된다
+
+모든 테스트가 QA 단계에 몰리면 QA 팀이 release bottleneck이 된다.
+
+```text
+개발팀:
+  기능 구현 완료
+
+QA 팀:
+  여러 기능을 한꺼번에 수동 테스트
+
+결과:
+  테스트 대기열 증가
+  release 지연
+  결함 수정 후 재테스트 반복
+```
+
+Continuous Testing은 반복적인 검증을 pipeline으로 옮겨 QA가 exploratory testing, risk-based testing, test strategy에 집중할 수 있게 한다.
+
+### 결함 원인 범위가 커진다
+
+변경 사항이 많아진 뒤 테스트하면 실패 원인을 찾기 어렵다.
+
+```text
+large batch release:
+  feature A
+  feature B
+  feature C
+  dependency update
+  DB migration
+  config 변경
+
+테스트 실패:
+  원인 후보가 너무 많음
+```
+
+작은 변경마다 자동 검증하면 실패 원인 후보가 줄어든다.
+
+### 수동 테스트는 재현성이 낮다
+
+수동 테스트는 사람의 숙련도와 집중도에 영향을 받는다.
+
+```text
+문제:
+  테스트 순서 누락
+  test data 차이
+  환경 설정 차이
+  결과 기록 불일치
+  반복 수행 비용 증가
+```
+
+반복적이고 명확한 검증은 자동화하는 것이 좋다. 다만 모든 테스트를 자동화할 수 있는 것은 아니며, exploratory testing이나 usability testing처럼 사람의 판단이 필요한 영역은 여전히 중요하다.
+
+---
+
+## Continuous Testing의 기본 구조
+
+Continuous Testing은 SDLC 전체에 feedback point를 배치한다.
+
+```text
+Plan
+  -> Test strategy / risk analysis
+
+Code
+  -> unit test / lint / type check
+
+Build
+  -> build validation / dependency scan
+
+Test
+  -> integration test / contract test / E2E test
+
+Release
+  -> smoke test / performance test / security test
+
+Deploy
+  -> canary test / policy check / automated validation
+
+Operate
+  -> synthetic monitoring / real user monitoring / SLO feedback
+```
+
+이 구조에서 테스트는 하나의 stage가 아니라 여러 단계에 분산된 feedback mechanism이다.
+
+| 테스트 시점 | 목적 | 예시 |
+|---|---|---|
+| Local / pre-commit | 개발자가 빠르게 기본 문제 확인 | lint, unit test, type check |
+| Pull Request | main branch에 들어가기 전 검증 | unit test, integration test, SAST, dependency scan |
+| CI build | artifact 생성 가능성 확인 | build test, package test, container image build |
+| Staging | production-like 환경 검증 | smoke test, contract test, E2E test |
+| Pre-production | release risk 평가 | performance test, security test, migration test |
+| Production | 실제 사용자 영향 관찰 | synthetic monitoring, canary analysis, SLO monitoring |
+
+Continuous Testing의 목표는 결함을 가능한 한 빠르고 정확하게 발견하고, 각 단계에서 다음 단계로 넘어가도 되는지 판단하는 signal을 제공하는 것이다.
+
+---
+
+## 테스트 피라미드
+
+Continuous Testing을 설계할 때 중요한 mental model이 **test pyramid**다.
+
+```text
+        E2E Tests
+      Integration Tests
+    Unit Tests
+```
+
+피라미드의 아래쪽은 빠르고 많아야 하며, 위쪽은 느리고 적어야 한다.
+
+| 계층 | 특징 | 예시 |
+|---|---|---|
+| Unit test | 빠름, 저렴함, 원인 파악 쉬움 | 함수, class, module 단위 |
+| Integration test | 중간 속도, component 간 상호작용 검증 | DB, API, message queue 연동 |
+| E2E test | 느림, 사용자 흐름 검증, 유지보수 비용 큼 | 로그인 → 결제 → 완료 flow |
+
+자칫 실수하기 쉬운 부분은 E2E test에 너무 많이 의존하는 것이다. E2E test는 실제 사용자 flow를 검증할 수 있어 중요하지만, 느리고 flaky해지기 쉽다.
+
+좋은 구조는 다음과 같다.
+
+```text
+많은 unit test:
+  business logic과 작은 module 검증
+
+적절한 integration test:
+  DB, API, external dependency 연동 검증
+
+핵심 E2E test:
+  가장 중요한 user journey만 검증
+```
+
+---
+
+## Shift Left Testing
+
+Continuous Testing은 **shift left testing**과 강하게 연결된다.
+
+SDLC 흐름을 왼쪽에서 오른쪽으로 보면 다음과 같다.
+
+```text
+Plan -> Code -> Build -> Test -> Release -> Deploy -> Operate
+```
+
+기존 테스트는 오른쪽에 몰려 있었다.
+
+```text
+Plan -> Code -> Build -> [Test] -> Release -> Deploy
+```
+
+Shift left는 테스트를 더 앞쪽으로 이동시키는 것이다.
+
+```text
+Plan -> [Test design] -> Code -> [Unit test] -> Build -> [Integration test] -> ...
+```
+
+Shift left의 목표는 다음과 같다.
+
+| 목표 | 설명 |
+|---|---|
+| 빠른 결함 발견 | 개발자가 context를 기억하고 있을 때 문제를 확인한다. |
+| 수정 비용 감소 | architecture나 code가 굳기 전에 수정한다. |
+| 품질 책임 공유 | QA만이 아니라 개발자도 test ownership을 가진다. |
+| pipeline 안정성 | 후반부 큰 실패를 줄인다. |
+| release confidence 향상 | 작은 검증을 계속 통과한 변경만 후속 단계로 이동한다. |
+
+Shift left가 모든 테스트를 개발자에게 떠넘긴다는 뜻은 아니다. 반복 가능한 테스트는 자동화하고, QA는 더 고차원적인 test strategy와 exploratory testing에 집중하는 방향이 좋다.
+
+---
+
+## Shift Right Testing
+
+Continuous Testing은 shift left만이 아니다. Production에서도 계속 테스트와 검증이 필요하다. 이를 **shift right** 관점으로 볼 수 있다.
+
+```text
+Deploy -> Operate -> Monitor -> Feedback
+```
+
+Shift right testing의 예시는 다음과 같다.
+
+| 방식 | 설명 |
+|---|---|
+| Synthetic monitoring | 가짜 사용자 요청으로 핵심 flow를 주기적으로 확인한다. |
+| Real User Monitoring | 실제 사용자 경험 기반 latency/error를 측정한다. |
+| Canary analysis | 일부 traffic에서 새 version의 안정성을 검증한다. |
+| A/B testing | 사용자 그룹별 기능과 UX를 비교한다. |
+| Feature flag rollout | 기능 노출 범위를 점진적으로 확대한다. |
+| Chaos testing | 의도적으로 failure를 주입해 resilience를 검증한다. |
+| SLO monitoring | 서비스가 reliability 목표를 만족하는지 확인한다. |
+
+Production testing이 필요한 이유는 staging에서 발견되지 않는 문제가 있기 때문이다.
+
+```text
+staging에서는 정상:
+  traffic scale이 작음
+  real user data가 없음
+  external dependency latency가 다름
+  cache warm-up 상태가 다름
+
+production에서 문제:
+  p99 latency 급증
+  특정 region 사용자만 실패
+  특정 데이터 조합에서 오류
+  실제 traffic pattern에서 race condition 발생
+```
+
+Continuous Testing은 production 전 검증과 production 후 관찰을 함께 포함해야 한다.
+
+---
+
+## CI/CD Pipeline 안의 Continuous Testing
+
+Continuous Testing은 CI/CD pipeline 안에서 여러 quality gate로 작동한다.
+
+예를 들어 Kubernetes application의 pipeline은 다음처럼 구성할 수 있다.
+
+```text
+Git push
+  -> lint
+  -> unit test
+  -> dependency scan
+  -> build
+  -> container image build
+  -> image scan
+  -> integration test
+  -> Helm lint
+  -> manifest validation
+  -> staging deploy
+  -> smoke test
+  -> E2E test
+  -> canary deploy
+  -> metrics validation
+  -> production rollout
+```
+
+각 단계에서 테스트 실패 시 다음 단계로 넘어가지 않는다.
+
+```text
+if unit test fails:
+  build 중단
+
+if image scan critical fails:
+  image push 또는 deploy 중단
+
+if smoke test fails:
+  production deploy 중단
+
+if canary metric fails:
+  rollout 중단 또는 rollback
+```
+
+단계별로 적합한 테스트는 다음과 같다.
+
+| Pipeline 단계 | 적합한 테스트 |
+|---|---|
+| PR | lint, unit test, type check, SAST |
+| Merge to main | full unit test, integration test, build |
+| Image build | image scan, SBOM, startup test |
+| Staging deploy | smoke test, contract test, E2E |
+| Pre-prod | performance test, DAST, migration test |
+| Canary | error rate, latency, business metric |
+| Production | synthetic check, SLO monitoring |
+
+Quality gate가 너무 많고 느리면 delivery가 멈춘다. 따라서 빠른 feedback과 깊은 검증을 계층화해야 한다.
+
+---
+
+## Continuous Testing과 CI/CD의 관계
+
+CI는 code integration과 자동 검증의 출발점이다. Continuous Testing은 CI를 더 넓게 확장한다.
+
+```text
+CI:
+  code를 자주 합치고 build/test를 실행
+
+Continuous Testing:
+  SDLC 전체에 자동화된 test와 feedback을 배치
+```
+
+CI에서 주로 확인하는 것은 다음이다.
+
+```text
+이 변경이 build를 깨뜨리는가?
+unit test가 통과하는가?
+기본 integration이 되는가?
+artifact를 만들 수 있는가?
+```
+
+Continuous Testing은 더 넓은 질문을 던진다.
+
+```text
+이 변경이 사용자 flow를 깨뜨리는가?
+API contract가 유지되는가?
+보안 취약점이 생겼는가?
+성능이 나빠졌는가?
+production canary에서 error rate가 증가하는가?
+SLO에 영향을 주는가?
+```
+
+Continuous Delivery와 Continuous Deployment가 안전하게 작동하려면 Continuous Testing이 필요하다.
+
+```text
+Continuous Delivery:
+  build/test/staging 검증 완료
+  -> manual approval
+  -> production deploy
+
+Continuous Deployment:
+  build/test/staging/canary 검증 완료
+  -> production deploy 자동 진행
+```
+
+Continuous Deployment에서는 자동 검증 결과를 근거로 production까지 자동 배포하므로 Continuous Testing의 품질이 특히 중요하다.
+
+---
+
+## 어떤 테스트를 자동화해야 하는가
+
+모든 테스트를 자동화할 수는 없다. 하지만 반복적이고 결과가 명확한 테스트는 자동화할 가치가 크다.
+
+| 테스트 | 자동화 적합성 |
+|---|---|
+| Unit test | 매우 높음 |
+| API contract test | 높음 |
+| Regression test | 높음 |
+| Smoke test | 높음 |
+| Security scan | 높음 |
+| Dependency scan | 높음 |
+| Kubernetes manifest validation | 높음 |
+| Performance baseline test | 중간~높음 |
+| Exploratory testing | 낮음 |
+| Usability testing | 낮음 |
+| 복잡한 시각적 판단 | 낮음 또는 보조 자동화 |
+
+자동화 기준은 다음 질문으로 잡을 수 있다.
+
+```text
+이 테스트는 자주 반복되는가?
+결과가 명확히 pass/fail로 나뉘는가?
+자동화 비용보다 반복 수행 비용이 큰가?
+실패했을 때 빠르게 원인을 찾을 수 있는가?
+pipeline에서 실행할 만큼 안정적인가?
+```
+
+Exploratory testing이나 usability testing은 사람이 여전히 중요하다. Continuous Testing은 사람의 테스트를 없애는 것이 아니라, 반복적 검증을 자동화해 사람이 더 가치 있는 테스트에 집중하게 만드는 것이다.
+
+---
+
+## Test Data 관리
+
+Continuous Testing에서 자주 어려워지는 부분이 **test data**다. 테스트는 code만으로 동작하지 않는다. 적절한 data, configuration, dependency가 필요하다.
+
+| 문제 | 설명 |
+|---|---|
+| test data 부족 | edge case를 검증하지 못한다. |
+| test data 오염 | 이전 test 결과가 다음 test에 영향을 준다. |
+| production data 사용 | 개인정보와 보안 위험이 있다. |
+| data setup 느림 | pipeline 속도가 느려진다. |
+| schema 변화 | migration 후 test data 불일치가 생긴다. |
+| environment별 차이 | local, CI, staging test 결과가 달라진다. |
+
+좋은 test data 전략은 다음과 같다.
+
+```text
+좋은 test data 전략:
+  fixture 사용
+  test container 사용
+  seed script 관리
+  synthetic data 사용
+  production data masking
+  test 실행 후 cleanup
+  test isolation 보장
+```
+
+Database integration test에서는 test isolation이 특히 중요하다.
+
+```text
+각 test:
+  독립된 transaction 사용
+  또는 독립 database/schema 사용
+  또는 test 후 cleanup 수행
+```
+
+Test data가 불안정하면 flaky test가 증가한다.
+
+---
+
+## Test Environment 관리
+
+Continuous Testing은 환경 관리와도 연결된다. 테스트는 환경이 달라지면 결과가 달라질 수 있다.
+
+```text
+local:
+  통과
+
+CI:
+  실패
+
+staging:
+  통과
+
+production:
+  실패
+```
+
+환경 차이의 원인은 다음과 같다.
+
+| 원인 | 설명 |
+|---|---|
+| dependency version 차이 | local과 CI의 library version이 다르다. |
+| configuration 차이 | 환경 변수 또는 secret 차이가 있다. |
+| external service 차이 | mock, sandbox, real API 차이가 있다. |
+| resource 차이 | CI runner의 CPU/memory가 부족하다. |
+| network 차이 | DNS, latency, firewall 차이가 있다. |
+| data 차이 | test dataset과 production data가 다르다. |
+
+환경 차이를 줄이는 방법은 다음과 같다.
+
+```text
+- container 기반 test 환경 사용
+- test container로 DB/cache/message queue 실행
+- environment variable 표준화
+- configuration template 관리
+- staging을 production-like하게 유지
+- ephemeral test environment 사용
+- IaC로 test environment 재현
+```
+
+Kubernetes 환경에서는 PR마다 ephemeral namespace를 만들어 테스트할 수도 있다.
+
+```text
+PR opened
+  -> namespace pr-123 생성
+  -> application 배포
+  -> smoke/E2E test 실행
+  -> PR closed
+  -> namespace 삭제
+```
+
+이 방식은 실제 Kubernetes 환경에서 application이 동작하는지 검증하는 데 유용하다. 다만 resource 비용과 cleanup 정책이 필요하다.
+
+---
+
+## Flaky Test 문제
+
+Continuous Testing의 가장 큰 적 중 하나가 **flaky test**다.
+
+Flaky test는 code 변경이 없는데도 어떤 때는 성공하고 어떤 때는 실패하는 test다.
+
+| 원인 | 예시 |
+|---|---|
+| 시간 의존성 | `sleep`, timeout, clock 차이 |
+| 비동기 처리 | event 처리 완료 전 assertion |
+| shared state | test 간 DB/cache/file 충돌 |
+| network 의존성 | 외부 API, DNS, latency |
+| 순서 의존성 | test 실행 순서에 따라 결과 변화 |
+| random data | seed 고정 안 됨 |
+| resource 부족 | CI runner 성능 차이 |
+| race condition | thread/concurrency timing 문제 |
+
+Flaky test가 위험한 이유는 feedback 신뢰도를 떨어뜨리기 때문이다.
+
+```text
+test 실패
+  -> 개발자: "또 flaky겠지"
+  -> 실제 regression도 무시될 위험 증가
+```
+
+Flaky test는 단순 nuisance가 아니라 pipeline reliability 문제다.
+
+대응 방식은 다음과 같다.
+
+```text
+1. flaky test를 식별하고 기록한다.
+2. owner를 지정한다.
+3. 원인을 분석한다.
+4. test isolation을 개선한다.
+5. 외부 dependency를 mock 또는 test container로 대체한다.
+6. timeout/retry 남용을 피한다.
+7. 임시 quarantine하더라도 수정 backlog에 등록한다.
+```
+
+Continuous Testing에서 테스트의 신뢰도는 테스트 수만큼 중요하다.
+
+---
+
+## 테스트 속도와 Pipeline 설계
+
+Continuous Testing에서 테스트가 너무 느리면 feedback loop가 길어진다.
+
+```text
+느린 pipeline:
+  PR 생성
+    -> 90분 뒤 실패
+    -> 개발자는 다른 작업 중
+    -> context switching
+    -> 수정 지연
+```
+
+테스트 속도를 개선하려면 계층화와 병렬화가 필요하다.
+
+| 전략 | 설명 |
+|---|---|
+| fast test first | lint, unit test를 먼저 실행한다. |
+| test parallelization | test suite를 여러 runner에 분산한다. |
+| dependency cache | package install 시간을 단축한다. |
+| build cache | compile 또는 image layer cache를 활용한다. |
+| selective test | 변경 범위에 맞는 test를 우선 실행한다. |
+| quarantine | flaky/slow test를 별도 관리한다. |
+| nightly test | 매우 느린 full test는 별도 주기로 실행한다. |
+| performance baseline 분리 | 매 PR이 아니라 조건부로 실행한다. |
+
+좋은 Continuous Testing 구조는 빠른 feedback과 깊은 검증을 분리한다.
+
+```text
+PR 단계:
+  빠르고 결정적인 테스트
+
+Merge 후:
+  더 넓은 integration test
+
+Staging:
+  E2E, DAST, migration test
+
+Nightly:
+  load test, long-running test, chaos test
+```
+
+---
+
+## Risk-based Testing
+
+모든 변경이 같은 수준의 테스트를 필요로 하지는 않는다. README 수정과 payment API 변경은 위험도가 다르다.
+
+```text
+README 수정:
+  문서 build 정도면 충분할 수 있음
+
+payment API 변경:
+  unit test
+  integration test
+  contract test
+  E2E test
+  security test
+  performance 영향 확인
+```
+
+Continuous Testing에서는 변경 위험도에 따라 테스트 범위를 조정할 수 있다.
+
+| 변경 유형 | 테스트 전략 |
+|---|---|
+| 문서 변경 | markdown lint, link check |
+| UI text 변경 | unit/snapshot test |
+| business logic 변경 | unit + integration |
+| API contract 변경 | contract + E2E |
+| database migration | migration test + backward compatibility |
+| authentication 변경 | security test + regression |
+| payment/checkout 변경 | E2E + canary + monitoring |
+| infrastructure 변경 | IaC plan + policy check + smoke test |
+
+Risk-based testing은 pipeline 시간을 줄이면서도 중요한 변경에 충분한 검증을 적용하는 방식이다.
+
+---
+
+## Security Testing
+
+Continuous Testing은 기능 테스트만 의미하지 않는다. Security testing도 포함된다.
+
+DevSecOps 관점에서 Continuous Testing은 다음을 포함할 수 있다.
+
+| 보안 테스트 | 설명 |
+|---|---|
+| Secret scanning | token, password, private key 탐지 |
+| SAST | source code 취약 pattern 분석 |
+| SCA | dependency vulnerability 분석 |
+| Container scan | image 취약점 분석 |
+| IaC scan | Terraform/Kubernetes misconfiguration 탐지 |
+| DAST | 실행 중 application 취약점 검사 |
+| Policy check | 배포 policy 위반 차단 |
+
+예를 들어 Kubernetes manifest에 다음과 같은 설정이 있으면 pipeline에서 차단할 수 있다.
+
+```yaml
+securityContext:
+  privileged: true
+```
+
+Continuous Testing은 quality gate이면서 security gate이기도 하다. 다만 모든 security finding을 같은 기준으로 blocking하면 pipeline이 마비될 수 있으므로 severity와 exposure를 기준으로 정책을 정해야 한다.
+
+---
+
+## Performance Testing
+
+성능 테스트도 Continuous Testing의 일부가 될 수 있다. 다만 모든 commit마다 full load test를 실행하는 것은 현실적이지 않을 수 있다.
+
+성능 테스트는 단계별로 나눌 수 있다.
+
+| 단계 | 성능 검증 |
+|---|---|
+| PR | microbenchmark, critical function benchmark |
+| Merge 후 | API-level performance smoke test |
+| Staging | load test, stress test |
+| Canary | real traffic latency 비교 |
+| Production | SLO, p95/p99 latency monitoring |
+
+Performance regression은 기능 regression만큼 중요할 수 있다.
+
+```text
+기능은 정상:
+  모든 test 통과
+
+하지만:
+  p99 latency 3배 증가
+  CPU 사용량 2배 증가
+  DB query time 급증
+
+결과:
+  production 사용자 경험 악화
+```
+
+Continuous Testing은 performance를 pipeline과 production monitoring 모두에서 검증해야 한다.
+
+---
+
+## Observability와 Continuous Testing
+
+Continuous Testing은 observability와 연결되어야 한다.
+
+배포 전 테스트가 모두 통과해도 production에서 문제가 생길 수 있다. 따라서 production observability는 Continuous Testing의 마지막 feedback loop다.
+
+확인할 지표는 다음과 같다.
+
+| 지표 | 의미 |
+|---|---|
+| Error rate | 요청 실패율 |
+| Latency | p50/p95/p99 응답 시간 |
+| Throughput | 요청 처리량 |
+| Saturation | CPU, memory, DB connection, queue length |
+| Business metric | 결제 성공률, 가입 완료율, 검색 성공률 |
+| Deployment event | 어떤 version이 언제 배포되었는지 |
+| SLO burn rate | reliability 목표를 얼마나 빠르게 소모하는지 |
+
+Continuous Testing은 다음 질문으로 production feedback을 해석한다.
+
+```text
+새 version 배포 후 error rate가 증가했는가?
+p99 latency가 악화되었는가?
+특정 region이나 사용자 그룹에서만 실패하는가?
+business transaction success가 감소했는가?
+SLO burn rate가 증가했는가?
+```
+
+즉, production monitoring도 넓은 의미의 Continuous Testing이다.
+
+---
+
+## Canary Analysis
+
+Canary deployment는 Continuous Testing의 대표적인 runtime 검증 방식이다.
+
+```text
+v1:
+  100% traffic
+
+v2:
+  5% traffic으로 canary 배포
+
+검증:
+  v1 vs v2 error rate 비교
+  latency 비교
+  business metric 비교
+
+정상:
+  25% -> 50% -> 100%
+
+비정상:
+  rollout 중단 또는 rollback
+```
+
+Canary analysis에서 중요한 것은 version별 metric 분리다.
+
+```text
+필요한 label:
+  app
+  version
+  namespace
+  route
+  status_code
+```
+
+Canary에서 확인할 지표는 다음과 같다.
+
+| 지표 | 목적 |
+|---|---|
+| HTTP 5xx rate | server error 증가 여부 |
+| p95/p99 latency | 지연 악화 여부 |
+| request success rate | 요청 성공률 |
+| pod restart count | crash 여부 |
+| CPU/memory usage | resource regression |
+| business transaction success | 실제 user journey 성공 여부 |
+| SLO burn rate | reliability 목표 영향 |
+
+Canary는 production traffic을 일부 사용하기 때문에 강력하지만, blast radius를 제한해야 한다.
+
+---
+
+## Test Ownership
+
+Continuous Testing은 QA 팀만의 일이 아니다.
+
+| 역할 | 책임 |
+|---|---|
+| Developer | unit test, component test, testability 개선 |
+| QA / Test Engineer | test strategy, exploratory testing, E2E 설계 |
+| DevOps Engineer | pipeline test automation, environment 구성 |
+| SRE | production validation, SLO, canary metric, observability |
+| Security Engineer | security test, policy, vulnerability triage |
+| Product Owner | critical user journey 정의 |
+
+이 구조에서 QA의 역할은 사라지지 않는다. 오히려 반복 수동 테스트에서 벗어나 더 전략적인 역할을 하게 된다.
+
+```text
+QA의 변화:
+  수동 regression 실행자
+    -> test strategy designer
+    -> risk analyst
+    -> exploratory tester
+    -> quality coach
+```
+
+Continuous Testing은 품질 책임을 팀 전체로 확장한다.
+
+---
+
+## Kubernetes 환경에서 Continuous Testing 적용
+
+Kubernetes 기반 application에서는 Continuous Testing이 여러 계층에 적용될 수 있다.
+
+| 계층 | 테스트/검증 |
+|---|---|
+| Application code | unit, integration, contract test |
+| Container image | build test, vulnerability scan, startup test |
+| Kubernetes manifest | schema validation, policy check, Helm lint |
+| Deployment | readiness/liveness/startupProbe 검증 |
+| Network | service discovery, ingress routing, DNS, TLS |
+| Storage | PVC mount, migration, backup/restore test |
+| Runtime | canary, SLO, synthetic monitoring |
+| Security | RBAC, NetworkPolicy, Pod Security, secret handling |
+
+CI에서 다음을 수행할 수 있다.
+
+```bash
+npm test
+docker build -t my-app:${GIT_SHA} .
+helm lint ./chart
+helm template my-app ./chart
+kubectl apply --dry-run=client -f k8s/
+```
+
+Staging에서는 다음을 수행할 수 있다.
+
+```text
+staging namespace deploy
+  -> readinessProbe 통과 확인
+  -> smoke test
+  -> API contract test
+  -> E2E test
+  -> metrics baseline 확인
+```
+
+Production에서는 다음을 수행한다.
+
+```text
+canary rollout
+  -> error rate 확인
+  -> latency 확인
+  -> SLO burn rate 확인
+  -> 이상 시 rollback
+```
+
+Kubernetes에서는 manifest 자체도 테스트 대상이다. Application code가 정상이어도 `readinessProbe`, `resources`, `Service`, `Ingress`, `Secret`, `ConfigMap` 설정이 잘못되면 production 장애가 발생할 수 있다.
+
+---
+
+## 미래 테스트 방향
+
+Continuous Testing의 미래 방향은 대체로 다음과 같이 볼 수 있다.
+
+| 방향 | 설명 |
+|---|---|
+| Smart test selection | 변경 영향 범위에 따라 필요한 test만 선택 |
+| Test impact analysis | 어떤 code change가 어떤 test에 영향을 주는지 분석 |
+| AI-assisted test generation | code나 user flow 기반 test 생성 보조 |
+| Flaky test detection | 불안정 test 자동 탐지 |
+| Self-healing test | UI 변경에 따른 test locator 자동 보정 |
+| Risk-based pipeline | 변경 위험도에 따라 test depth 조정 |
+| Production feedback 기반 test 보강 | 실제 장애를 test case로 환류 |
+
+주의할 점은 AI가 테스트 전략을 대체하는 것이 아니라 보조한다는 것이다. 좋은 테스트를 만들려면 여전히 system understanding, user journey 이해, risk 판단, observability 설계가 필요하다.
+
+---
+
+## 자칫 실수하기 쉬운 부분
+
+### 테스트를 많이 추가하면 된다고 생각하는 경우
+
+테스트 수가 많다고 품질이 자동으로 좋아지는 것은 아니다. 중요한 것은 risk를 잘 줄이는 테스트를 적절한 위치에 배치하는 것이다.
+
+### 모든 테스트를 PR 단계에 넣는 경우
+
+모든 테스트를 PR마다 실행하면 pipeline이 너무 느려질 수 있다. 빠른 test와 느린 test를 나누고, 위험도 기반으로 실행 범위를 조정해야 한다.
+
+### Flaky test를 방치하는 경우
+
+Flaky test가 많으면 pipeline 결과를 신뢰할 수 없다. 이는 test reliability 문제로 관리해야 한다.
+
+### Manual QA를 완전히 없애려는 경우
+
+Continuous Testing은 사람의 테스트를 없애는 것이 아니다. 반복 가능한 테스트를 자동화하고, QA가 exploratory testing과 risk analysis에 집중할 수 있게 하는 것이다.
+
+### Production feedback을 테스트로 환류하지 않는 경우
+
+장애가 발생했는데 해당 failure mode를 regression test나 monitoring rule로 추가하지 않으면 같은 문제가 반복될 수 있다.
+
+### 테스트 환경을 관리하지 않는 경우
+
+환경 차이가 크면 test 결과를 신뢰하기 어렵다. IaC, container, ephemeral environment로 테스트 환경을 재현 가능하게 만들어야 한다.
+
+---
+
+## 실무 검증 포인트
+
+Continuous Testing을 운영할 때는 다음 질문을 확인해야 한다.
+
+| 검증 포인트 | 확인 질문 |
+|---|---|
+| Test placement | 테스트가 SDLC의 적절한 단계에 배치되어 있는가? |
+| Feedback speed | 개발자가 context를 잃기 전에 결과를 받는가? |
+| Test reliability | flaky test 비율이 낮고 결과를 신뢰할 수 있는가? |
+| Risk coverage | 중요한 user journey와 high-risk change를 검증하는가? |
+| Automation level | 반복 테스트가 자동화되어 있는가? |
+| Manual testing role | QA가 반복 검증보다 탐색적/전략적 테스트에 집중하는가? |
+| Environment parity | CI/staging/production 환경 차이가 관리되는가? |
+| Test data | test data가 안정적이고 안전하게 관리되는가? |
+| Security testing | SAST, SCA, image scan, IaC scan이 포함되는가? |
+| Performance testing | latency와 resource regression을 감지하는가? |
+| Runtime validation | canary, synthetic monitoring, SLO monitoring이 있는가? |
+| Feedback loop | production 장애가 test case와 monitoring rule로 환류되는가? |
+
+---
+
+## 정리
+
+Continuous Testing은 SDLC의 여러 단계에 자동화된 테스트와 feedback을 배치하여, 결함을 조기에 발견하고 CI/CD pipeline이 빠르면서도 신뢰 가능하게 작동하도록 만드는 DevOps practice다.
+
+핵심은 다음과 같다.
+
+- Continuous Testing은 테스트를 마지막에 몰아서 하는 방식이 아니다.
+- 중요한 것은 테스트 수가 아니라 적절한 테스트를 적절한 시점에 배치하는 것이다.
+- Test pyramid는 unit, integration, E2E test의 비율을 설계하는 기본 mental model이다.
+- Shift left는 결함을 개발 초기에 발견하게 해준다.
+- Shift right는 production feedback을 통해 실제 사용자 영향을 검증한다.
+- Continuous Testing은 Continuous Delivery와 Continuous Deployment의 안전장치다.
+- Test data와 test environment는 테스트 신뢰도의 핵심이다.
+- Flaky test는 pipeline reliability 문제로 관리해야 한다.
+- Security, performance, observability도 Continuous Testing의 일부다.
+- Kubernetes 환경에서는 application code뿐 아니라 image, manifest, deployment, runtime metric까지 테스트 대상이다.
+
+짧게 말하면 다음과 같다.
+
+```text
+Continuous Testing:
+  테스트를 마지막에 몰아서 하는 것이 아니라
+  개발부터 운영까지 계속 feedback을 받는 방식
+```
+
+운영 관점에서는 다음처럼 정리할 수 있다.
+
+```text
+CI/CD가 빠르게 software를 흘려보내는 pipeline이라면,
+Continuous Testing은 그 pipeline의 각 지점에서
+다음 단계로 넘어가도 되는지 판단하는 quality signal이다.
+```
