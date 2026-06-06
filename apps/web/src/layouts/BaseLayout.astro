@@ -24,6 +24,9 @@ const ogImage = new URL(withBase(image), Astro.site ?? "http://localhost:4321");
     <meta name="description" content={description} />
     <meta name="theme-color" content="#08090d" />
     <link rel="canonical" href={canonical} />
+    <link rel="icon" type="image/png" sizes="32x32" href={withBase("/favicon-32x32.png")} />
+    <link rel="icon" type="image/png" sizes="192x192" href={withBase("/favicon-192x192.png")} />
+    <link rel="apple-touch-icon" sizes="180x180" href={withBase("/apple-touch-icon.png")} />
     <title>{pageTitle}</title>
     <meta property="og:title" content={pageTitle} />
     <meta property="og:description" content={description} />
@@ -41,7 +44,7 @@ const ogImage = new URL(withBase(image), Astro.site ?? "http://localhost:4321");
     <div class="mx-auto flex min-h-screen w-full max-w-6xl flex-col px-5 sm:px-8">
       <header class="border-b border-white/10 py-3">
         <nav class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between" aria-label="Primary navigation">
-          <a href={withBase("/")} class="font-mono text-sm font-semibold text-white">peto.lab/notes</a>
+          <a href={withBase("/")} class="font-mono text-sm font-semibold text-white">Jihwan Park</a>
           <div class="-mx-5 flex gap-4 overflow-x-auto px-5 pb-1 text-sm text-slate-300 md:mx-0 md:px-0">
             {siteConfig.nav.map((item) => <a class="transition hover:text-white" href={withBase(item.href)}>{item.label}</a>)}
           </div>
@@ -52,9 +55,10 @@ const ogImage = new URL(withBase(image), Astro.site ?? "http://localhost:4321");
       </main>
       <footer class="border-t border-white/10 py-8 text-sm text-slate-400">
         <div class="flex flex-col justify-between gap-4 md:flex-row">
-          <p>Personal engineering and research notes, kept in Git and built as a static Astro site.</p>
+          <p>Engineering notes and project records, kept in Git and built as a static Astro site.</p>
           <div class="flex gap-4">
             <a href={siteConfig.githubUrl}>GitHub</a>
+            <a href={withBase("/archive")}>Archive</a>
             <a href={withBase("/rss.xml")}>RSS</a>
             <a href={withBase("/admin/")}>CMS</a>
           </div>

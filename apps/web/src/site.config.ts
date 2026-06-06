@@ -1,8 +1,8 @@
 export const siteConfig = {
-  title: "Peto Lab Notes",
+  title: "Jihwan Park",
   description:
-    "A Git-based technical archive for engineering notes, systems work, DevOps logs, paper reviews, and long-term implementation records.",
-  author: "Peto",
+    "A Git-based engineering notebook for systems work, DevOps notes, software study, paper reviews, and long-term implementation records.",
+  author: "Jihwan Park",
   ogImage: "/og-default.svg",
   githubUrl: "https://github.com/Petooooo/Petooooo.github.io",
   resumeUrl: "/about",
@@ -12,8 +12,6 @@ export const siteConfig = {
     { label: "Research", href: "/research" },
     { label: "DevOps", href: "/devops" },
     { label: "Notes", href: "/notes" },
-    { label: "Paper Reviews", href: "/paper-reviews" },
-    { label: "Archive", href: "/archive" },
-    { label: "CV", href: "/about#cv" }
+    { label: "Paper Reviews", href: "/paper-reviews" }
   ]
 };

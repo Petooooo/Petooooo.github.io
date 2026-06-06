@@ -2,7 +2,6 @@
 import { getCollection } from "astro:content";
 import BaseLayout from "@/layouts/BaseLayout.astro";
 import ContentCard from "@/components/ContentCard.astro";
-import ProjectCard from "@/components/ProjectCard.astro";
 import SectionHeader from "@/components/SectionHeader.astro";
 import { siteConfig } from "@/site.config";
 import { byDateDesc, getCollectionUrl, isPublishedEntry } from "@/lib/content";
@@ -13,65 +12,45 @@ const notes = (await getCollection("notes")).filter(isPublishedEntry);
 const devops = (await getCollection("devops")).filter(isPublishedEntry);
 const research = (await getCollection("research")).filter(isPublishedEntry);
 const paperReviews = (await getCollection("paper-reviews")).filter(isPublishedEntry);
-const archive = (await getCollection("archive")).filter(isPublishedEntry);
 const posts = [
   ...notes,
   ...devops,
   ...research,
-  ...paperReviews,
-  ...archive
+  ...paperReviews
 ]
   .filter(isPublishedEntry)
   .sort(byDateDesc);
-const featuredProjects = projects.filter((p) => p.data.featured).slice(0, 3);
 const recentPosts = posts.slice(0, 4);
 const sections = [
-  { title: "Projects", description: "Larger implementations, engineering tooling, deployment systems, and architecture logs.", href: "/projects", count: projects.length },
-  { title: "Research", description: "Systems, AI infrastructure, algorithms, embedded work, and performance-oriented research notes.", href: "/research", count: research.length },
-  { title: "DevOps", description: "Infrastructure operations, troubleshooting, CI/CD, Docker, networking, GitOps, and recovery notes.", href: "/devops", count: devops.length },
-  { title: "Notes", description: "Study notes for networks, OS, algorithms, digital logic, implementation techniques, and problem solving.", href: "/notes", count: notes.length },
-  { title: "Paper Reviews", description: "Concise reviews of technical papers with implementation details and practical observations.", href: "/paper-reviews", count: paperReviews.length },
-  { title: "Archive", description: "Temporary notes, experiments, migrated material, and older archive entries.", href: "/archive", count: archive.length }
+  { title: "Notes", description: "Study notes for algorithms, networks, operating systems, databases, digital logic, and implementation details.", href: "/notes", count: notes.length },
+  { title: "DevOps", description: "Operations notes, deployment records, troubleshooting logs, CI/CD decisions, and infrastructure recovery notes.", href: "/devops", count: devops.length },
+  { title: "Projects", description: "Larger implementations and project-level writeups with goals, architecture, tradeoffs, and progress logs.", href: "/projects", count: projects.length },
+  { title: "Research", description: "Computer science and electronic engineering notes around systems, AI infrastructure, architecture, and performance.", href: "/research", count: research.length },
+  { title: "Paper Reviews", description: "Technical paper reading notes focused on core ideas, implementation details, limitations, and references.", href: "/paper-reviews", count: paperReviews.length }
 ];
 ---
 
 <BaseLayout>
-  <section class="grid gap-8 border-b border-white/10 py-10 md:grid-cols-[1fr_0.75fr] md:py-14">
+  <section class="border-b border-white/10 py-10 md:py-14">
     <div>
-      <p class="font-mono text-xs uppercase tracking-[0.2em] text-slate-500">Technical archive / engineering notebook</p>
+      <p class="font-mono text-xs uppercase tracking-[0.2em] text-slate-500">Jihwan Park / engineering notebook</p>
       <h1 class="mt-4 max-w-3xl text-3xl font-semibold leading-tight text-white md:text-5xl">
-        Systems notes, implementation records, and research logs.
+        Technical notes, project records, and operations logs.
       </h1>
       <p class="mt-5 max-w-2xl text-base leading-8 text-slate-300">
-        A static, Git-backed notebook for projects, DevOps runbooks, study notes, paper reviews, and engineering observations accumulated over time.
+        A static, Git-backed notebook for software engineering study, infrastructure work, systems experiments, and paper reviews.
       </p>
       <div class="mt-7 flex flex-wrap gap-3">
         <a class="border border-white/20 px-3 py-2 text-sm text-white hover:border-signal hover:text-signal" href={withBase("/notes")}>Notes</a>
         <a class="border border-white/20 px-3 py-2 text-sm text-white hover:border-signal hover:text-signal" href={withBase("/devops")}>DevOps</a>
-        <a class="border border-white/20 px-3 py-2 text-sm text-white hover:border-signal hover:text-signal" href={withBase("/paper-reviews")}>Paper Reviews</a>
+        <a class="border border-white/20 px-3 py-2 text-sm text-white hover:border-signal hover:text-signal" href={withBase("/projects")}>Projects</a>
         <a class="border border-white/20 px-3 py-2 text-sm text-white hover:border-signal hover:text-signal" href={siteConfig.githubUrl}>GitHub</a>
       </div>
     </div>
-    <aside class="border-l border-white/10 pl-5">
-      <p class="font-mono text-xs uppercase tracking-[0.18em] text-slate-500">Repository workflow</p>
-      <dl class="mt-5 grid gap-4">
-        {[
-          ["Input", "raw notes, logs, study fragments"],
-          ["Format", "Markdown and MDX content collections"],
-          ["Review", "editor review, Decap CMS, Git diff"],
-          ["Deploy", "GitHub Pages; optional RP4 path"]
-        ].map(([label, value]) => (
-          <div>
-            <dt class="font-mono text-xs uppercase tracking-[0.16em] text-slate-500">{label}</dt>
-            <dd class="mt-1 text-sm leading-6 text-slate-200">{value}</dd>
-          </div>
-        ))}
-      </dl>
-    </aside>
   </section>
 
   <section class="py-10 md:py-12">
-    <SectionHeader eyebrow="Index" title="Archive Map" description="The site is organized by durable use: implementation records, operations notes, study material, research work, paper reviews, and unfinished archive material." />
+    <SectionHeader eyebrow="Index" title="Technical Index" description="The public sections are organized by the kind of work each entry records." />
     <div class="grid gap-3 md:grid-cols-2">
       {sections.map((section) => (
         <a class="grid grid-cols-[1fr_auto] gap-4 border-b border-white/10 py-4 hover:border-signal/60" href={withBase(section.href)}>
@@ -86,35 +65,9 @@ const sections = [
   </section>
 
   <section class="py-10 md:py-12">
-    <SectionHeader eyebrow="Project Records" title="Larger Work" description="Longer-running implementation work with goals, architecture, tradeoffs, troubleshooting, and future plans." />
-    <div class="grid gap-4 md:grid-cols-2">
-      {featuredProjects.map((project) => <ProjectCard project={project} />)}
-    </div>
-  </section>
-
-  <section class="py-10 md:py-12">
-    <SectionHeader eyebrow="Recent Entries" title="Notebook Feed" description="Recent published entries across notes, DevOps, research, paper reviews, and archive material." />
+    <SectionHeader eyebrow="Recent" title="Recent Entries" description="Latest published notes from the main technical sections." />
     <div class="grid gap-4 md:grid-cols-2">
       {recentPosts.map((entry) => <ContentCard entry={entry} href={getCollectionUrl(entry)} label={entry.collection} />)}
-    </div>
-  </section>
-
-  <section class="border-t border-white/10 py-10 md:py-12">
-    <SectionHeader eyebrow="Scope" title="What Belongs Here" description="The archive favors concrete technical material over status updates or polished personal branding." />
-    <div class="grid gap-3 md:grid-cols-3">
-      {[
-        ["Projects", "goals, architecture, implementation logs, troubleshooting, tradeoffs, progress, future plans"],
-        ["Notes", "cloud, digital logic, system software, networks, OS, algorithms, coding tests, Baekjoon strategies"],
-        ["DevOps", "Kubernetes, CoreDNS, Nexus, Docker, CI/CD, RP4 deploys, bootstrap issues, monitoring, recovery"],
-        ["Research", "systems, AI infrastructure, distributed systems, networking, architecture, embedded, performance, algorithms"],
-        ["Paper Reviews", "summary, core idea, implementation details, limitations, references, related work"],
-        ["Archive", "temporary notes, experiments, migrated material, and older archive entries"]
-      ].map(([title, description]) => (
-        <div class="border-b border-white/10 py-4">
-          <h3 class="font-mono text-xs uppercase tracking-[0.16em] text-slate-500">{title}</h3>
-          <p class="mt-2 text-sm leading-6 text-slate-300">{description}</p>
-        </div>
-      ))}
     </div>
   </section>
 </BaseLayout>
