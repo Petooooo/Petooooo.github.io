@@ -17,7 +17,6 @@ git bundle create "$DEST/repository.bundle" --all
 echo "Copying deployment and content files..."
 mkdir -p "$DEST/files"
 cp -R apps/web/src/content "$DEST/files/content"
-cp -R apps/web/public/admin "$DEST/files/admin"
 cp -R infra "$DEST/files/infra"
 cp docker-compose.yml Dockerfile .env.example "$DEST/files/"
 
@@ -35,4 +34,4 @@ fi
 tar -czf "$BACKUP_DIR/portfolio-platform-$STAMP.tar.gz" -C "$BACKUP_DIR" "$STAMP"
 
 echo "Backup written to $BACKUP_DIR/portfolio-platform-$STAMP.tar.gz"
-echo "Contents: Git bundle, content, admin config, infra, Docker files, redacted env, and recent container diagnostics when available."
+echo "Contents: Git bundle, content, infra, Docker files, redacted env, and recent container diagnostics when available."

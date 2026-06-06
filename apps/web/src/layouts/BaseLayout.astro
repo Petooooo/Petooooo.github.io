@@ -45,7 +45,7 @@ const ogImage = new URL(withBase(image), Astro.site ?? "http://localhost:4321");
       <header class="border-b border-white/10 py-3">
         <nav class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between" aria-label="Primary navigation">
           <a href={withBase("/")} class="inline-flex items-center gap-2 font-mono text-sm font-semibold text-white">
-            <img src={withBase("/brand-mark.png")} alt="" width="96" height="89" class="h-7 w-auto shrink-0" />
+            <img src={withBase("/brand-mark.png")} alt="" width="96" height="89" class="h-[1.4rem] w-auto shrink-0" />
             <span>Jihwan Park</span>
           </a>
           <div class="-mx-5 flex gap-4 overflow-x-auto px-5 pb-1 text-sm text-slate-300 md:mx-0 md:px-0">
@@ -63,7 +63,6 @@ const ogImage = new URL(withBase(image), Astro.site ?? "http://localhost:4321");
             <a href={siteConfig.githubUrl}>GitHub</a>
             <a href={withBase("/archive")}>Archive</a>
             <a href={withBase("/rss.xml")}>RSS</a>
-            <a href={withBase("/admin/")}>CMS</a>
           </div>
         </div>
       </footer>

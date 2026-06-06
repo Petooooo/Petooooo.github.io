@@ -27,7 +27,7 @@ Research automation is limited to computer science, electrical/electronic engine
 3. The source is classified by collection, content type, tags, and sensitivity.
 4. A draft MDX file is written into `apps/web/src/content`.
 5. The draft keeps `draft: true`, `reviewed: false`, and `reviewStatus: "needs-review"`.
-6. A human reviews in Decap CMS or an editor.
+6. A human reviews in Workbench, an editor, or a pull request.
 7. Reviewed content is committed and pushed.
 8. GitHub Pages deploys the public site. Optional RP4 deployment remains documented separately.
 

@@ -4,7 +4,7 @@ This file is the authoritative operational manual for future Codex sessions work
 
 ## Project Goal
 
-Build and maintain a personal engineering and research lab notebook: projects, technical notes, research archive, DevOps journal, manual CMS, and automation-ready draft archive.
+Build and maintain a personal engineering and research lab notebook: projects, technical notes, research archive, DevOps journal, Workbench/MDX writing workflow, and automation-ready draft archive.
 
 The platform should demonstrate real ownership of modern web engineering, deployment, operations, and automation on a Raspberry Pi 4 server.
 
@@ -25,7 +25,6 @@ Do not optimize only for a short-lived demo. Maintainability, clear architecture
 - Astro with TypeScript
 - Tailwind CSS
 - MDX and Astro content collections
-- Decap CMS under `/admin`
 - Docker Compose
 - Caddy
 - GitHub as source of truth
@@ -35,7 +34,6 @@ Do not optimize only for a short-lived demo. Maintainability, clear architecture
 
 - `apps/web`: Astro application.
 - `apps/web/src/content`: Markdown and MDX collections.
-- `apps/web/public/admin`: Decap CMS admin.
 - `infra/caddy`: Caddy configuration.
 - `infra/scripts`: RP4 deploy and backup scripts.
 - `automation`: n8n notes, prompt templates, and draft-generation scripts.
@@ -66,7 +64,7 @@ GitHub is the source of truth. Code, content, generated drafts, infrastructure f
 
 The static-first architecture is intentional. It lowers operational risk, improves performance, reduces memory usage, and makes the platform practical to host on a Raspberry Pi 4.
 
-Decap CMS exists as a manual editing interface over the Git content model. It should not replace Git or introduce hidden content storage.
+Workbench and local editors are the manual writing surface over the Git content model. Do not reintroduce a web CMS unless the owner explicitly asks for it.
 
 Docker Compose is used for repeatable deployment on the RP4 without requiring a complex orchestrator.
 
@@ -139,7 +137,7 @@ UI anti-patterns:
 - Use reusable components for cards, section headers, lists, tags, and repeated UI patterns.
 - Treat content collections as the source of truth for projects and posts.
 - Keep typed schemas in `apps/web/src/content/config.ts`.
-- Add fields to schemas deliberately and keep Decap CMS config aligned with schema changes.
+- Add fields to schemas deliberately and keep documentation and automation templates aligned with schema changes.
 - Organize pages by route under `apps/web/src/pages`.
 - Keep dynamic routes simple and collection-driven.
 - Filter out `draft: true` content from public routes.
@@ -223,7 +221,7 @@ Future workflow:
 2. Summarize and classify source material using AI.
 3. Generate MDX drafts with safe frontmatter.
 4. Commit drafts to GitHub.
-5. Review through Decap CMS, editor, or pull request.
+5. Review through Workbench, an editor, or pull request.
 6. Publish only after human approval.
 
 n8n is the likely orchestration layer for triggers, scheduled jobs, webhooks, GitHub operations, and AI calls.
@@ -295,7 +293,6 @@ ipTIME DDNS assumptions:
 - Do not publish private IPs, hostnames, access tokens, SSH details, logs with personal data, or internal network diagrams unless explicitly approved.
 - Keep `.env` out of Git.
 - Document required variables in `.env.example`.
-- Treat Decap CMS authentication and GitHub OAuth configuration as production security concerns.
 
 ## Performance Rules
 
@@ -318,7 +315,7 @@ README and docs must always explain:
 - RP4 deployment.
 - Docker deployment.
 - Caddy configuration.
-- Decap CMS setup.
+- Workbench/local MDX writing workflow.
 - GitHub workflow.
 - Automation plans.
 - Backup strategy.
@@ -367,7 +364,7 @@ A task is only complete when:
 - Deployment impact is explained.
 - RP4 compatibility is preserved.
 - Documentation is updated if necessary.
-- Content schema and Decap CMS config remain aligned when content fields change.
+- Content schema, docs, and automation templates remain aligned when content fields change.
 - Draft and auto-generated content rules are preserved.
 - No secrets or private infrastructure details are introduced.
 

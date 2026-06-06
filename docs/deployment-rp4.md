@@ -122,7 +122,7 @@ cd ~/Petooooo.github.io
 ./infra/scripts/backup.sh
 ```
 
-The backup script writes a timestamped tarball under `$HOME/backups/portfolio-platform` by default. It includes a Git bundle, content files, Decap admin config, infrastructure files, Docker files, a redacted copy of `.env` when present, and recent container diagnostics when the service is running.
+The backup script writes a timestamped tarball under `$HOME/backups/portfolio-platform` by default. It includes a Git bundle, content files, infrastructure files, Docker files, a redacted copy of `.env` when present, and recent container diagnostics when the service is running.
 
 ## Failed Deployment Recovery
 

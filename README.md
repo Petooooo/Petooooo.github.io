@@ -9,14 +9,14 @@ The site is intentionally simple: write in Markdown or MDX, review changes in Gi
 - A public technical notebook and archive.
 - A place for engineering notes, implementation records, infrastructure writeups, and study material.
 - A static-first site built with Astro content collections.
-- A Git-backed writing workflow with optional Decap CMS editing under `/admin`.
+- A Git-backed writing workflow built around local editing, Workbench notes, and reviewed MDX commits.
 - A deployable site that can run on GitHub Pages or, optionally, behind Caddy on a Raspberry Pi 4.
 
 This repository is not the private Workbench itself. Some writing and experiments may start in a local Workbench or RP4 setup, but the material that lands here is the reviewed, public-facing MDX content and the site code that presents it.
 
 ## Structure
 
-- `apps/web`: Astro app, Tailwind CSS, MDX content collections, layouts, components, and Decap CMS admin files.
+- `apps/web`: Astro app, Tailwind CSS, MDX content collections, layouts, and components.
 - `apps/web/src/content`: public content collections.
 - `docs`: architecture, deployment, content workflow, and troubleshooting notes.
 - `infra`: optional Docker, Caddy, deploy, and backup scripts for RP4/self-hosted operation.
@@ -90,21 +90,11 @@ Set `SITE_URL`, `SITE_DOMAIN`, and `CADDY_EMAIL` before production-style RP4 bui
 
 See `docs/deployment-rp4.md` for the longer runbook.
 
-## Decap CMS
-
-The admin interface lives at `/admin` and edits the same Git-backed MDX files. It is a convenience layer, not a separate content store.
-
-Before production use, review `apps/web/public/admin/config.yml` and configure the GitHub OAuth backend for Decap CMS. Local CMS editing can use Decap's local backend:
-
-```bash
-npx decap-server
-```
-
 ## Writing Workflow
 
 The normal flow is:
 
-1. Write or collect notes locally.
+1. Write or collect notes locally, often through Workbench or a local editor.
 2. Convert useful material into MDX under `apps/web/src/content`.
 3. Keep unfinished material as `draft: true`.
 4. Review the diff.
@@ -116,7 +106,7 @@ The `automation` directory is for helper scripts and draft organization. It shou
 
 ## Backups
 
-GitHub is the primary backup. The optional RP4 script `infra/scripts/backup.sh` can create a timestamped backup containing a Git bundle, content files, admin config, infrastructure files, Docker files, a redacted `.env`, and recent container diagnostics when available.
+GitHub is the primary backup. The optional RP4 script `infra/scripts/backup.sh` can create a timestamped backup containing a Git bundle, content files, infrastructure files, Docker files, a redacted `.env`, and recent container diagnostics when available.
 
 Recommended operational habits:
 

@@ -2,7 +2,7 @@
 
 ## Manual Writing
 
-Use `/admin` for Decap CMS or edit MDX files directly under `apps/web/src/content`.
+Write in Workbench or a local editor, then commit reviewed MDX files under `apps/web/src/content`.
 
 Raw notes and logs can be staged under `automation/raw/inbox` before conversion. Keep sensitive files out of Git; use `automation/raw/private` for local-only scratch material.
 
