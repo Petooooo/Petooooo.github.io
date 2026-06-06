@@ -90,11 +90,11 @@ const collectionLabel = collectionLabels[entry.collection] ?? entry.collection;
       )}
     </header>
     <div class="mx-auto mt-10 max-w-3xl">
-      <AreaPostIndex currentEntry={entry} entries={areaEntries} placement="mobile" />
       <AreaPostIndex currentEntry={entry} entries={areaEntries} placement="desktop" />
       <div class="prose-platform">
         <Content />
       </div>
+      <AreaPostIndex currentEntry={entry} entries={areaEntries} placement="mobile" />
     </div>
   </article>
 </BaseLayout>
