@@ -24,8 +24,8 @@ const recentPosts = posts.slice(0, 4);
 const sections = [
   { title: "Notes", description: "Concept notes for Kubernetes, cloud infrastructure, networks, databases, algorithms, OS, and implementation details.", href: "/notes", count: notes.length },
   { title: "DevOps", description: "Operational records only: runbooks, troubleshooting notes, deployment decisions, and recovery paths.", href: "/devops", count: devops.length },
-  { title: "Projects", description: "Project-level records around air-gapped platforms, stateful recovery, supply chains, and resource-constrained AI systems.", href: "/projects", count: projects.length },
-  { title: "Research", description: "Research-oriented notes for reliable systems, distributed systems, storage systems, AI infrastructure, and hardware-aware cloud systems.", href: "/research", count: research.length },
+  { title: "Projects", description: "Project-level records around restricted-network platforms, stateful recovery, artifact workflows, and resource-constrained AI systems.", href: "/projects", count: projects.length },
+  { title: "Research", description: "Research-oriented notes for reliable systems, distributed systems, storage systems, AI infrastructure, and hardware-aware systems.", href: "/research", count: research.length },
   { title: "Paper Reviews", description: "Technical paper reading notes focused on core ideas, implementation details, limitations, and references.", href: "/paper-reviews", count: paperReviews.length }
 ];
 ---
@@ -33,12 +33,12 @@ const sections = [
 <BaseLayout>
   <section class="border-b border-white/10 py-10 md:py-14">
     <div>
-      <p class="font-mono text-xs uppercase tracking-[0.2em] text-slate-500">Jihwan Park / systems-first engineering notebook</p>
+      <p class="font-mono text-xs uppercase tracking-[0.2em] text-slate-500">Jihwan Park / engineering notebook</p>
       <h1 class="mt-4 max-w-3xl text-3xl font-semibold leading-tight text-white md:text-5xl">
-        Reliable cloud-native systems for constrained environments.
+        Notes on reliable infrastructure under real constraints.
       </h1>
       <p class="mt-5 max-w-2xl text-base leading-8 text-slate-300">
-        I write about air-gapped Kubernetes/K3S platforms, stateful workload recovery, internal artifact supply chains, degraded AI serving, and resource-constrained AI systems.
+        I use this site to organize work on restricted-network platform migration, stateful service recovery, private artifact workflows, operational AI serving, and resource-constrained AI systems.
       </p>
       <div class="mt-7 flex flex-wrap gap-3">
         <a class="border border-white/20 px-3 py-2 text-sm text-white hover:border-signal hover:text-signal" href={withBase("/cv")}>CV</a>
@@ -51,12 +51,12 @@ const sections = [
   </section>
 
   <section class="py-10 md:py-12">
-    <SectionHeader eyebrow="Thread" title="Main Technical Axis" description="The notes and project records are organized around one recurring problem: making workloads run reliably when infrastructure, network, storage, GPU, memory, or hardware resources are constrained." />
+    <SectionHeader eyebrow="Thread" title="Main Technical Axis" description="The notes and project records circle around a practical question: how services and AI workloads behave when network, storage, deployment, GPU, memory, or hardware resources are constrained." />
     <div class="grid gap-4 md:grid-cols-3">
       {[
-        ["Air-Gapped Platforms", "K3S, private registry, Nexus, internal CI/CD, GitOps-style operation, service exposure, and reproducible deployment without public cloud assumptions."],
+        ["Restricted-Network Platforms", "K3S, private registry, Nexus, internal CI/CD, GitOps-style operation, service exposure, and deployment repeatability without assuming public cloud access."],
         ["Reliability And Recovery", "Stateful workload recovery, Longhorn PVC behavior, RTO/RPO thinking, bootstrap dependency paths, and practical failure modes."],
-        ["Resource-Constrained AI", "TinyML memory planning, FPGA-based CNN acceleration, full-GPU serving tradeoffs, degraded serving, and hardware-aware systems design."]
+        ["Resource-Constrained AI", "TinyML memory planning, FPGA-based CNN acceleration, full-GPU serving tradeoffs, degraded serving, and hardware-aware implementation details."]
       ].map(([title, description]) => (
         <div class="border-b border-white/10 py-4">
           <h2 class="text-base font-semibold text-white">{title}</h2>
