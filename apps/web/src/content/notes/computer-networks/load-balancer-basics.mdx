@@ -1,0 +1,677 @@
+---
+area: "Computer Networks"
+type: "concept"
+series: "Cloud Networking"
+title: "Load Balancer 기본 메커니즘"
+slug: "load-balancer-basics"
+date: "2026-06-01"
+updated: "2026-06-01"
+draft: false
+reviewed: true
+category: "Notes"
+tags: ["load-balancer", "networking", "traffic-distribution", "high-availability", "round-robin", "health-check", "l4-load-balancing", "l7-load-balancing", "cloud-native"]
+description: "Load Balancer가 필요한 이유, Round Robin과 Smart Load Balancing의 차이, L4/L7 분산 방식, health check와 session persistence까지 정리한 DevOps 네트워킹 개념 노트"
+---
+## 개요
+
+**Load Balancer**는 사용자 요청을 여러 backend server로 분산해 서비스의 성능, 가용성, 확장성을 높이는 네트워크 컴포넌트다. 단일 서버가 모든 요청을 처리하는 구조에서는 트래픽이 증가할수록 서버 자원이 포화되고, 해당 서버가 장애를 일으키면 전체 서비스가 중단된다.
+
+Load Balancer는 이러한 문제를 완화하기 위해 사용자와 application server 사이에 위치한다. 사용자는 개별 서버의 주소를 알 필요 없이 하나의 endpoint로 접속하고, Load Balancer는 내부적으로 어떤 backend server가 요청을 처리할지 결정한다.
+
+```text
+Client
+  ↓
+Load Balancer
+  ↓
+Application Server 1
+Application Server 2
+Application Server 3
+```
+
+핵심은 단순히 요청을 나누는 것이 아니다. Load Balancer는 다음과 같은 운영상의 목표와 직접 연결된다.
+
+- 트래픽 분산
+- 장애 서버 격리
+- 서비스 고가용성 확보
+- 수평 확장 구조 지원
+- backend server 변경에 대한 client 영향 최소화
+- cloud-native architecture의 stable entrypoint 제공
+
+---
+
+## Load Balancer가 필요한 이유
+
+처음에는 하나의 application server만으로도 서비스를 운영할 수 있다. 사용자의 요청은 인터넷을 거쳐 application server로 전달되고, server는 HTML, API response, image, file, database query 결과 등을 반환한다.
+
+```text
+Client
+  ↓
+Application Server
+  ↓
+Database
+```
+
+하지만 사용자가 증가하면 단일 application server는 여러 자원 측면에서 한계에 도달한다.
+
+| 병목 지점 | 설명 |
+|---|---|
+| CPU | 요청 처리, compression, encryption, business logic 처리량 한계 |
+| Memory | session, cache, request buffer, runtime heap 증가 |
+| Network bandwidth | inbound/outbound traffic 증가 |
+| Disk I/O | log write, file serving, local storage 접근 증가 |
+| Connection 수 | 동시 접속자 또는 keep-alive connection 증가 |
+| External dependency | database, cache, message queue 접근량 증가 |
+
+이때 서버 스펙을 키우는 방식은 **vertical scaling** 또는 **scale-up**이라고 한다. CPU, memory, network 성능이 더 좋은 서버로 바꾸는 방식이다.
+
+반대로 서버 대수를 늘리는 방식은 **horizontal scaling** 또는 **scale-out**이다. 대규모 서비스에서는 일반적으로 scale-out이 더 유연하다.
+
+```text
+Scale-up:
+Small Server → Bigger Server
+
+Scale-out:
+Server 1
+Server 2
+Server 3
+Server 4
+```
+
+scale-out을 하려면 반드시 해결해야 하는 질문이 있다.
+
+> 새로 들어온 요청을 여러 application server 중 어디로 보낼 것인가?
+
+이 질문에 답하는 컴포넌트가 Load Balancer다.
+
+---
+
+## Load Balancer의 기본 동작 모델
+
+Load Balancer는 client가 직접 backend server에 접속하지 않도록 중간에 위치한다. 외부에는 하나의 endpoint만 노출하고, 내부에는 여러 backend server를 둔다.
+
+```text
+Client A ─┐
+Client B ─┼─→ Load Balancer ─→ App Server 1
+Client C ─┘                  ├→ App Server 2
+                              └→ App Server 3
+```
+
+client 입장에서는 서비스 endpoint가 하나로 보인다. backend server가 추가되거나 제거되어도 client는 이를 직접 알 필요가 없다.
+
+이 구조의 장점은 다음과 같다.
+
+| 목적 | 효과 |
+|---|---|
+| 성능 향상 | 요청을 여러 server로 분산해 단일 server의 과부하를 줄인다. |
+| 가용성 향상 | 특정 server가 장애를 일으켜도 다른 server가 요청을 처리할 수 있다. |
+| 확장성 확보 | server를 추가하면 더 많은 요청을 처리할 수 있다. |
+| 운영 유연성 | server 교체, 배포, 점검 시 traffic 제어가 가능하다. |
+| 장애 격리 | unhealthy backend로 traffic을 보내지 않도록 구성할 수 있다. |
+
+---
+
+## Load Balancer가 없을 때의 문제
+
+Load Balancer 없이 단일 application server만 운영하면 구조가 단순하다는 장점은 있지만, 운영 관점에서는 여러 위험이 생긴다.
+
+### 성능 저하
+
+트래픽이 증가하면 request queue가 길어지고, response time이 늘어난다. CPU와 memory 사용률이 높아지면 garbage collection, context switching, thread pool saturation 등으로 인해 응답 지연이 더 커질 수 있다.
+
+### Single Point of Failure
+
+단일 server가 장애를 일으키면 전체 서비스가 중단된다.
+
+```text
+Client
+  ↓
+Application Server ❌
+  ↓
+Service Unavailable
+```
+
+이 구조에서는 server 하나의 장애가 곧 서비스 장애가 된다.
+
+### 확장성 제한
+
+server를 여러 대 추가하더라도 요청을 어떻게 분산할지 결정하는 계층이 없다면 실질적인 scale-out이 어렵다. 사용자가 직접 server별 endpoint를 알아야 하는 구조는 운영하기 어렵고, 장애 대응도 복잡해진다.
+
+---
+
+## Load Balancing 알고리즘
+
+Load Balancer는 요청을 어느 backend server로 보낼지 결정해야 한다. 이때 사용하는 기준이 **load balancing algorithm**이다.
+
+대표적인 방식은 다음과 같다.
+
+| 알고리즘 | 기준 | 장점 | 주의할 점 |
+|---|---|---|---|
+| Round Robin | server를 순서대로 선택 | 단순하고 예측 가능 | 요청 비용이 다르면 부하가 불균등해질 수 있음 |
+| Random Selection | server를 무작위 선택 | 구현이 단순함 | 요청 수가 적으면 편차가 커질 수 있음 |
+| Least Connections | connection 수가 적은 server 선택 | 긴 connection이 많은 서비스에 유리 | connection 수가 실제 부하를 완전히 대변하지는 않음 |
+| Least Response Time | 응답 시간이 짧은 server 선택 | 사용자 경험에 가까운 지표 사용 | metric 수집과 판단 로직이 필요함 |
+| Weighted Round Robin | server별 가중치 반영 | server 성능 차이를 반영 가능 | weight 설정이 부정확하면 불균형 발생 |
+| IP Hash | client IP를 기준으로 server 결정 | sticky session에 유리 | NAT 환경에서 특정 server로 쏠릴 수 있음 |
+
+---
+
+## Round Robin
+
+**Round Robin**은 가장 단순한 load balancing 방식 중 하나다. 요청이 들어올 때마다 backend server를 순서대로 선택한다.
+
+```text
+Request 1 → App Server 1
+Request 2 → App Server 2
+Request 3 → App Server 3
+Request 4 → App Server 1
+Request 5 → App Server 2
+Request 6 → App Server 3
+```
+
+이 방식은 server 성능이 비슷하고, 요청 처리 비용도 대체로 비슷할 때 효과적이다.
+
+### 장점
+
+- 구현이 단순하다.
+- backend server에 요청을 고르게 나눠 보낼 수 있다.
+- 별도의 복잡한 metric 수집이 필요하지 않다.
+- 작은 규모의 서비스에서 이해하고 운영하기 쉽다.
+
+### 주의할 점
+
+Round Robin은 각 요청의 실제 비용을 고려하지 않는다. 따라서 다음과 같은 상황에서는 server 간 부하가 균등하지 않을 수 있다.
+
+- 어떤 요청은 단순 정적 파일 요청이고, 어떤 요청은 복잡한 database query를 수행하는 경우
+- 어떤 사용자는 짧게 접속하고, 어떤 사용자는 긴 session을 유지하는 경우
+- 일부 server의 성능이 다른 server보다 낮은 경우
+- 특정 요청이 CPU 또는 memory를 많이 사용하는 경우
+
+예를 들어 요청 수는 균등하게 분산되더라도 실제 부하는 다음처럼 달라질 수 있다.
+
+```text
+App Server 1: 100 requests, mostly heavy queries
+App Server 2: 100 requests, mostly static files
+App Server 3: 100 requests, mixed workload
+```
+
+이 경우 request count만 보면 균등하지만, resource usage는 균등하지 않다.
+
+---
+
+## Smart Load Balancing
+
+**Smart Load Balancing**은 단순히 순서대로 요청을 보내는 것이 아니라, backend server의 현재 상태를 참고해 더 적절한 server를 선택하는 방식이다.
+
+예를 들어 Load Balancer가 backend server들의 상태를 알고 있다고 가정한다.
+
+```text
+App Server 1: CPU 85%, active connections 900
+App Server 2: CPU 60%, active connections 500
+App Server 3: CPU 20%, active connections 100
+```
+
+이때 새로운 요청은 App Server 3으로 보내는 것이 합리적이다. Round Robin이라면 순서상 App Server 1로 보낼 수도 있지만, Smart Load Balancing은 현재 부하를 고려한다.
+
+### 참고할 수 있는 지표
+
+Smart Load Balancing에서는 다음과 같은 지표를 활용할 수 있다.
+
+| 지표 | 의미 |
+|---|---|
+| CPU usage | server의 연산 부하 |
+| Memory usage | process, cache, heap 사용량 |
+| Active connections | 현재 유지 중인 connection 수 |
+| Request latency | 최근 요청의 응답 시간 |
+| Error rate | backend server의 오류 비율 |
+| Queue length | 처리 대기 중인 요청 수 |
+| Health status | server가 정상 요청 처리를 할 수 있는지 여부 |
+
+### 장점
+
+- 실제 부하에 더 가까운 판단이 가능하다.
+- 특정 server로 traffic이 몰리는 상황을 줄일 수 있다.
+- server 성능 차이를 반영할 수 있다.
+- auto scaling과 결합하기 좋다.
+
+### 주의할 점
+
+Smart Load Balancing은 단순한 Round Robin보다 운영 복잡도가 높다.
+
+- metric 수집이 필요하다.
+- health check 설계가 필요하다.
+- 어떤 지표를 기준으로 판단할지 정해야 한다.
+- metric 지연이나 오판으로 인해 잘못된 routing이 발생할 수 있다.
+- 구성 비용과 운영 비용이 증가할 수 있다.
+
+따라서 모든 상황에서 복잡한 알고리즘이 좋은 것은 아니다. workload 특성과 운영 규모에 맞는 방식을 선택해야 한다.
+
+---
+
+## Random Selection
+
+**Random Selection**은 backend server 중 하나를 무작위로 선택하는 방식이다.
+
+```text
+Request 1 → App Server 2
+Request 2 → App Server 1
+Request 3 → App Server 3
+Request 4 → App Server 3
+Request 5 → App Server 1
+```
+
+이 방식은 매우 단순하지만, traffic이 충분히 많으면 확률적으로 어느 정도 균등한 분산을 기대할 수 있다.
+
+다만 요청 수가 적거나 요청별 처리 비용 차이가 크면 특정 server에 우연히 요청이 몰릴 수 있다. 운영 환경에서는 Random Selection을 단독으로 쓰기보다, 다른 방식과 조합하거나 간단한 fallback 방식으로 고려하는 경우가 많다.
+
+---
+
+## L4 Load Balancer와 L7 Load Balancer
+
+Load Balancer는 어느 계층의 정보를 보고 traffic을 분산하는지에 따라 크게 **L4 Load Balancer**와 **L7 Load Balancer**로 나눌 수 있다.
+
+### L4 Load Balancer
+
+**L4 Load Balancer**는 transport layer 수준에서 동작한다. 주로 IP, port, protocol, TCP/UDP connection 정보를 기준으로 traffic을 분산한다.
+
+```text
+Client IP
+Client Port
+Destination IP
+Destination Port
+Protocol: TCP / UDP
+```
+
+예를 들어 다음과 같은 connection을 보고 backend server를 결정할 수 있다.
+
+```text
+TCP 203.0.113.10:51234 → 10.0.0.5:443
+```
+
+L4 Load Balancer는 HTTP path, header, cookie 같은 application-level 정보를 깊게 보지 않는다. 따라서 일반적으로 단순하고 빠르다.
+
+### L7 Load Balancer
+
+**L7 Load Balancer**는 application layer 수준에서 동작한다. HTTP/HTTPS traffic의 host, path, header, cookie, method, TLS SNI 등을 기준으로 routing할 수 있다.
+
+```text
+https://example.com/api     → api-server-pool
+https://example.com/images  → image-server-pool
+https://admin.example.com   → admin-server-pool
+```
+
+L7 Load Balancer는 단순 분산뿐 아니라 다음과 같은 기능과도 연결된다.
+
+- host 기반 routing
+- path 기반 routing
+- cookie 기반 session persistence
+- TLS termination
+- header 조작
+- redirect
+- authentication 연동
+- rate limiting
+- WAF 연동
+
+### L4와 L7 비교
+
+| 구분 | L4 Load Balancer | L7 Load Balancer |
+|---|---|---|
+| 기준 계층 | Transport layer | Application layer |
+| 주요 정보 | IP, port, protocol, connection | HTTP host, path, header, cookie |
+| 장점 | 빠르고 단순함 | 세밀한 routing 가능 |
+| 단점 | application context를 알기 어려움 | 상대적으로 복잡하고 처리 비용이 큼 |
+| 예시 용도 | TCP/UDP service 분산 | web service, API gateway, ingress routing |
+
+---
+
+## Reverse Proxy와 Load Balancer
+
+실무에서는 **Reverse Proxy**와 Load Balancer가 함께 언급되는 경우가 많다.
+
+Reverse Proxy는 client 요청을 대신 받아 backend server로 전달하는 proxy다. Load Balancer는 이 reverse proxy 동작 위에 여러 backend server 중 하나를 선택하는 기능을 포함한다고 볼 수 있다.
+
+```text
+Client
+  ↓
+Reverse Proxy / Load Balancer
+  ↓
+Backend Server Pool
+```
+
+Nginx, HAProxy, Envoy, Traefik 같은 도구는 reverse proxy이면서 load balancing 기능도 제공할 수 있다.
+
+Kubernetes 환경에서는 Ingress Controller가 L7 reverse proxy와 load balancer 역할을 함께 수행하는 경우가 많다.
+
+```text
+External Client
+  ↓
+Ingress Controller
+  ↓
+Service
+  ↓
+Pod
+```
+
+---
+
+## Health Check
+
+Load Balancer에서 중요한 기능 중 하나는 **health check**다. backend server가 여러 대 있더라도, 장애가 발생한 server에 계속 traffic을 보내면 일부 요청은 실패한다.
+
+```text
+App Server 1: healthy
+App Server 2: healthy
+App Server 3: unhealthy
+```
+
+Load Balancer는 backend server의 상태를 주기적으로 확인하고, unhealthy server를 backend pool에서 제외해야 한다.
+
+### 대표적인 health check 방식
+
+| 방식 | 설명 |
+|---|---|
+| TCP check | 특정 port가 열려 있는지 확인 |
+| HTTP check | `GET /healthz` 같은 endpoint에 요청 후 status code 확인 |
+| gRPC health check | gRPC service의 health 상태 확인 |
+| Custom check | application 특성에 맞춘 별도 검사 수행 |
+
+### 좋은 health check의 기준
+
+단순히 process가 떠 있는지만 확인하는 health check는 충분하지 않을 수 있다. application process는 살아 있지만 실제 요청 처리가 불가능한 경우가 있기 때문이다.
+
+예를 들어 다음과 같은 상황을 고려해야 한다.
+
+- database connection pool이 고장난 경우
+- dependency service에 접근할 수 없는 경우
+- disk가 full인 경우
+- thread pool이 saturation된 경우
+- application은 살아 있지만 request queue가 과도하게 긴 경우
+
+좋은 health check는 service가 실제 traffic을 처리할 수 있는지를 판단할 수 있어야 한다.
+
+> Health check가 너무 느슨하면 장애 server로 traffic이 전달되고, 너무 엄격하면 일시적 지연에도 정상 server가 pool에서 제외될 수 있다.
+
+---
+
+## Session Persistence와 Sticky Session
+
+Load Balancer가 요청을 여러 server로 분산할 때, 사용자의 session state를 어떻게 다룰지도 중요하다.
+
+application이 stateless하게 설계되어 있다면 사용자의 어떤 요청이 어느 server로 가도 문제가 없다. 하지만 session 정보를 server memory에 저장하는 구조라면 문제가 발생할 수 있다.
+
+```text
+Login request → App Server 1
+Next request  → App Server 2
+Result        → session not found
+```
+
+이 문제를 완화하는 방식이 **session persistence** 또는 **sticky session**이다. 같은 사용자의 요청을 가능하면 같은 backend server로 보내는 방식이다.
+
+### Sticky session 방식
+
+| 방식 | 설명 |
+|---|---|
+| Source IP hash | client IP를 기준으로 backend server 결정 |
+| Cookie-based persistence | Load Balancer가 cookie를 사용해 같은 backend로 routing |
+| Header-based routing | 특정 header 값을 기준으로 routing |
+| Consistent hashing | backend pool 변경 시 mapping 변화를 최소화 |
+
+### 주의할 점
+
+Sticky session은 편리하지만 부하 불균형을 만들 수 있다. 특정 사용자가 긴 session을 유지하거나, NAT 환경에서 여러 사용자가 같은 public IP를 공유하면 특정 backend에 traffic이 몰릴 수 있다.
+
+가능하면 application을 stateless하게 설계하고, session state는 외부 저장소에 분리하는 편이 운영상 유리하다.
+
+```text
+App Server 1 ─┐
+App Server 2 ─┼─→ Redis / Database / Distributed Cache
+App Server 3 ─┘
+```
+
+이 구조에서는 어떤 app server가 요청을 처리하더라도 같은 session state를 조회할 수 있다.
+
+---
+
+## Auto Scaling과 Load Balancer
+
+Load Balancer는 auto scaling 구조와 결합될 때 더 큰 의미를 가진다. server 수가 동적으로 늘어나거나 줄어드는 환경에서는 backend pool도 함께 바뀌어야 한다.
+
+일반적인 흐름은 다음과 같다.
+
+```text
+Metric 수집
+  ↓
+Scaling 판단
+  ↓
+새 instance 또는 pod 생성
+  ↓
+Load Balancer backend pool에 등록
+  ↓
+새 server로 traffic 분산
+```
+
+scale-out이 발생하면 Load Balancer는 새 server를 backend pool에 추가한다. scale-in이 발생하면 제거될 server로 새 요청을 보내지 않고, 기존 connection이 정리된 뒤 제외해야 한다.
+
+### 운영상 필요한 기능
+
+| 기능 | 설명 |
+|---|---|
+| Dynamic registration | 새 server를 자동으로 backend pool에 추가 |
+| Deregistration | 제거되는 server를 pool에서 제외 |
+| Connection draining | 기존 connection이 종료될 때까지 기다림 |
+| Readiness check | traffic을 받을 준비가 되었는지 확인 |
+| Health check | 운영 중 정상 상태인지 지속적으로 확인 |
+
+특히 container orchestration 환경에서는 pod가 계속 생성되고 삭제된다. 따라서 Load Balancer는 고정된 server 목록만 바라보는 것이 아니라, 동적으로 변하는 endpoint를 추적할 수 있어야 한다.
+
+---
+
+## Database Tier와 Load Balancing
+
+Application server는 stateless하게 설계하면 비교적 쉽게 scale-out할 수 있다. 하지만 database tier는 더 조심스럽게 다뤄야 한다.
+
+```text
+App Server 1 ─┐
+App Server 2 ─┼─→ Database
+App Server 3 ─┘
+```
+
+database에는 data consistency, transaction, replication, leader election, failover 같은 문제가 있다. application server처럼 단순히 여러 대를 두고 아무 곳에나 요청을 보내면 안 된다.
+
+예를 들어 primary-replica 구조에서는 write traffic과 read traffic을 구분해야 한다.
+
+```text
+Write traffic → DB Primary
+Read traffic  → DB Replica 1
+Read traffic  → DB Replica 2
+```
+
+잘못 구성하면 다음 문제가 발생할 수 있다.
+
+- stale read
+- replication lag
+- write conflict
+- split-brain
+- transaction inconsistency
+
+따라서 database 앞에 Load Balancer를 둘 때는 단순한 traffic 분산이 아니라, database topology와 consistency model을 고려해야 한다.
+
+---
+
+## Proxy 방식과 Direct Server Return 방식
+
+Load Balancer의 traffic 처리 방식은 구현에 따라 다를 수 있다.
+
+### Proxy 방식
+
+가장 직관적인 방식은 Load Balancer가 client와 backend server 사이의 connection을 모두 처리하는 방식이다.
+
+```text
+Client ↔ Load Balancer ↔ Backend Server
+```
+
+이 경우 request와 response가 모두 Load Balancer를 거친다.
+
+장점은 제어가 쉽다는 것이다.
+
+- TLS termination
+- HTTP routing
+- header 조작
+- retry
+- rate limiting
+- logging
+- authentication 연동
+
+단점은 모든 traffic이 Load Balancer를 지나기 때문에 Load Balancer 자체의 성능과 가용성이 중요해진다는 점이다.
+
+### Direct Server Return
+
+**Direct Server Return**은 request는 Load Balancer를 거치지만 response는 backend server가 client에게 직접 반환하는 구조다.
+
+```text
+Request:  Client → Load Balancer → Backend
+Response: Backend → Client
+```
+
+이 방식은 Load Balancer의 outbound traffic 부담을 줄일 수 있다. 하지만 VIP, ARP, routing symmetry, source/destination address 처리 등 네트워크 구성이 더 까다롭다.
+
+---
+
+## Cloud-Native Architecture에서의 의미
+
+Cloud-native 환경에서는 application instance가 고정되어 있다고 가정하지 않는다. instance 또는 pod는 언제든 생성, 삭제, 교체될 수 있다.
+
+```text
+Pod A: running
+Pod B: terminating
+Pod C: starting
+Pod D: running
+```
+
+이런 환경에서 client가 개별 instance를 직접 바라보면 운영이 어려워진다. Load Balancer는 동적으로 변하는 backend pool 앞에서 stable endpoint 역할을 한다.
+
+Cloud-native architecture에서 Load Balancer가 중요한 이유는 다음과 같다.
+
+- client는 고정 endpoint로 접속한다.
+- backend instance는 동적으로 증가하거나 감소할 수 있다.
+- 장애 instance는 traffic에서 제외할 수 있다.
+- 새 instance는 준비가 끝난 뒤 traffic을 받을 수 있다.
+- 배포, 교체, 확장이 client 영향 없이 진행될 수 있다.
+
+---
+
+## Kubernetes 관점의 해석
+
+Kubernetes에서도 Load Balancer 개념은 여러 계층에서 등장한다.
+
+| Kubernetes 요소 | Load Balancer 관점의 의미 |
+|---|---|
+| Service | 여러 Pod 앞의 stable virtual endpoint |
+| EndpointSlice | Service가 가리키는 실제 Pod endpoint 목록 |
+| kube-proxy | Service IP로 들어온 traffic을 Pod로 전달하는 dataplane 구성 |
+| Ingress Controller | HTTP/HTTPS 기반 L7 routing 수행 |
+| Readiness Probe | Pod가 traffic을 받을 준비가 되었는지 확인 |
+| Liveness Probe | Pod가 재시작되어야 하는 상태인지 확인 |
+| Horizontal Pod Autoscaler | 부하에 따라 Pod replica 수 조정 |
+| MetalLB | bare-metal 환경에서 LoadBalancer type Service에 외부 IP 제공 |
+
+예를 들어 Kubernetes Service는 여러 Pod 앞에서 stable endpoint를 제공한다.
+
+```text
+Client
+  ↓
+Service ClusterIP
+  ↓
+Pod A
+Pod B
+Pod C
+```
+
+Ingress Controller는 host/path 기반 routing을 수행한다.
+
+```text
+example.com/api   → api-service
+example.com/admin → admin-service
+```
+
+bare-metal Kubernetes 환경에서는 cloud provider의 managed load balancer가 없을 수 있다. 이때 MetalLB 같은 구성은 `Service type=LoadBalancer`에 외부 IP를 제공해 외부 traffic이 cluster로 들어올 수 있도록 한다.
+
+---
+
+## 운영 시 주의할 점
+
+Load Balancer를 도입한다고 모든 문제가 자동으로 해결되는 것은 아니다. 오히려 traffic의 중심 지점이 되기 때문에 운영 설계가 중요하다.
+
+### Load Balancer 자체의 고가용성
+
+Load Balancer가 하나뿐이면 Load Balancer 자체가 single point of failure가 될 수 있다. production 환경에서는 Load Balancer 자체도 고가용성으로 구성해야 한다.
+
+가능한 구조는 다음과 같다.
+
+- active-standby
+- active-active
+- multi-zone deployment
+- DNS failover
+- anycast
+- managed load balancing service
+
+### Health check 설계
+
+Health check endpoint는 실제 traffic 처리 가능성을 반영해야 한다. 단순히 `200 OK`를 반환하는 endpoint만으로는 부족할 수 있다.
+
+검증 포인트는 다음과 같다.
+
+- application process가 정상인지
+- database 접근이 가능한지
+- critical dependency가 살아 있는지
+- request 처리 queue가 과도하게 밀리지 않았는지
+- disk, memory, thread pool 상태가 정상인지
+
+### Connection draining
+
+배포 또는 scale-in 시 backend server를 즉시 제거하면 기존 요청이 끊길 수 있다. 따라서 제거 대상 server에는 새 요청을 보내지 않되, 기존 connection이 종료될 때까지 기다리는 connection draining이 필요하다.
+
+```text
+1. server를 backend pool에서 drain 상태로 전환
+2. 새 request 전달 중지
+3. 기존 connection 종료 대기
+4. server 제거 또는 재시작
+```
+
+### Sticky session 남용
+
+Sticky session은 stateful application을 빠르게 운영하기에는 편리하지만, 장기적으로는 부하 불균형과 장애 영향을 키울 수 있다. 가능하면 session state를 외부 저장소로 분리해 stateless application 구조로 전환하는 것이 좋다.
+
+### TLS termination 위치
+
+TLS를 어디에서 종료할지도 중요하다.
+
+```text
+TLS termination at Load Balancer:
+Client --HTTPS--> Load Balancer --HTTP/HTTPS--> Backend
+
+TLS passthrough:
+Client --HTTPS--> Load Balancer --HTTPS--> Backend
+```
+
+Load Balancer에서 TLS를 종료하면 L7 routing, certificate management, WAF 연동, header inspection이 쉬워진다. 반면 end-to-end encryption 요구사항이 강하면 backend까지 TLS를 유지해야 할 수 있다.
+
+---
+
+## 정리
+
+Load Balancer는 단일 server의 한계를 넘기 위한 traffic 분산 장치이면서, modern infrastructure에서 service availability와 scalability를 담당하는 핵심 컴포넌트다.
+
+핵심 정리는 다음과 같다.
+
+| 항목 | 정리 |
+|---|---|
+| 기본 역할 | client request를 여러 backend server로 분산 |
+| 주요 목적 | 성능 향상, 고가용성 확보, scale-out 지원 |
+| 기본 알고리즘 | Round Robin, Random Selection, Least Connections 등 |
+| 고급 방식 | backend 상태를 고려한 Smart Load Balancing |
+| 필수 기능 | health check, backend pool 관리, connection draining |
+| L4/L7 차이 | L4는 IP/port/connection 기준, L7은 HTTP context 기준 |
+| 운영 주의점 | Load Balancer 자체 HA, health check 정확도, sticky session 관리 |
+| cloud-native 의미 | 동적으로 변하는 backend 앞의 stable endpoint 제공 |
+
+Load Balancer를 이해할 때 가장 중요한 관점은 “요청을 나눈다”에서 멈추지 않는 것이다. 실제 운영에서는 health check, session state, auto scaling, database topology, TLS termination, connection draining까지 함께 고려해야 한다. 이 요소들이 맞물려야 traffic 분산이 단순한 기능을 넘어 안정적인 서비스 운영 메커니즘이 된다.

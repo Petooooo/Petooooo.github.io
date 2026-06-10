@@ -1,0 +1,940 @@
+---
+area: "Cloud Infrastructure"
+type: "concept"
+series: "DevOps Explained"
+title: "Infrastructure as Code"
+slug: "infrastructure-as-code"
+date: "2026-06-02"
+updated: "2026-06-02"
+draft: false
+reviewed: true
+category: "Notes"
+tags: ["Infrastructure as Code", "IaC", "DevOps", "Terraform", "Kubernetes", "Immutable Infrastructure", "Configuration Drift", "Policy as Code"]
+description: "Infrastructure as Code의 개념을 DevOps 운영 관점에서 정리하고, declarative/imperative, mutable/immutable, state management, drift detection, policy as code, Kubernetes 적용 방식을 설명한다."
+---
+## 개요
+
+**Infrastructure as Code**는 서버, 네트워크, storage, database, Kubernetes resource, IAM policy, security group 같은 infrastructure를 사람이 console에서 직접 클릭해 만드는 것이 아니라, code 또는 configuration file로 정의하고 자동화 도구가 실제 환경에 반영하게 하는 방식이다.
+
+핵심은 단순히 "스크립트로 서버를 만든다"가 아니다. IaC의 본질은 infrastructure 변경을 software delivery lifecycle 안으로 가져오는 것이다.
+
+```text
+수동 console 작업
+  -> code로 infrastructure 정의
+  -> Git으로 version 관리
+  -> pull request로 review
+  -> plan/diff로 변경 사항 확인
+  -> pipeline으로 apply
+  -> 실제 infrastructure 상태와 code 상태 비교
+```
+
+즉, IaC는 infrastructure를 다음처럼 다루게 만든다.
+
+| 기존 방식 | IaC 방식 |
+|---|---|
+| console에서 직접 resource 생성 | code/configuration으로 resource 정의 |
+| 작업자 기억과 문서에 의존 | Git history와 pull request로 추적 |
+| 환경마다 설정이 달라지기 쉬움 | 동일한 정의를 여러 환경에 반복 적용 |
+| 긴급 변경 후 기록 누락 가능 | 변경 사항을 code에 반영 |
+| 복구 시 수동 재구성 필요 | code와 state를 기반으로 재생성 가능 |
+
+DevOps 관점에서 IaC는 application code와 infrastructure code를 분리된 세계로 보지 않는다. 애플리케이션이 빠르게 배포되려면, 그 애플리케이션이 실행될 infrastructure도 같은 수준으로 재현 가능하고 검토 가능해야 한다.
+
+---
+
+## IaC가 필요한 이유
+
+현대적인 DevOps 환경에서는 application code만 빠르게 배포한다고 충분하지 않다. 애플리케이션은 반드시 실행 환경이 필요하다. 서버, network, database, secret, ingress, DNS, TLS, monitoring, backup policy가 함께 맞아야 정상 동작한다.
+
+예를 들어 새로운 서비스를 배포한다고 가정하자.
+
+```text
+application code:
+  Git push 완료
+  CI test 통과
+  container image build 완료
+  registry push 완료
+
+필요한 infrastructure:
+  namespace 필요
+  database 필요
+  object storage bucket 필요
+  service account 필요
+  ingress 필요
+  DNS record 필요
+  TLS certificate 필요
+  monitoring rule 필요
+```
+
+application pipeline은 자동화되어 있는데 infrastructure provisioning이 ticket 기반 수동 작업이라면 전체 delivery 속도는 결국 infrastructure에서 막힌다.
+
+```text
+개발팀:
+  서비스는 이미 준비됨
+
+운영팀:
+  database 요청 ticket 확인 필요
+  network rule 승인 필요
+  ingress 설정 필요
+  DNS 요청 처리 필요
+
+결과:
+  application delivery는 빠른데 infrastructure delivery가 병목이 됨
+```
+
+IaC가 해결하려는 문제는 다음과 같다.
+
+| 필요성 | 설명 |
+|---|---|
+| 속도 | infrastructure provisioning을 수동 ticket 처리에서 자동화된 workflow로 전환 |
+| 일관성 | dev, staging, production 환경 차이를 줄임 |
+| 추적성 | 누가, 언제, 어떤 변경을 했는지 Git history로 확인 |
+| 재현성 | 같은 code로 같은 infrastructure를 반복 생성 |
+| 복구성 | 장애나 실수 발생 시 이전 configuration으로 복원 |
+| 협업 | infrastructure 변경도 pull request와 review 대상으로 관리 |
+| 보안 | security group, IAM, network policy를 코드 수준에서 검토 |
+| 비용 관리 | 필요한 resource를 만들고, 필요 없는 resource를 제거하는 workflow 구성 |
+
+---
+
+## 수동 Infrastructure 관리의 문제
+
+수동 infrastructure 관리는 처음에는 간단해 보일 수 있다. cloud console에서 버튼 몇 번으로 VM, database, load balancer를 만들 수 있기 때문이다. 그러나 시간이 지나면 다음 문제가 누적된다.
+
+### 문서화되지 않은 변경
+
+운영 중 production 장애를 해결하기 위해 firewall rule을 하나 열었다고 하자. 긴급 조치였을 수 있지만, 이 변경이 Git에도 문서에도 남지 않으면 나중에 아무도 그 rule이 왜 존재하는지 알 수 없다.
+
+```text
+문제 상황:
+  production에서 긴급 변경 수행
+
+수동 처리:
+  console에서 직접 security group 수정
+
+결과:
+  Git history 없음
+  review 없음
+  변경 사유 불명확
+  rollback 기준 없음
+```
+
+이런 변경이 누적되면 infrastructure는 "현재는 동작하지만 왜 그런지는 모르는 상태"가 된다.
+
+### 환경 간 불일치
+
+수동 작업으로 dev, staging, production을 각각 만들면 세 환경이 완전히 같기 어렵다.
+
+| 항목 | dev | staging | production |
+|---|---|---|---|
+| DB version | 14 | 14 | 15 |
+| Redis 설정 | 기본값 | 일부 수정 | 수동 튜닝 |
+| security group | 넓게 열림 | 일부 제한 | 운영 중 긴급 rule 추가 |
+| namespace quota | 없음 | 있음 | 있음 |
+| TLS 설정 | self-signed | staging cert | production cert |
+
+이런 차이가 누적되면 staging에서는 정상인데 production에서만 장애가 발생한다. 이 상태를 **configuration drift**라고 볼 수 있다.
+
+### 변경 검토 불가능
+
+application code는 pull request로 검토하면서 infrastructure 변경은 console에서 직접 수행한다면 위험하다.
+
+Infrastructure 변경도 code review와 같은 수준으로 검토되어야 한다.
+
+```text
+검토할 질문:
+  이 security group rule이 너무 넓지 않은가?
+  이 IAM permission이 과도하지 않은가?
+  이 database가 public access로 열려 있지 않은가?
+  이 resource size가 비용을 과도하게 만들지 않는가?
+  이 변경이 production traffic에 영향을 주지 않는가?
+```
+
+IaC는 infrastructure 변경을 review 가능한 code로 만든다.
+
+---
+
+## IaC의 기본 Workflow
+
+IaC의 기본 workflow는 다음처럼 정리할 수 있다.
+
+```text
+1. Write
+   infrastructure를 HCL, YAML, JSON 등으로 정의
+
+2. Version
+   Git repository에 저장하고 변경 이력 관리
+
+3. Review
+   pull request로 변경 사항 검토
+
+4. Plan / Diff
+   실제 infrastructure에 어떤 변경이 생길지 확인
+
+5. Apply / Provision
+   automation tool이 cloud API 또는 platform API를 호출해 resource 생성/변경/삭제
+
+6. Verify
+   실제 상태, application 상태, security 상태 확인
+
+7. Operate
+   drift, cost, capacity, compliance를 지속적으로 관리
+```
+
+이 workflow는 software code와 매우 유사하다.
+
+| Software code | Infrastructure code |
+|---|---|
+| source code 작성 | infrastructure definition 작성 |
+| Git commit | Git commit |
+| pull request review | pull request review |
+| unit/integration test | validation, policy check, plan review |
+| build/deploy | provision/apply |
+| monitoring | drift detection, resource monitoring |
+| rollback | previous configuration 또는 immutable replacement |
+
+IaC의 가치는 infrastructure를 **검토 가능하고, 반복 가능하고, 추적 가능한 변경 단위**로 만드는 데 있다.
+
+---
+
+## Declarative vs Imperative
+
+IaC에서 중요한 구분 중 하나는 **declarative approach**와 **imperative approach**다.
+
+| 구분 | 핵심 질문 | 방식 |
+|---|---|---|
+| Imperative | 어떻게 만들 것인가? | step-by-step 명령을 작성 |
+| Declarative | 어떤 상태가 되어야 하는가? | desired state를 정의 |
+
+### Imperative 방식
+
+**Imperative** 방식은 "어떻게 할 것인가"를 순서대로 지시한다.
+
+```text
+1. VM을 하나 만든다.
+2. VM에 SSH 접속한다.
+3. Docker를 설치한다.
+4. application directory를 만든다.
+5. config file을 복사한다.
+6. container를 실행한다.
+7. firewall rule을 연다.
+8. load balancer target에 추가한다.
+```
+
+Shell script나 절차형 automation이 이 방식에 가깝다.
+
+```bash
+cloud-cli vm create --name app-01 --size small
+ssh app-01 "sudo apt-get update"
+ssh app-01 "sudo apt-get install -y docker.io"
+scp app.env app-01:/opt/app/.env
+ssh app-01 "docker run -d --env-file /opt/app/.env my-app:latest"
+cloud-cli firewall allow --port 8080 --target app-01
+```
+
+장점은 실행 흐름이 명확하다는 것이다. 그러나 단점도 크다.
+
+- 현재 상태를 모르면 같은 명령을 반복 실행했을 때 문제가 생길 수 있다.
+- 중간 단계에서 실패하면 partial state가 남는다.
+- 이미 존재하는 resource와 새 resource를 구분하기 어렵다.
+- 순서가 길어질수록 유지보수가 어렵다.
+- rollback을 직접 구현해야 한다.
+- dependency 처리를 사람이 신경 써야 한다.
+
+### Declarative 방식
+
+**Declarative** 방식은 "최종 상태가 무엇이어야 하는가"를 정의한다.
+
+```text
+나는 다음 상태를 원한다.
+
+- VM 3개
+- 동일한 image 사용
+- private subnet에 배치
+- load balancer 뒤에 연결
+- port 443만 외부 노출
+- autoscaling enabled
+```
+
+Kubernetes manifest는 declarative 방식의 대표적인 예다.
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: web
+  template:
+    metadata:
+      labels:
+        app: web
+    spec:
+      containers:
+        - name: web
+          image: nginx:1.27
+          ports:
+            - containerPort: 80
+```
+
+이 manifest는 "nginx container를 실행하는 pod를 3개 유지하라"는 desired state를 표현한다. 사용자는 pod를 어떤 node에 어떤 순서로 만들지 직접 지시하지 않는다. Kubernetes controller가 현재 상태와 원하는 상태를 비교하고 맞춰간다.
+
+Declarative 방식의 장점은 다음과 같다.
+
+| 장점 | 설명 |
+|---|---|
+| desired state 중심 | 최종 상태를 code로 표현 |
+| 반복 실행 가능 | 같은 정의를 반복 적용해도 같은 상태를 지향 |
+| 변경 diff 확인 | 현재 상태와 목표 상태의 차이를 확인 가능 |
+| dependency 처리 | 도구가 resource dependency를 계산 가능 |
+| drift 감지 | 실제 상태가 code와 달라졌는지 확인 가능 |
+| 협업 적합 | PR에서 상태 변경을 검토하기 쉬움 |
+
+주의할 점도 있다.
+
+- 도구의 state model을 이해해야 한다.
+- 실제 provider behavior와 desired state 사이에 차이가 있을 수 있다.
+- state file 또는 backend 관리가 중요하다.
+- 모든 변경이 완전히 declarative하게 표현되지는 않는다.
+- migration이나 data change는 별도 절차가 필요할 수 있다.
+
+---
+
+## Mutable vs Immutable Infrastructure
+
+IaC에서 또 하나 중요한 구분은 **mutable infrastructure**와 **immutable infrastructure**다.
+
+| 구분 | 의미 |
+|---|---|
+| Mutable infrastructure | 한 번 만든 resource를 계속 수정하며 사용 |
+| Immutable infrastructure | 변경이 필요하면 기존 resource를 수정하지 않고 새 resource로 교체 |
+
+### Mutable Infrastructure
+
+**Mutable infrastructure**는 한 번 만든 server나 resource를 계속 수정하면서 사용하는 방식이다.
+
+```text
+app-server-01 생성
+  -> package 설치
+  -> config 수정
+  -> security patch 적용
+  -> library upgrade
+  -> 긴급 hotfix 적용
+  -> application version 교체
+```
+
+이 방식은 전통적인 서버 운영과 비슷하다. 긴급 변경이 빠르고 기존 server를 계속 사용할 수 있다는 장점이 있다.
+
+그러나 시간이 지나며 drift가 쌓이기 쉽다.
+
+```text
+server A:
+  운영 중 수동 patch 적용
+
+server B:
+  patch 누락
+
+server C:
+  다른 config 적용
+
+결과:
+  세 서버가 같은 역할을 하지만 실제 상태가 다름
+```
+
+Mutable 방식은 특히 다음 상황에서 위험하다.
+
+- production에서 직접 SSH로 수정하는 경우
+- 변경 사항이 Git에 반영되지 않는 경우
+- 서버별 package version이 달라지는 경우
+- 긴급 조치가 나중에 원복되지 않는 경우
+- audit trail이 없는 경우
+- autoscaling으로 새 서버가 추가될 때 기존 서버와 상태가 달라지는 경우
+
+### Immutable Infrastructure
+
+**Immutable infrastructure**는 기존 resource를 직접 수정하지 않고, 변경이 필요하면 새 resource를 만들어 교체하는 방식이다.
+
+```text
+version v1:
+  image app:v1 기반 server group 실행
+
+변경 필요:
+  기존 server에 SSH 접속해서 수정하지 않음
+
+version v2:
+  image app:v2 기반 새 server group 생성
+  health check 통과 확인
+  traffic을 v2로 전환
+  v1 제거 또는 rollback 후보로 유지
+```
+
+Container와 Kubernetes 환경에서는 immutable infrastructure 개념이 자연스럽다. container image를 새로 만들고, 새 image tag로 `Deployment`를 업데이트하면 Kubernetes가 새 pod를 만들고 기존 pod를 교체한다.
+
+Immutable 방식의 장점은 다음과 같다.
+
+| 장점 | 설명 |
+|---|---|
+| drift 감소 | 실행 중인 resource를 직접 수정하지 않음 |
+| rollback 쉬움 | 이전 image 또는 이전 resource group으로 전환 가능 |
+| 추적성 향상 | 모든 변경이 새 version으로 표현됨 |
+| 재현성 향상 | 같은 artifact로 같은 환경을 만들 수 있음 |
+| 배포 안전성 | blue-green, canary, rolling update와 잘 맞음 |
+
+주의할 점도 있다.
+
+- image build와 artifact 관리가 중요해진다.
+- stateful workload는 별도 설계가 필요하다.
+- database migration은 immutable하게 처리하기 어렵다.
+- 교체 과정에서 비용이 일시적으로 증가할 수 있다.
+- 변경 단위가 크면 rollout 시간이 길어질 수 있다.
+
+---
+
+## IaC와 Kubernetes의 관계
+
+Kubernetes 자체도 declarative infrastructure management의 좋은 예다. Kubernetes에서는 사용자가 pod를 하나하나 만들고 관리하기보다, `Deployment`, `Service`, `Ingress`, `ConfigMap`, `Secret`, `PersistentVolumeClaim` 같은 resource manifest로 원하는 상태를 정의한다.
+
+```text
+Kubernetes desired state:
+  Deployment replicas = 3
+  Service exposes app
+  Ingress routes external traffic
+  ConfigMap provides configuration
+  Secret provides sensitive values
+  PVC provides storage
+```
+
+Kubernetes controller는 실제 cluster 상태를 desired state와 맞추려고 계속 reconcile한다.
+
+이 관점에서 Kubernetes YAML은 넓은 의미의 IaC에 포함될 수 있다. 다만 Kubernetes manifest는 cloud infrastructure 전체를 만드는 도구라기보다는 cluster 내부 workload와 configuration을 정의하는 데 더 가깝다.
+
+실무에서는 보통 계층을 나누어 관리한다.
+
+| 계층 | 예시 도구 | 관리 대상 |
+|---|---|---|
+| Cloud provisioning | Terraform, Pulumi, CloudFormation | VPC, subnet, IAM, cluster, database, bucket |
+| Configuration management | Ansible, Puppet, Chef | OS package, server config, application runtime |
+| Kubernetes resource | YAML, Helm, Kustomize | Deployment, Service, Ingress, ConfigMap, Secret |
+| GitOps sync | Argo CD, Flux | Git desired state와 cluster live state 동기화 |
+| Policy as Code | OPA, Kyverno, Sentinel | 보안/운영 정책 검증 |
+
+모든 것을 하나의 도구로 해결하려고 하기보다, 각 계층의 책임을 분리하는 것이 중요하다.
+
+---
+
+## IaC와 DevOps Pipeline
+
+IaC는 DevOps pipeline 안에 들어갈 때 가장 큰 효과를 낸다.
+
+Application code pipeline이 다음과 같다면:
+
+```text
+Git push
+  -> unit test
+  -> build
+  -> image push
+  -> deploy
+```
+
+Infrastructure code pipeline은 다음처럼 구성할 수 있다.
+
+```text
+IaC code push
+  -> format check
+  -> validate
+  -> security policy check
+  -> plan
+  -> review
+  -> apply
+  -> drift detection
+  -> observability 확인
+```
+
+Terraform 기준의 예시는 다음과 같다.
+
+```bash
+terraform fmt -check
+terraform validate
+terraform plan -out=tfplan
+terraform apply tfplan
+```
+
+DevOps 관점에서 중요한 것은 `apply`를 무조건 자동화하는 것이 아니다. 변경 위험도에 맞게 검토와 승인 단계를 두어야 한다.
+
+| 환경 | 권장 workflow |
+|---|---|
+| dev | plan 후 자동 apply 가능 |
+| staging | plan 결과 review 후 apply |
+| production | plan artifact 저장, approval, policy check 후 apply |
+| shared network | 별도 change window와 owner approval 필요 |
+| database | backup, migration plan, rollback strategy 확인 후 apply |
+
+Infrastructure 변경은 network, IAM, database, storage에 영향을 줄 수 있으므로 blast radius가 크다. 따라서 production IaC pipeline에는 plan review, approval, policy check, rollback strategy가 필요하다.
+
+---
+
+## Idempotency
+
+IaC에서 중요한 개념 중 하나가 **idempotency**다. Idempotency는 같은 작업을 여러 번 수행해도 최종 결과가 같아야 한다는 의미다.
+
+예를 들어 선언형 IaC에서는 다음과 같은 resource가 있을 수 있다.
+
+```hcl
+resource "example_instance" "app" {
+  name = "app-01"
+  size = "small"
+}
+```
+
+이 코드를 한 번 적용하면 `app-01`이 만들어진다. 다시 적용했을 때 이미 원하는 상태라면 아무 변경도 없어야 한다. 다시 실행할 때마다 `app-01`, `app-02`, `app-03`이 계속 만들어진다면 안정적인 IaC라고 보기 어렵다.
+
+Idempotency가 중요한 이유는 다음과 같다.
+
+| 이유 | 설명 |
+|---|---|
+| 반복 실행 안전성 | pipeline 재실행 시 불필요한 변경을 막음 |
+| 장애 복구 | 중간 실패 후 다시 실행해도 목표 상태로 수렴 가능 |
+| drift correction | 실제 상태가 달라졌을 때 code 상태로 되돌릴 수 있음 |
+| 자동화 신뢰성 | 사람이 현재 상태를 모두 기억하지 않아도 됨 |
+| 운영 예측성 | 같은 input이 같은 final state를 만든다는 믿음 제공 |
+
+---
+
+## State Management
+
+IaC를 깊게 이해하려면 **state**를 반드시 이해해야 한다. Terraform 같은 도구는 code만 보고 모든 것을 알 수 없다. 실제 cloud에 어떤 resource가 만들어졌고, 그 resource ID가 무엇이며, code의 어떤 resource block과 연결되는지를 추적해야 한다.
+
+예를 들어 다음 code가 있다고 하자.
+
+```hcl
+resource "aws_instance" "web" {
+  ami           = "ami-..."
+  instance_type = "t3.micro"
+}
+```
+
+IaC 도구는 이 resource가 실제 cloud의 어떤 resource인지 알아야 한다.
+
+```text
+Terraform state:
+  aws_instance.web
+    -> actual cloud resource ID: i-xxxxxxxx
+```
+
+State는 다음 역할을 한다.
+
+- code resource와 실제 resource를 매핑한다.
+- plan 생성 시 현재 상태와 desired state를 비교한다.
+- resource dependency를 추적한다.
+- 변경, 삭제, import 판단에 사용된다.
+- team collaboration에서 같은 infrastructure를 일관되게 관리하게 한다.
+
+State를 local file로만 관리하면 위험하다.
+
+```text
+위험한 상황:
+  A 개발자가 local state로 apply
+  B 개발자가 다른 local state로 apply
+  실제 cloud resource 상태가 꼬임
+```
+
+Team 환경에서는 remote backend, locking, access control, encryption을 고려해야 한다.
+
+| 항목 | 주의할 점 |
+|---|---|
+| state backend | local file 대신 remote backend 검토 |
+| locking | 동시에 apply되지 않도록 lock 필요 |
+| encryption | state에 민감 정보가 포함될 수 있으므로 암호화 필요 |
+| access control | state 접근 권한 최소화 |
+| backup | state 손상 시 복구 전략 필요 |
+| secret | state에 password/token이 저장될 수 있는지 확인 |
+| import | 기존 resource를 IaC state로 가져올 때 신중히 처리 |
+| drift | console 수동 변경과 state 불일치 감지 필요 |
+
+IaC 초보자가 가장 자주 놓치는 부분이 state다. Code는 Git에 있으니 안전하다고 생각할 수 있지만, 실제 운영에서는 state backend가 IaC의 핵심 운영 자산이다.
+
+---
+
+## Drift Detection
+
+IaC에서는 code가 desired state다. 하지만 실제 infrastructure는 언제든 code와 달라질 수 있다.
+
+예를 들어 누군가 production console에서 직접 security group을 열 수 있다. 또는 긴급 장애 대응 과정에서 수동 변경이 생길 수도 있다. 이런 상태를 **drift**라고 볼 수 있다.
+
+```text
+Git에 정의된 상태:
+  port 443만 open
+
+실제 cloud 상태:
+  port 443 open
+  port 8080도 수동으로 open
+
+결과:
+  drift 발생
+```
+
+Drift가 위험한 이유는 다음과 같다.
+
+- 보안 rule이 code review 없이 변경될 수 있다.
+- 다음 apply 때 예상치 못한 변경이 발생할 수 있다.
+- dev/staging/prod 환경이 달라진다.
+- 장애 복구 시 실제 상태를 재현하기 어렵다.
+- compliance audit에서 변경 근거를 설명하기 어렵다.
+
+Drift를 줄이려면 다음 원칙이 필요하다.
+
+```text
+1. production console 직접 변경을 제한한다.
+2. 긴급 변경도 사후에 반드시 code로 반영한다.
+3. 정기적으로 plan 또는 drift detection을 수행한다.
+4. critical resource는 policy-as-code로 보호한다.
+5. manual change가 필요한 경우 change record를 남긴다.
+```
+
+IaC의 목표는 사람이 절대 console에 들어가지 못하게 하는 것이 아니다. 목표는 **source of truth를 code로 유지하는 것**이다.
+
+---
+
+## Provisioning과 Configuration Management
+
+IaC 도구는 크게 **provisioning**과 **configuration management**로 나누어 생각할 수 있다.
+
+| 구분 | 목적 | 예시 도구 | 관리 대상 |
+|---|---|---|---|
+| Provisioning | infrastructure resource 생성/변경/삭제 | Terraform, Pulumi, CloudFormation | VPC, subnet, VM, cluster, DB, bucket |
+| Configuration Management | 이미 존재하는 system 설정 관리 | Ansible, Puppet, Chef | package, file, service, OS config |
+| Orchestration | workload scheduling과 service 운영 | Kubernetes | pod, service, deployment |
+| GitOps | Git desired state와 live state 동기화 | Argo CD, Flux | Kubernetes manifest, Helm chart |
+| Policy as Code | 정책 검증과 제한 | OPA, Kyverno, Sentinel | security, compliance, admission rule |
+
+예를 들어 Kubernetes cluster를 만드는 것은 Terraform이 담당할 수 있다. Cluster 안에 application을 배포하는 것은 Helm이나 Argo CD가 담당할 수 있다. Node 내부의 OS 설정은 Ansible이 담당할 수 있다.
+
+```text
+Terraform:
+  VPC, subnet, Kubernetes cluster, database provisioning
+
+Ansible:
+  VM package, OS setting, service configuration
+
+Helm/Kustomize:
+  Kubernetes application manifest packaging
+
+Argo CD:
+  Git과 cluster 상태 동기화
+```
+
+책임 경계를 명확히 해야 tool overlap으로 인한 충돌을 줄일 수 있다.
+
+---
+
+## IaC와 Immutable Delivery
+
+IaC는 immutable delivery와 잘 맞는다. Immutable delivery에서는 기존 resource를 직접 수정하기보다, 새 version의 resource를 만들고 traffic을 전환한다.
+
+Kubernetes에서는 다음과 같이 볼 수 있다.
+
+```text
+현재 상태:
+  Deployment image = app:v1
+  ReplicaSet v1 실행 중
+
+변경:
+  Deployment image = app:v2
+
+Kubernetes 동작:
+  ReplicaSet v2 생성
+  readinessProbe 통과한 pod부터 traffic 수신
+  기존 v1 pod 점진 종료
+```
+
+이 방식은 다음 deployment strategy와 연결된다.
+
+| 전략 | 설명 |
+|---|---|
+| Rolling update | 새 pod를 점진적으로 만들고 기존 pod를 제거 |
+| Blue-green deployment | 기존 환경과 새 환경을 분리한 뒤 traffic 전환 |
+| Canary deployment | 일부 traffic만 새 version으로 보내고 metrics 확인 |
+| Feature flag | deploy와 release를 분리 |
+
+IaC 관점에서 immutable delivery를 적용하면 다음 장점이 있다.
+
+- 변경 단위가 명확하다.
+- 이전 version으로 rollback하기 쉽다.
+- 수동 patch 누적이 줄어든다.
+- drift가 감소한다.
+- 배포 전후 차이를 추적하기 쉽다.
+
+다만 database schema migration, persistent storage, stateful service는 immutable하게 다루기 어렵다. 이런 경우에는 migration strategy, backup, compatibility, rollback 가능성을 별도로 설계해야 한다.
+
+---
+
+## IaC와 보안
+
+IaC는 보안을 자동화할 수 있게 해주지만, 잘못 사용하면 보안 사고를 code로 반복 배포할 수도 있다.
+
+보안 관점에서 IaC의 장점은 다음과 같다.
+
+| 장점 | 설명 |
+|---|---|
+| review 가능 | security group, IAM, network policy를 PR에서 검토 |
+| audit 가능 | 누가 어떤 보안 변경을 했는지 Git history로 추적 |
+| policy 적용 | policy-as-code로 위험한 설정을 차단 |
+| 일관성 | 모든 환경에 동일한 security baseline 적용 |
+| drift 감지 | 수동으로 열린 port나 과도한 permission 탐지 |
+
+주의할 점도 있다.
+
+```text
+위험:
+  secret을 IaC repository에 commit
+  state file에 password 저장
+  overly permissive IAM policy 작성
+  0.0.0.0/0 ingress rule 허용
+  public bucket 생성
+  production database deletion protection 누락
+```
+
+IaC repository에는 token, password, private key, internal hostname, internal IP 등을 직접 넣지 않아야 한다. 민감 정보는 secret manager, sealed secret, external secret, CI/CD secret store 등을 통해 관리해야 한다.
+
+또한 plan 결과와 state file에도 민감 정보가 포함될 수 있으므로 state backend 보안이 중요하다.
+
+---
+
+## Policy as Code
+
+IaC가 커지면 code review만으로 모든 위험을 잡기 어렵다. 그래서 **Policy as Code**를 함께 사용한다.
+
+Policy as Code는 infrastructure code가 조직의 보안·운영 정책을 만족하는지 자동으로 검사하는 방식이다.
+
+예를 들어 다음과 같은 정책을 둘 수 있다.
+
+```text
+- production database는 public access 금지
+- storage bucket은 public read 금지
+- security group은 0.0.0.0/0 SSH 허용 금지
+- Kubernetes container는 privileged mode 금지
+- resource에는 owner/cost-center tag 필수
+- production namespace에는 resource limits 필수
+- LoadBalancer service는 승인된 namespace에서만 허용
+```
+
+Policy as Code는 IaC pipeline의 guardrail 역할을 한다.
+
+```text
+IaC pull request
+  -> syntax validation
+  -> plan
+  -> policy check
+  -> security review
+  -> approval
+  -> apply
+```
+
+이렇게 하면 잘못된 infrastructure 변경이 production에 반영되기 전에 차단할 수 있다.
+
+---
+
+## IaC와 비용 관리
+
+IaC는 비용 관리에도 중요하다. Cloud resource는 쉽게 만들 수 있지만, 쉽게 방치되기도 한다.
+
+수동 provisioning 환경에서는 다음 문제가 자주 생긴다.
+
+```text
+테스트용 VM 생성
+  -> 사용 후 삭제 누락
+  -> 한 달 뒤 비용 청구
+
+임시 database 생성
+  -> owner 불명
+  -> backup과 storage 비용 누적
+
+LoadBalancer 생성
+  -> 사용하지 않지만 계속 과금
+```
+
+IaC를 사용하면 resource를 code로 추적할 수 있고, tag를 강제할 수 있으며, ephemeral environment를 만들고 삭제하는 workflow를 구성할 수 있다.
+
+예를 들어 pull request마다 test environment를 만들고, PR이 닫히면 삭제할 수 있다.
+
+```text
+PR opened:
+  -> ephemeral environment provisioning
+
+PR updated:
+  -> environment update
+
+PR closed:
+  -> environment destroy
+```
+
+다만 destroy 자동화는 매우 조심해야 한다. 잘못된 workspace나 잘못된 target에 destroy가 실행되면 production resource가 삭제될 수 있다.
+
+비용 자동화에는 다음 guardrail이 필요하다.
+
+- environment별 workspace 분리
+- production destroy 제한
+- deletion protection
+- approval rule
+- tag 기반 ownership
+- TTL cleanup policy
+- backup 확인
+- dry-run 또는 plan review
+
+---
+
+## Kubernetes Homelab 관점에서의 IaC
+
+개인 homelab이나 k3s 환경에서도 IaC는 유용하다. 규모가 작아도 "서버를 다시 만들 수 있는가?"라는 질문이 중요하기 때문이다.
+
+예를 들어 다음 리소스를 IaC로 관리할 수 있다.
+
+| 영역 | 관리 대상 |
+|---|---|
+| Cluster provisioning | k3s 설치, node join, kubeconfig |
+| Storage | Longhorn 설치, StorageClass, backup target |
+| Networking | Traefik, MetalLB, IngressRoute, DNS |
+| Registry | Nexus, Harbor, image registry 설정 |
+| Observability | Prometheus, Grafana, Loki, Alertmanager |
+| App deployment | Helm chart, Kustomize, Argo CD Application |
+| Security | namespace, RBAC, NetworkPolicy, Secret 관리 |
+
+개인 환경에서 IaC를 적용할 때 중요한 목표는 거창한 multi-cloud automation이 아니다. 오히려 다음 질문에 답하는 것이 중요하다.
+
+```text
+서버가 날아가도 cluster를 다시 만들 수 있는가?
+어떤 Helm chart가 어떤 values로 설치되었는가?
+Longhorn backup target은 어디에 정의되어 있는가?
+Ingress와 DNS 설정은 Git에 남아 있는가?
+NodePort나 LoadBalancer port가 문서화되어 있는가?
+Secret은 안전하게 분리되어 있는가?
+```
+
+작은 환경에서는 다음 정도부터 시작해도 충분하다.
+
+```text
+1. Kubernetes manifest와 Helm values를 Git에 저장
+2. namespace, ingress, storage 설정을 코드화
+3. Argo CD 또는 Flux로 GitOps 적용
+4. secret은 repository에 직접 넣지 않음
+5. 수동 변경이 생기면 Git에 반영
+6. cluster 재구축 절차를 README로 정리
+```
+
+---
+
+## IaC 도입 시 자칫 실수하기 쉬운 부분
+
+### Console 변경과 IaC 변경을 섞는 경우
+
+IaC를 도입했지만 production console에서 계속 직접 변경하면 source of truth가 깨진다. 긴급 변경은 있을 수 있지만, 사후에 반드시 code에 반영해야 한다.
+
+### State 관리 없이 시작하는 경우
+
+Terraform 같은 도구를 사용할 때 local state로 시작하고 team이 함께 apply하면 충돌 위험이 커진다. 처음부터 remote backend, locking, access control을 고려해야 한다.
+
+### Module을 너무 빨리 추상화하는 경우
+
+IaC code가 조금 생기자마자 복잡한 module을 만들면 오히려 유지보수가 어려워질 수 있다. 반복 패턴이 충분히 보인 뒤 module화하는 것이 안전하다.
+
+### 모든 환경을 복붙으로 관리하는 경우
+
+dev, staging, production을 directory 복붙으로 관리하면 drift가 생기기 쉽다. 공통 module과 environment-specific variables를 적절히 분리해야 한다.
+
+### Secret을 code에 넣는 경우
+
+password, token, private key를 IaC repository에 넣는 것은 위험하다. Git history에 남으면 제거도 어렵다. 반드시 secret manager 또는 CI/CD secret store를 사용해야 한다.
+
+### Plan 없이 Apply하는 경우
+
+Production에서 plan review 없이 apply하면 어떤 변경이 일어나는지 모른 채 infrastructure를 바꾸게 된다. 특히 network, IAM, database, storage 변경은 plan review가 필요하다.
+
+### IaC를 한 명만 이해하는 경우
+
+IaC는 개인 자동화 스크립트가 아니라 team workflow가 되어야 한다. PR review, naming convention, module convention, runbook, ownership을 정해야 한다.
+
+---
+
+## 운영 검증 포인트
+
+IaC를 운영할 때는 다음 항목을 확인해야 한다.
+
+| 검증 포인트 | 확인 질문 |
+|---|---|
+| Source of truth | 실제 infrastructure 기준이 Git에 있는가? |
+| Plan review | production 변경 전에 diff를 확인하는가? |
+| State backend | remote backend, locking, encryption이 구성되어 있는가? |
+| Drift detection | 수동 변경이나 provider-side 변경을 탐지하는가? |
+| Secret 관리 | token, password, private key가 repository/state/log에 노출되지 않는가? |
+| Policy check | 위험한 IAM, network, public access 설정을 자동 차단하는가? |
+| Rollback | 잘못된 변경을 되돌릴 절차가 있는가? |
+| Cost control | owner tag, TTL, cleanup policy가 있는가? |
+| Environment parity | dev/staging/prod 차이가 의도된 것인지 확인 가능한가? |
+| Ownership | 각 module과 resource의 책임자가 명확한가? |
+
+---
+
+## Mental Model
+
+IaC는 다음 mental model로 이해하면 좋다.
+
+```text
+Git:
+  원하는 infrastructure 상태를 저장하는 source of truth
+
+IaC tool:
+  code와 실제 infrastructure 상태를 비교하고 변경 계획 생성
+
+Cloud / Kubernetes API:
+  실제 resource를 생성, 변경, 삭제하는 실행 계층
+
+State:
+  code resource와 실제 resource의 mapping 정보
+
+Pipeline:
+  validate, plan, review, apply를 반복 가능하게 만드는 실행 흐름
+
+Observability:
+  변경 이후 실제 service와 infrastructure가 정상인지 확인하는 계층
+```
+
+이 mental model에서 핵심은 **source of truth**다.
+
+IaC를 한다는 것은 단순히 `terraform apply`를 실행한다는 뜻이 아니다. 인프라 변경의 기준을 console이나 사람의 기억이 아니라 Git에 둔다는 뜻이다.
+
+---
+
+## 정리
+
+Infrastructure as Code는 서버와 네트워크 같은 인프라를 수동으로 만들고 수정하는 대신, code로 원하는 상태를 정의하고 자동화 도구가 이를 실제 환경에 반영하도록 하는 방식이다.
+
+핵심은 다음과 같다.
+
+- IaC는 infrastructure를 software처럼 versioning, review, test, deploy하게 만든다.
+- 수동 인프라 관리는 문서화되지 않은 변경, 환경 불일치, configuration drift를 만들기 쉽다.
+- Declarative 방식은 desired state를 정의하고, imperative 방식은 수행 절차를 정의한다.
+- Immutable infrastructure는 기존 resource를 직접 수정하지 않고 새 version으로 교체해 drift를 줄인다.
+- Kubernetes manifest는 declarative IaC의 대표적인 예다.
+- IaC pipeline에는 format, validate, plan, policy check, review, apply, drift detection이 포함될 수 있다.
+- Idempotency는 반복 실행 시 같은 최종 상태를 보장하기 위한 핵심 속성이다.
+- State management는 IaC 운영에서 가장 중요한 자산 중 하나다.
+- Drift detection은 code와 실제 infrastructure 사이의 차이를 찾고 source of truth를 유지하는 과정이다.
+- Policy as Code는 위험한 infrastructure 변경을 production 전에 차단하는 guardrail이다.
+- Secret, token, internal IP, private hostname은 IaC repository와 state, log에 노출되지 않도록 관리해야 한다.
+
+짧게 말하면 다음과 같다.
+
+```text
+IaC는 infrastructure를 클릭이 아니라 code로 관리하는 방식이다.
+```
+
+하지만 더 정확하게는 다음과 같다.
+
+```text
+IaC는 infrastructure 변경을
+Git, review, plan, automation, policy, observability가 있는
+software delivery lifecycle 안으로 가져오는 방식이다.
+```

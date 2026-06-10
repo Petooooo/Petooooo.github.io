@@ -1,0 +1,802 @@
+---
+area: "Cloud Infrastructure"
+type: "concept"
+series: "DevOps Explained"
+title: "Kubernetes Delivery와 Reliability"
+slug: "kubernetes-delivery-reliability"
+date: "2026-06-02"
+updated: "2026-06-02"
+draft: true
+reviewed: false
+category: "Notes"
+tags: ["DevOps", "SRE", "Kubernetes", "Reliability", "SLI", "SLO", "Error Budget", "Incident Response", "Observability"]
+description: "DevOps와 SRE를 delivery pipeline, reliability engineering, SLI/SLO, error budget, incident response, toil reduction 관점에서 비교하고 Kubernetes 운영 환경에서의 역할 차이를 정리한다."
+---
+## 개요
+
+**DevOps**와 **SRE**(Site Reliability Engineering)는 모두 개발과 운영 사이의 간극을 줄이기 위한 접근이다. 두 개념은 자주 비교되지만, 경쟁 관계로 보는 것은 적절하지 않다. DevOps는 소프트웨어를 더 빠르고 안정적으로 전달하기 위한 문화, 프로세스, 자동화 방식에 가깝고, SRE는 production reliability를 정량화하고 자동화하는 engineering discipline에 가깝다.
+
+짧게 정리하면 다음과 같다.
+
+```text
+DevOps:
+  개발과 운영이 함께 빠르고 안정적으로 소프트웨어를 전달하는 문화와 실천 방식
+
+SRE:
+  production reliability를 software engineering 방식으로 측정, 자동화, 개선하는 discipline
+```
+
+DevOps가 delivery pipeline을 빠르고 일관되게 만드는 데 집중한다면, SRE는 그 pipeline을 통해 배포된 시스템이 실제 production에서 약속한 reliability 수준을 만족하는지 확인한다. Kubernetes 환경에서는 이 차이가 더 분명해진다. DevOps는 Git, CI/CD, container image, Helm, Argo CD, Kubernetes deployment 흐름을 다루고, SRE는 SLI, SLO, error budget, incident response, toil reduction, capacity planning, observability를 다룬다.
+
+---
+
+## DevOps와 SRE가 등장한 배경
+
+전통적인 조직에서는 개발팀과 운영팀의 관심사가 분리되어 있었다.
+
+| 구분 | 주요 관심사 | 충돌 지점 |
+|---|---|---|
+| 개발팀 | 기능 구현, 코드 변경, release 속도 | 빠르게 변경하고 싶어 함 |
+| 운영팀 | 안정성, 장애 대응, 인프라 유지 | 변경을 조심스럽게 다루고 싶어 함 |
+
+이 구조에서는 다음과 같은 문제가 반복된다.
+
+```text
+개발팀:
+  새로운 기능을 빠르게 release하고 싶음
+
+운영팀:
+  변경으로 인한 장애를 막고 싶음
+
+결과:
+  배포 지연
+  책임 전가
+  장애 원인 분석 지연
+  수동 운영 증가
+  production feedback 반영 지연
+```
+
+DevOps는 이 문제를 **협업과 자동화**로 풀려고 한다. 개발과 운영이 같은 delivery pipeline을 공유하고, build, test, deploy, monitor 과정을 자동화하여 변경 사항이 빠르고 안전하게 production까지 도달하도록 만든다.
+
+SRE도 같은 문제를 다루지만 관점이 다르다. SRE는 “production system을 어느 정도 안정적으로 유지해야 하는가”, “안정성과 release velocity 사이의 균형을 어떻게 정량화할 것인가”, “반복적인 운영 작업을 어떻게 software engineering으로 줄일 것인가”에 집중한다.
+
+즉, 둘은 같은 문제를 다루지만 접근하는 층위가 다르다.
+
+| 구분 | DevOps | SRE |
+|---|---|---|
+| 핵심 관심 | delivery flow 개선 | production reliability 보장 |
+| 주요 방식 | 협업, CI/CD, 자동화, feedback loop | SLI/SLO, error budget, incident response, toil reduction |
+| 중심 질문 | 어떻게 더 빠르고 안전하게 배포할 것인가? | 얼마나 안정적이어야 충분하며, 이를 어떻게 측정하고 유지할 것인가? |
+
+---
+
+## DevOps의 핵심 관점
+
+DevOps는 개발과 운영을 분리된 단계로 보지 않는다. 아이디어가 backlog에 들어오고, 코드로 구현되고, build와 test를 거쳐, production에 배포되고, 운영 중 feedback이 다시 다음 개발로 돌아오는 전체 흐름을 하나의 system으로 본다.
+
+DevOps가 강조하는 핵심 요소는 다음과 같다.
+
+| 요소 | 설명 |
+|---|---|
+| Collaboration | 개발, 운영, QA, 보안, 비즈니스가 같은 제품을 함께 책임 |
+| CI/CD | build, test, deploy를 자동화 |
+| Small batch | 변경 사항을 작게 나누어 자주 배포 |
+| Automation | 반복 작업을 pipeline으로 자동화 |
+| Feedback | 운영 중 얻은 정보를 다시 개발에 반영 |
+| Shared ownership | “개발 후 운영팀에 던지는” 구조를 줄임 |
+
+DevOps는 다음 질문에 답하려는 접근이다.
+
+```text
+변경 사항이 얼마나 빠르게 production까지 도달하는가?
+변경 사항은 자동으로 검증되는가?
+배포 실패 시 rollback 또는 fix forward가 가능한가?
+운영 중 얻은 feedback이 다음 개발로 돌아오는가?
+개발팀과 운영팀이 같은 지표와 pipeline을 공유하는가?
+```
+
+DevOps만으로도 많은 문제가 해결된다. 하지만 DevOps 자체는 reliability target을 어떻게 정량화할지, release velocity와 stability 사이의 trade-off를 어떤 기준으로 조절할지에 대한 구체적인 운영 체계를 항상 제공하지는 않는다. 이 지점을 SRE가 보완한다.
+
+---
+
+## SRE의 핵심 관점
+
+SRE는 production reliability를 software engineering 방식으로 관리하는 discipline이다. 단순히 장애가 났을 때 복구하는 역할이 아니라, 장애가 반복되지 않도록 system과 운영 방식을 개선하는 역할에 가깝다.
+
+SRE의 주요 관심사는 다음과 같다.
+
+| SRE 관점 | 설명 |
+|---|---|
+| Reliability | 서비스가 기대한 수준으로 동작하는가 |
+| Availability | 사용자가 서비스를 사용할 수 있는가 |
+| Latency | 응답 시간이 사용자가 감내할 수 있는 수준인가 |
+| Error rate | 실패 요청 비율이 허용 범위 안인가 |
+| Capacity | traffic 증가를 감당할 수 있는가 |
+| Incident response | 장애를 빠르게 감지하고 복구할 수 있는가 |
+| Toil reduction | 반복적이고 수동적인 운영 작업을 줄이는가 |
+| Error budget | 안정성과 release velocity를 정량적으로 조절하는가 |
+
+SRE는 다음 질문에 답하려고 한다.
+
+```text
+이 서비스의 사용자 관점 reliability는 무엇으로 측정할 것인가?
+어느 정도의 failure까지 허용할 것인가?
+SLO를 위협하는 상황을 어떻게 alerting할 것인가?
+장애 발생 시 누가, 어떤 순서로, 무엇을 확인할 것인가?
+반복적인 장애 대응을 어떻게 자동화할 것인가?
+release를 계속해도 되는지 어떤 기준으로 판단할 것인가?
+```
+
+DevOps가 delivery system을 개선한다면, SRE는 reliability control system을 만든다.
+
+---
+
+## 차이 1: Development와 Implementation의 관점
+
+DevOps와 SRE의 첫 번째 차이는 관심이 놓이는 위치다.
+
+DevOps는 주로 **development와 delivery flow**에 관심을 둔다. 기능을 만들고, 테스트하고, 배포하고, 운영 feedback을 다시 개발에 반영하는 흐름을 개선한다.
+
+SRE는 **production implementation과 runtime behavior**에 관심을 둔다. 개발된 기능이 production에서 실제로 의도한 대로 안정적으로 동작하는지, 사용자가 체감하는 reliability가 목표 안에 들어오는지 확인한다.
+
+| 구분 | DevOps | SRE |
+|---|---|---|
+| 중심 관심 | 기능 전달, delivery pipeline, 협업 | reliability, production behavior, 운영 자동화 |
+| 주요 질문 | 어떻게 더 빠르게 build/test/deploy할 것인가? | production에서 안정적으로 동작하는가? |
+| 피드백 방향 | 개발과 운영 흐름을 연결 | production data를 개발팀에 되돌림 |
+| 성공 기준 | release frequency, lead time, deployment automation | SLO 달성, MTTR 개선, incident 감소, toil 감소 |
+
+예를 들어 결제 API를 배포한다고 가정하면 DevOps 관점은 다음과 같다.
+
+```text
+결제 API 코드 작성
+  -> unit test
+  -> integration test
+  -> container image build
+  -> staging deploy
+  -> production deploy
+  -> monitoring 연결
+```
+
+반면 SRE 관점은 다음 질문에 가깝다.
+
+```text
+결제 API의 availability 목표는 얼마인가?
+p95 latency는 어느 수준이어야 하는가?
+장애가 발생하면 어떤 alert이 울리는가?
+error budget은 얼마나 남아 있는가?
+특정 dependency가 느려지면 fallback이 가능한가?
+동일 장애가 반복되지 않도록 어떤 자동화를 추가할 것인가?
+```
+
+즉, DevOps는 변경이 production까지 흐르는 경로를 개선하고, SRE는 production에서 변경이 reliability 목표를 만족하는지 검증한다.
+
+---
+
+## 차이 2: Skill Set
+
+DevOps와 SRE는 겹치는 기술이 많지만, skill set의 중심이 다르다.
+
+### DevOps Engineer에게 중요한 역량
+
+DevOps role에서는 변경 사항을 안전하게 전달하기 위한 pipeline, platform, automation 역량이 중요하다.
+
+| 영역 | 구체적 역량 |
+|---|---|
+| CI/CD | Jenkins, Tekton, GitHub Actions, GitLab CI 등 |
+| Build automation | build script, artifact management, container image build |
+| Deployment | Kubernetes, Helm, Argo CD, rolling update, canary |
+| IaC | Terraform, Ansible, Pulumi 등 |
+| Source control | Git branch strategy, pull request workflow |
+| Container | Dockerfile, image registry, image scanning |
+| Platform integration | registry, secret manager, monitoring tool 연결 |
+
+DevOps는 “변경 사항을 안전하게 흘려보내는 길”을 만드는 역할에 가깝다.
+
+### SRE에게 중요한 역량
+
+SRE role에서는 production system의 reliability를 측정하고 개선하는 역량이 더 중요하다.
+
+| 영역 | 구체적 역량 |
+|---|---|
+| Observability | metrics, logs, traces, alerting |
+| Reliability modeling | SLI, SLO, error budget |
+| Incident response | 장애 감지, triage, mitigation, postmortem |
+| Systems engineering | Linux, networking, distributed systems |
+| Automation | toil 제거, auto-remediation, runbook automation |
+| Capacity planning | traffic growth, resource saturation, scaling |
+| Performance | latency analysis, bottleneck finding |
+| Risk management | release freeze, error budget policy, change control |
+
+SRE는 “production이 실제로 어떻게 실패하는지”를 분석하고, 같은 문제가 반복되지 않도록 자동화와 구조 개선을 수행한다.
+
+---
+
+## 차이 3: Automation의 초점
+
+DevOps와 SRE 모두 automation을 중요하게 생각한다. 그러나 자동화의 초점이 다르다.
+
+| 구분 | DevOps Automation | SRE Automation |
+|---|---|---|
+| 주요 목적 | delivery 속도와 일관성 향상 | reliability와 운영 부담 감소 |
+| 예시 | CI/CD pipeline, test automation, deploy automation | auto-healing, failover, alert routing, incident remediation |
+| 주요 대상 | build, test, release, deploy | 장애 대응, capacity, redundancy, toil |
+| 성공 기준 | 배포가 빠르고 재현 가능한가 | 장애가 줄고 복구가 빨라졌는가 |
+
+DevOps automation의 예시는 다음과 같다.
+
+```text
+Git push
+  -> CI pipeline 실행
+  -> test
+  -> image build
+  -> registry push
+  -> Helm chart update
+  -> Argo CD sync
+```
+
+SRE automation의 예시는 다음과 같다.
+
+```text
+error rate 증가 감지
+  -> alert 발생
+  -> affected pod / node / dependency 식별
+  -> 자동 rollback 또는 traffic shift
+  -> incident ticket 생성
+  -> postmortem template 생성
+  -> SLO impact 계산
+```
+
+둘 다 자동화지만, DevOps는 delivery automation에 더 가깝고 SRE는 reliability automation에 더 가깝다.
+
+---
+
+## SRE의 핵심 언어: SLI, SLO, SLA
+
+SRE를 이해하려면 **SLI**, **SLO**, **SLA**를 구분해야 한다.
+
+| 용어 | 의미 | 예시 |
+|---|---|---|
+| SLI | 실제 측정 지표 | HTTP success rate, p95 latency, error rate |
+| SLO | 내부 reliability 목표 | 30일 동안 request success rate 99.9% 이상 |
+| SLA | 외부 계약 또는 약속 | 99.5% 미만이면 service credit 제공 |
+
+예를 들어 API 서비스에서는 다음처럼 정의할 수 있다.
+
+```text
+SLI:
+  successful HTTP requests / total HTTP requests
+
+SLO:
+  30일 rolling window에서 success rate >= 99.9%
+
+SLA:
+  월간 availability가 99.5% 미만이면 고객에게 service credit 제공
+```
+
+구분 기준은 다음과 같다.
+
+| 질문 | 해당 개념 |
+|---|---|
+| 무엇을 측정할 것인가? | SLI |
+| 어느 수준을 목표로 할 것인가? | SLO |
+| 목표 미달 시 어떤 외부 책임이 발생하는가? | SLA |
+
+DevOps 관점에서는 “이 API를 어떻게 자동으로 배포할 것인가”가 중요하다. SRE 관점에서는 “이 API가 사용자에게 약속한 reliability 수준을 만족하는가”가 중요하다.
+
+---
+
+## Error Budget: 속도와 안정성의 정량적 균형
+
+DevOps와 SRE가 충돌할 수 있는 가장 큰 지점은 **release velocity**와 **reliability**다.
+
+개발팀은 빠르게 release하고 싶어 하고, SRE는 production 안정성을 지켜야 한다. 기준이 없으면 이 논의는 감정적인 충돌이 되기 쉽다.
+
+```text
+개발팀:
+  이번 기능을 빨리 release해야 합니다.
+
+SRE:
+  최근 장애가 많아서 위험합니다.
+
+개발팀:
+  비즈니스 일정이 중요합니다.
+
+SRE:
+  production 안정성이 더 중요합니다.
+```
+
+SRE에서는 이를 **error budget**으로 정량화한다. Error budget은 SLO가 허용하는 실패 여유분이다.
+
+예를 들어 30일 기준 availability SLO가 99.9%라면 다음과 같이 계산할 수 있다.
+
+```text
+30 days = 30 * 24 * 60 = 43,200 minutes
+
+SLO = 99.9%
+Error budget = 0.1%
+
+Allowed downtime = 43,200 * 0.001 = 43.2 minutes
+```
+
+Error budget이 있으면 release decision을 다음처럼 다룰 수 있다.
+
+| 상태 | 의사결정 방향 |
+|---|---|
+| error budget이 충분히 남아 있음 | release velocity 유지 가능 |
+| error budget이 빠르게 소모됨 | reliability work 우선순위 상승 |
+| error budget을 모두 소모함 | release freeze 또는 change restriction 검토 |
+
+이 구조의 장점은 DevOps와 SRE가 같은 기준으로 대화할 수 있다는 점이다. DevOps는 delivery velocity를 추구하고, SRE는 reliability를 지키지만, 둘 모두 error budget이라는 공통 지표를 기준으로 의사결정할 수 있다.
+
+---
+
+## 100% Reliability의 함정
+
+SRE는 보통 100% uptime을 목표로 하지 않는다. 모든 시스템에 100% reliability를 요구하면 비용과 복잡도가 급격히 증가하고, release velocity가 크게 떨어질 수 있다.
+
+중요한 것은 “무조건 가장 높은 reliability”가 아니라 **사용자와 비즈니스에 필요한 적정 reliability**를 정의하는 것이다.
+
+| 서비스 | 적정 reliability 관점 |
+|---|---|
+| 결제 승인 API | 매우 높은 availability와 낮은 latency 필요 |
+| 내부 관리자 리포트 페이지 | 약간의 지연이나 일시 오류를 감내 가능 |
+| 실시간 채팅 | latency와 message delivery가 중요 |
+| 배치 통계 생성 | 몇 분 지연은 허용될 수 있음 |
+
+모든 서비스가 같은 SLO를 가져야 하는 것은 아니다. SRE는 각 서비스의 사용자 영향도와 비즈니스 중요도를 기준으로 reliability 목표를 다르게 설정한다.
+
+주의할 점은 다음과 같다.
+
+> 높은 reliability는 비용이 든다. SLO는 기술적 자존심이 아니라 사용자 경험과 비즈니스 요구사항을 기준으로 정해야 한다.
+
+---
+
+## Toil: SRE가 제거하려는 운영 부담
+
+**Toil**은 반복적이고, 수동적이고, 자동화 가능하며, 장기적으로 가치를 축적하지 않는 운영 작업을 의미한다.
+
+예를 들어 다음은 toil에 가깝다.
+
+```text
+장애 때마다 사람이 직접 pod를 재시작한다.
+매번 같은 로그를 수동으로 수집한다.
+반복 alert을 사람이 계속 triage한다.
+매번 동일한 incident ticket을 복사해서 작성한다.
+수동으로 capacity spreadsheet를 갱신한다.
+```
+
+SRE는 이러한 작업을 줄이고 자동화하려고 한다.
+
+| Toil 예시 | SRE식 개선 |
+|---|---|
+| 장애 때마다 수동으로 pod 재시작 | `livenessProbe`, auto-remediation |
+| 매번 수동으로 로그 수집 | centralized logging, trace correlation |
+| 반복 alert triage | alert grouping, routing, severity rule |
+| 수동 capacity 확인 | capacity dashboard, saturation alert |
+| 매번 같은 postmortem 작성 | template과 자동 incident timeline 생성 |
+| 수동 failover | automated failover 또는 traffic shifting |
+
+Toil reduction의 목적은 단순히 일을 줄이는 것이 아니다. 반복 대응에 쓰는 시간을 reliability engineering, capacity planning, architecture improvement 같은 구조적 개선에 쓰기 위한 것이다.
+
+---
+
+## Incident Response
+
+SRE는 장애 대응을 체계화한다. 중요한 것은 장애를 단순히 복구하는 것이 아니라, 장애 대응 과정에서 학습하고 재발 방지책을 만드는 것이다.
+
+일반적인 incident response 흐름은 다음과 같다.
+
+```text
+Detect:
+  장애를 빠르게 감지한다.
+
+Triage:
+  영향 범위와 severity를 판단한다.
+
+Mitigate:
+  사용자 영향을 줄이는 우선 조치를 수행한다.
+
+Resolve:
+  근본 원인을 제거한다.
+
+Postmortem:
+  재발 방지책과 follow-up action을 정리한다.
+
+Improve:
+  test, alert, automation, architecture를 개선한다.
+```
+
+장애 이후에는 개인을 비난하기보다 시스템이 왜 그런 실패를 허용했는지 분석해야 한다. 이를 위해 다음 질문이 필요하다.
+
+```text
+왜 잘못된 변경이 test에서 잡히지 않았는가?
+canary 배포가 있었다면 영향이 줄었을까?
+alert은 너무 늦게 울리지 않았는가?
+rollback은 자동화되어 있었는가?
+runbook은 명확했는가?
+SLO에 어떤 영향을 주었는가?
+같은 장애를 막기 위해 어떤 guardrail이 필요한가?
+```
+
+Incident response는 단순한 긴급 대응 절차가 아니라 reliability 개선 loop의 일부다.
+
+---
+
+## DevOps와 SRE의 공통점
+
+DevOps와 SRE는 다르지만 공통점도 많다.
+
+| 공통점 | 설명 |
+|---|---|
+| 사일로 해소 | 개발과 운영의 단절을 줄임 |
+| 자동화 중시 | 반복적인 수동 작업을 줄임 |
+| production feedback 중시 | 운영 중 얻은 정보를 개발에 반영 |
+| 빠른 복구 중요 | 장애가 없을 수 없으므로 복구 능력을 중시 |
+| 작은 변경 선호 | 큰 변경보다 작고 자주 검증되는 변경 선호 |
+| 측정 기반 개선 | 감이 아니라 metric과 data를 기반으로 개선 |
+
+관계를 정리하면 다음과 같다.
+
+```text
+DevOps:
+  개발과 운영이 함께 일하는 문화와 delivery 방식
+
+SRE:
+  그 방식 안에서 reliability를 정량화하고 자동화하는 engineering discipline
+```
+
+DevOps가 “개발과 운영을 연결해야 한다”라고 말한다면, SRE는 “그 연결을 SLO, error budget, incident response, toil reduction으로 구현하자”라고 말하는 것에 가깝다.
+
+---
+
+## Kubernetes 환경에서 DevOps와 SRE의 차이
+
+Kubernetes 환경에서는 DevOps와 SRE의 차이가 더 실무적으로 드러난다.
+
+### DevOps 관점의 Kubernetes 업무
+
+DevOps 관점에서 Kubernetes는 delivery platform이다.
+
+```text
+Git push
+  -> CI pipeline
+  -> test
+  -> container image build
+  -> registry push
+  -> Helm chart update
+  -> Argo CD sync
+  -> Kubernetes deployment
+```
+
+주요 관심사는 다음과 같다.
+
+| 영역 | DevOps 관점의 작업 |
+|---|---|
+| Build | Dockerfile, image build, dependency 관리 |
+| Registry | image tag, image push, vulnerability scan |
+| Deploy | Kubernetes manifest, Helm chart, rollout strategy |
+| GitOps | Argo CD sync, desired state 관리 |
+| Config | ConfigMap, Secret, environment 분리 |
+| Pipeline | CI/CD workflow, approval, rollback |
+
+### SRE 관점의 Kubernetes 업무
+
+SRE 관점에서 Kubernetes는 reliability platform이다.
+
+```text
+service SLO 정의
+  -> SLI metric 수집
+  -> Prometheus alert rule 작성
+  -> error budget burn rate 계산
+  -> pod/node/resource saturation 관찰
+  -> incident response 자동화
+  -> capacity planning
+  -> reliability 개선
+```
+
+주요 관심사는 다음과 같다.
+
+| 영역 | SRE 관점의 작업 |
+|---|---|
+| SLI | availability, latency, error rate, saturation metric |
+| SLO | 서비스별 reliability target 정의 |
+| Alerting | burn rate alert, symptom-based alert |
+| Resilience | PDB, readinessProbe, livenessProbe, failover |
+| Capacity | HPA, VPA, node pressure, resource requests/limits |
+| Incident | runbook, postmortem, mitigation automation |
+
+같은 Kubernetes를 보더라도 DevOps는 “어떻게 배포할 것인가”에 더 집중하고, SRE는 “배포된 서비스가 reliability target을 만족하는가”에 더 집중한다.
+
+---
+
+## 예시: `payment-api`에 DevOps와 SRE 적용하기
+
+`payment-api`라는 Kubernetes 서비스를 운영한다고 가정한다.
+
+### DevOps 관점
+
+DevOps는 다음 흐름을 설계한다.
+
+```text
+1. 개발자가 Git에 code push
+2. CI가 unit test와 integration test 실행
+3. container image build
+4. image registry push
+5. Helm chart image tag update
+6. Argo CD가 cluster에 sync
+7. rolling update 수행
+8. deployment status 확인
+```
+
+검증 포인트는 다음과 같다.
+
+| 항목 | 확인 내용 |
+|---|---|
+| Build | image가 재현 가능하게 build되는가 |
+| Test | 자동 test가 충분한가 |
+| Deploy | rolling update가 안정적인가 |
+| Rollback | 이전 image로 되돌릴 수 있는가 |
+| Config | 환경별 설정이 분리되어 있는가 |
+| Secret | token, password가 노출되지 않는가 |
+
+### SRE 관점
+
+SRE는 같은 서비스를 다음처럼 본다.
+
+```text
+1. payment-api의 user journey 정의
+2. availability SLI 정의
+3. latency SLI 정의
+4. SLO 설정
+5. error budget 계산
+6. burn rate alert 구성
+7. dependency failure 시 fallback 전략 확인
+8. incident runbook 작성
+9. postmortem과 reliability backlog 관리
+```
+
+검증 포인트는 다음과 같다.
+
+| 항목 | 확인 내용 |
+|---|---|
+| Availability | 성공 요청 비율이 SLO 이상인가 |
+| Latency | p95/p99 latency가 목표 안에 있는가 |
+| Error budget | 최근 배포가 budget을 과도하게 소모했는가 |
+| Alert | 사용자 영향 전에 감지 가능한가 |
+| Capacity | peak traffic을 감당할 수 있는가 |
+| Resilience | DB, cache, 외부 API 장애에 대응 가능한가 |
+| Toil | 반복 장애 대응이 자동화되어 있는가 |
+
+같은 서비스라도 DevOps는 delivery system을 만들고, SRE는 reliability control system을 만든다.
+
+---
+
+## Release Velocity와 Reliability의 균형
+
+DevOps가 강해지면 release velocity가 올라간다. CI/CD가 잘 갖춰지고, Kubernetes 배포가 자동화되고, GitOps가 붙으면 하루에도 여러 번 production 변경이 가능하다.
+
+그러나 release velocity가 올라가면 production risk도 함께 증가할 수 있다. 변경이 많아질수록 장애 가능성도 커진다.
+
+SRE는 여기서 단순한 brake가 아니다. SRE는 안전하게 빠르게 가기 위한 계기판과 guardrail을 제공한다.
+
+```text
+DevOps:
+  더 빠르게 배포할 수 있게 한다.
+
+SRE:
+  얼마나 빠르게 배포해도 되는지 알려주는 reliability 기준을 만든다.
+```
+
+Error budget이 충분하면 release를 계속할 수 있다. Error budget이 빠르게 소모되면 reliability 개선에 집중해야 한다. Error budget을 모두 소모하면 release freeze나 change restriction을 검토할 수 있다.
+
+이 구조에서는 SRE가 단순히 “안 됩니다”라고 말하는 조직이 아니라, data를 기반으로 release risk를 설명하는 조직이 된다.
+
+---
+
+## DevOps와 SRE를 함께 운영하는 방식
+
+DevOps와 SRE는 함께 존재할 수 있다. 성숙한 조직에서는 서로 다른 역할을 가진 협업 구조로 운영된다.
+
+### Product Team 안에 DevOps 책임 포함
+
+각 product team이 자기 서비스의 build, test, deploy, monitor에 대한 책임을 가진다.
+
+```text
+Product Team:
+  developer
+  QA
+  DevOps-oriented engineer
+  service owner
+```
+
+이 구조에서는 팀이 자기 서비스의 delivery pipeline을 직접 소유한다.
+
+### 중앙 SRE Team이 Reliability 기준 제공
+
+SRE team은 전체 조직의 reliability 기준, SLO template, incident process, observability platform, error budget policy를 제공한다.
+
+```text
+SRE Team:
+  SLO 표준화
+  observability platform
+  incident management
+  reliability review
+  capacity planning
+  production readiness
+```
+
+이 구조에서는 product team이 기능을 빠르게 전달하고, SRE team이 reliability guardrail을 제공한다.
+
+### Platform Engineering과 함께 구성
+
+최근에는 platform engineering과 함께 구성되는 경우도 많다.
+
+```text
+DevOps:
+  개발과 운영의 협업 문화와 delivery practice
+
+SRE:
+  reliability 목표와 production stability 관리
+
+Platform Engineering:
+  개발팀이 쉽게 배포하고 운영할 수 있는 self-service platform 제공
+```
+
+Platform team이 Kubernetes cluster, CI/CD template, Helm chart template, observability stack, secret management, deployment portal을 제공하면 DevOps와 SRE 실천이 반복 가능해진다.
+
+---
+
+## 자칫 실수하기 쉬운 부분
+
+### DevOps와 SRE를 직무명으로만 이해하는 경우
+
+회사마다 DevOps Engineer와 SRE의 실제 업무는 다를 수 있다. 어떤 조직에서는 DevOps Engineer가 infrastructure engineer에 가깝고, 어떤 조직에서는 SRE가 Kubernetes 운영자에 가깝다.
+
+개념적으로는 다음처럼 구분하는 것이 안전하다.
+
+```text
+DevOps:
+  delivery와 collaboration을 개선하는 practice
+
+SRE:
+  reliability를 engineering하는 discipline
+```
+
+직무명보다 실제 책임 범위를 봐야 한다.
+
+### SRE를 장애 대응 담당자로만 보는 경우
+
+SRE는 장애가 났을 때 호출되는 사람만이 아니다. SRE의 더 중요한 가치는 장애가 반복되지 않도록 system을 개선하는 데 있다.
+
+단순 대응 중심이면 SRE가 아니라 운영 support 조직에 머물 수 있다.
+
+### DevOps를 CI/CD 도구 도입으로만 보는 경우
+
+Jenkins, Tekton, GitHub Actions, Argo CD를 도입했다고 DevOps가 완성되는 것은 아니다. 개발과 운영이 같은 지표를 보고, 같은 pipeline을 공유하고, feedback loop를 줄여야 DevOps에 가까워진다.
+
+### SLO 없이 Alert만 늘리는 경우
+
+SRE를 한다고 하면서 alert만 많이 만들면 noise가 늘어난다. 먼저 사용자 관점의 SLI와 SLO를 정의하고, 그 목표를 위협하는 상황에 대해 alert를 설계해야 한다.
+
+### Error Budget을 형식적으로만 두는 경우
+
+Error budget은 문서나 dashboard에만 있으면 의미가 없다. 실제 release decision, reliability prioritization, incident review에 연결되어야 한다.
+
+---
+
+## 실무 기준으로 보는 DevOps vs SRE
+
+| 질문 | DevOps에 가까운 관심 | SRE에 가까운 관심 |
+|---|---|---|
+| 변경을 어떻게 배포할 것인가? | CI/CD, GitOps, deployment automation | 배포가 SLO에 미치는 영향 |
+| 어떤 도구를 표준화할 것인가? | Jenkins, Tekton, Argo CD, Helm | Prometheus, Grafana, Alertmanager, incident tool |
+| 장애가 났을 때 무엇을 볼 것인가? | 배포 이력, rollback 가능성 | SLI, SLO, error budget, burn rate |
+| 반복 작업을 어떻게 줄일 것인가? | pipeline 자동화 | toil 제거와 auto-remediation |
+| 성공 지표는 무엇인가? | deployment frequency, lead time, change failure rate | availability, latency, MTTR, error budget burn |
+| 위험 관리는 어떻게 하는가? | test, approval, canary, rollback | SLO policy, release freeze, reliability review |
+
+---
+
+## Operational Metrics 비교
+
+DevOps와 SRE가 보는 지표는 일부 겹치지만 강조점이 다르다.
+
+| 분류 | 대표 지표 | 주로 연결되는 관점 |
+|---|---|---|
+| Deployment frequency | 얼마나 자주 배포하는가 | DevOps |
+| Lead time for changes | commit부터 production까지 걸리는 시간 | DevOps |
+| Change failure rate | 배포 후 장애로 이어지는 변경 비율 | DevOps / SRE |
+| MTTR | 장애 복구 평균 시간 | SRE |
+| Availability | 서비스 사용 가능 비율 | SRE |
+| Latency | p95/p99 응답 시간 | SRE |
+| Error budget burn rate | error budget 소모 속도 | SRE |
+| Toil ratio | 수동 반복 운영 작업 비율 | SRE |
+
+DevOps metric은 delivery system의 효율을 보여주고, SRE metric은 production reliability와 operational health를 보여준다.
+
+---
+
+## Kubernetes 운영 검증 포인트
+
+Kubernetes 환경에서 DevOps와 SRE를 함께 운영하려면 다음 항목을 확인해야 한다.
+
+| 검증 포인트 | DevOps 관점 | SRE 관점 |
+|---|---|---|
+| Deployment | rolling update, rollback, GitOps sync | 배포 후 SLI 변화, error budget 영향 |
+| Probe | readiness/liveness 설정 적용 | probe가 실제 사용자 영향과 맞는지 확인 |
+| Resource | requests/limits 설정 | saturation, throttling, OOMKilled 관찰 |
+| Scaling | HPA 설정 | peak traffic과 SLO 유지 여부 확인 |
+| Observability | dashboard와 log 연결 | SLO 기반 alert와 incident workflow 연결 |
+| Secret | 배포 시 secret 주입 | secret 노출, rotation, access 범위 점검 |
+| Release | canary, blue-green, feature flag | risk-based release decision |
+
+주의할 점은 DevOps와 SRE가 각각 별도 dashboard와 별도 기준으로 움직이면 안 된다는 것이다. Delivery event와 reliability signal이 연결되어야 한다.
+
+예를 들어 새로운 version이 배포되었을 때 다음을 함께 볼 수 있어야 한다.
+
+```text
+어떤 commit이 배포되었는가?
+어떤 image tag가 적용되었는가?
+어떤 namespace와 workload에 반영되었는가?
+배포 직후 error rate가 증가했는가?
+p95 latency가 SLO 기준을 넘었는가?
+error budget burn rate가 급격히 증가했는가?
+rollback 조건이 충족되었는가?
+```
+
+---
+
+## Mental Model
+
+DevOps와 SRE의 관계를 다음 mental model로 정리할 수 있다.
+
+```text
+DevOps:
+  변경 사항이 production까지 빠르고 안전하게 흐르는 길을 만든다.
+
+SRE:
+  그 길 위에서 서비스가 reliability 목표를 지키고 있는지 측정하고 제어한다.
+```
+
+다른 표현으로는 다음과 같다.
+
+```text
+DevOps = delivery system
+SRE = reliability control system
+```
+
+Kubernetes 환경에서는 다음처럼 연결된다.
+
+```text
+Git / CI / Registry / Helm / Argo CD:
+  DevOps delivery path
+
+Prometheus / Grafana / Alertmanager / SLO / Incident process:
+  SRE reliability path
+
+Kubernetes:
+  두 흐름이 만나는 runtime platform
+```
+
+---
+
+## 정리
+
+DevOps와 SRE는 경쟁 관계가 아니다. DevOps는 개발과 운영이 더 빠르고 안정적으로 소프트웨어를 전달하기 위한 문화와 실천 방식이고, SRE는 그 흐름 안에서 production reliability를 정량화하고 자동화하는 engineering discipline이다.
+
+핵심 정리는 다음과 같다.
+
+- DevOps는 delivery pipeline, collaboration, automation, feedback loop에 집중한다.
+- SRE는 SLI, SLO, error budget, incident response, toil reduction에 집중한다.
+- DevOps는 “어떻게 빠르고 안전하게 배포할 것인가”를 다룬다.
+- SRE는 “배포된 서비스가 reliability target을 만족하는가”를 다룬다.
+- Error budget은 release velocity와 reliability 사이의 균형을 정량화하는 핵심 장치다.
+- Kubernetes 환경에서는 DevOps가 배포 흐름을 만들고, SRE가 운영 안정성 기준과 관찰 체계를 만든다.
+- 두 접근은 함께 운영될 때 delivery speed와 production stability를 동시에 개선할 수 있다.
+
+마지막으로 한 문장으로 정리하면 다음과 같다.
+
+```text
+DevOps가 길을 만들고, SRE가 그 길을 안전하게 달릴 수 있는 계기판과 guardrail을 만든다.
+```

@@ -1,0 +1,1970 @@
+---
+area: "Cloud Infrastructure"
+type: "concept"
+series: "Kubernetes Essentials"
+title: "K8s 06. Ingress HTTP Routing"
+slug: "k8s-06-ingress-http-routing"
+date: "2026-06-02"
+updated: "2026-06-02"
+draft: true
+reviewed: false
+category: "Notes"
+tags: ["Kubernetes", "Ingress", "Service", "ClusterIP", "NodePort", "LoadBalancer", "Ingress Controller", "Networking", "TLS"]
+description: "Kubernetes에서 ClusterIP, NodePort, LoadBalancer, Ingress의 차이를 구분하고, Ingress Resource와 Ingress Controller를 중심으로 HTTP/HTTPS traffic 라우팅 구조를 정리한다."
+---
+Kubernetes에서 애플리케이션은 보통 `Pod`로 실행된다. 하지만 `Pod`는 직접 외부에 노출하기에 적합하지 않다. `Pod`는 언제든지 삭제되고 새로 만들어질 수 있으며, 새로 만들어질 때 IP도 바뀔 수 있기 때문이다.
+
+그래서 Kubernetes에서는 `Pod` 앞에 `Service`를 두고, 외부 HTTP/HTTPS traffic을 처리할 때는 그 앞에 `Ingress`를 두는 구조를 자주 사용한다.
+
+```text
+External User
+  ↓
+Ingress Controller / External Load Balancer
+  ↓
+Ingress rule
+  ↓
+Service
+  ↓
+Pod
+```
+
+**Ingress**는 Kubernetes cluster 외부의 HTTP/HTTPS 요청을 하나의 진입점에서 받아, host와 path rule에 따라 내부 `Service`로 전달하는 L7 routing layer다.
+
+---
+
+## 핵심 요약
+
+Kubernetes에서 애플리케이션을 노출하는 방식은 여러 가지가 있다.
+
+```text
+ClusterIP
+NodePort
+LoadBalancer
+Ingress
+```
+
+이 네 가지는 모두 traffic이 `Pod`까지 도달하는 방식과 관련되어 있지만, 역할과 추상화 수준이 다르다.
+
+| 방식 | Kubernetes object | 외부 접근 | 주 용도 | 한계 |
+|---|---|---|---|---|
+| `ClusterIP` | `Service` | 불가, cluster 내부 전용 | 내부 service discovery | 외부 사용자 접근 불가 |
+| `NodePort` | `Service` | `<NodeIP>:<NodePort>` | 테스트, 단순 노출, bare metal 실험 | port 관리 어려움, L7 routing 없음 |
+| `LoadBalancer` | `Service` | cloud LB external IP | 단일 service 외부 노출 | service마다 LB 생성 시 비용/관리 부담 |
+| `Ingress` | `Ingress` + Controller | HTTP/HTTPS domain/path 기반 | production HTTP routing | Ingress Controller 필요, HTTP/HTTPS 중심 |
+
+운영 관점에서 가장 중요한 구분은 다음이다.
+
+```text
+ClusterIP
+  → 내부 통신의 기본
+
+NodePort
+  → 외부에서 node port로 직접 접근하는 단순 방식
+
+LoadBalancer
+  → cloud load balancer를 Service에 직접 붙이는 방식
+
+Ingress
+  → HTTP/HTTPS traffic을 하나의 진입점에서 여러 Service로 라우팅하는 방식
+```
+
+---
+
+## 전체 구조 먼저 보기
+
+Kubernetes에서 일반적인 workload 구조는 다음과 같다.
+
+```text
+Deployment
+  ↓
+ReplicaSet
+  ↓
+Pods
+  ↓
+Service
+  ↓
+외부 노출 방식
+```
+
+예를 들어 API Pod가 3개 있다고 하자.
+
+```text
+api-pod-1: 10.244.1.10
+api-pod-2: 10.244.2.11
+api-pod-3: 10.244.3.12
+```
+
+이 Pod들은 `Deployment`에 의해 유지되고, `Service`는 label selector로 이 Pod들을 묶는다.
+
+```text
+Service: api-service
+  selector:
+    app: api
+  ↓
+api-pod-1
+api-pod-2
+api-pod-3
+```
+
+외부 사용자가 Pod IP를 직접 호출하면 안 된다. Pod IP는 ephemeral하기 때문이다. 그래서 stable endpoint 역할을 하는 `Service`가 필요하다.
+
+Ingress는 그 `Service`들 앞에 놓이는 HTTP/HTTPS routing layer다.
+
+```text
+External User
+  ↓
+Ingress Controller
+  ↓
+Ingress Resource의 routing rule
+  ↓
+Service
+  ↓
+Pod
+```
+
+주의할 점은 **Ingress가 Pod로 직접 traffic을 보내는 것이 아니라 보통 Service를 backend로 삼는다**는 것이다.
+
+---
+
+## ClusterIP: cluster 내부 전용 Service
+
+**ClusterIP**는 `Service`의 기본 type이다. `type`을 명시하지 않으면 기본적으로 `ClusterIP`가 사용된다.
+
+### ClusterIP의 역할
+
+`ClusterIP` Service는 cluster 내부에서만 접근 가능한 안정적인 virtual IP를 만든다.
+
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: api
+spec:
+  type: ClusterIP
+  selector:
+    app: api
+  ports:
+    - port: 80
+      targetPort: 3000
+```
+
+이 Service의 의미는 다음과 같다.
+
+```text
+cluster 내부에서 api라는 이름으로 접근하면,
+app=api label을 가진 Pod 중 하나의 3000번 port로 traffic을 전달한다.
+```
+
+cluster 내부의 다른 Pod는 다음처럼 호출할 수 있다.
+
+```text
+http://api
+```
+
+같은 namespace가 아니라면 DNS 이름을 더 길게 쓸 수 있다.
+
+```text
+http://api.default.svc.cluster.local
+```
+
+### ClusterIP의 traffic 흐름
+
+```text
+frontend Pod
+  ↓
+Service: api, ClusterIP
+  ↓
+api Pod 중 하나
+```
+
+예를 들어 frontend가 backend API를 호출하는 구조라면 `ClusterIP`만으로 충분하다.
+
+```text
+frontend
+  ↓
+api
+  ↓
+database
+```
+
+이때 `api`와 `database`는 외부 인터넷에 직접 열 필요가 없다. cluster 내부에서만 접근 가능하면 된다.
+
+### ClusterIP의 장점과 한계
+
+| 구분 | 내용 |
+|---|---|
+| 장점 | 내부 service discovery와 load balancing의 기본 단위 |
+| 장점 | Pod IP가 바뀌어도 Service DNS 이름은 유지 |
+| 장점 | 외부에 직접 노출되지 않음 |
+| 장점 | Ingress backend로 가장 자주 사용 |
+| 한계 | cluster 외부 사용자는 직접 접근 불가 |
+
+`ClusterIP`는 내부 통신에는 적합하지만, 외부 사용자가 접근해야 하는 frontend, public API, web app에는 별도의 노출 방식이 필요하다.
+
+---
+
+## NodePort: 모든 Node의 특정 port로 노출
+
+**NodePort**는 각 Kubernetes Node의 IP에 static port를 열어 `Service`를 노출하는 방식이다. 내부적으로는 `ClusterIP` Service도 함께 생성된다.
+
+### NodePort의 기본 구조
+
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: api
+spec:
+  type: NodePort
+  selector:
+    app: api
+  ports:
+    - port: 80
+      targetPort: 3000
+      nodePort: 30080
+```
+
+이 설정의 의미는 다음이다.
+
+```text
+각 Kubernetes Node의 30080번 port로 들어오는 요청을
+Service port 80으로 받고,
+최종적으로 app=api Pod의 3000번 port로 전달한다.
+```
+
+traffic 흐름은 다음과 같다.
+
+```text
+External User
+  ↓
+<NodeIP>:30080
+  ↓
+NodePort Service
+  ↓
+ClusterIP Service
+  ↓
+api Pod
+```
+
+Node IP가 세 개라면 모두 같은 NodePort를 연다.
+
+```text
+node-1:30080
+node-2:30080
+node-3:30080
+```
+
+외부 사용자는 어느 Node IP로 접근해도 Service에 도달할 수 있다.
+
+### NodePort는 ClusterIP를 포함한다
+
+`NodePort`는 독립적으로만 동작하는 것이 아니다. `NodePort`는 Service를 각 Node의 static port로 노출하면서, 내부적으로는 `ClusterIP` Service를 함께 가진다.
+
+```text
+NodePort
+  ↓
+ClusterIP
+  ↓
+Pod
+```
+
+즉 `NodePort`는 외부에서 Node로 들어올 수 있는 port를 열어주는 계층에 가깝다.
+
+### NodePort의 장점
+
+| 장점 | 설명 |
+|---|---|
+| 간단함 | cloud load balancer 없이도 외부 접근 가능 |
+| 실험에 유용 | local cluster, lab, 테스트 환경에서 편함 |
+| 명시적 port | 지정된 node port로 접근 가능 |
+| LoadBalancer의 기반 | 일부 환경에서 `LoadBalancer` Service가 내부적으로 `NodePort`를 활용 |
+
+### NodePort의 한계
+
+`NodePort`는 production에서 직접 사용하기에는 여러 단점이 있다.
+
+#### port 관리가 어렵다
+
+`NodePort`는 보통 제한된 port range를 사용한다. 일반적으로 많이 쓰이는 범위는 `30000-32767`이다.
+
+```text
+service-a → nodePort 30080
+service-b → nodePort 30081
+service-c → nodePort 30082
+```
+
+서비스가 많아지면 어떤 port가 어떤 service인지 관리하기 어렵다.
+
+#### URL이 지저분해진다
+
+사용자는 일반적으로 다음처럼 접근하고 싶어 한다.
+
+```text
+https://api.example.com
+```
+
+하지만 `NodePort`를 직접 쓰면 이런 형태가 된다.
+
+```text
+http://node-ip:30080
+```
+
+domain, TLS, path routing, virtual host를 깔끔하게 처리하기 어렵다.
+
+#### Node IP에 의존한다
+
+Node가 추가되거나 제거되면 외부 접근 지점도 바뀔 수 있다.
+
+```text
+node-1:30080
+node-2:30080
+node-3:30080
+```
+
+외부 load balancer 없이 사용하면 어떤 Node IP를 사용해야 하는지 문제가 된다.
+
+#### L7 routing이 없다
+
+`NodePort`는 HTTP path나 host를 이해하지 못한다.
+
+예를 들어 다음 routing을 하고 싶다고 하자.
+
+```text
+api.example.com/users  → user-service
+api.example.com/orders → order-service
+```
+
+`NodePort`만으로는 이런 L7 routing을 직접 처리하지 않는다. 별도의 reverse proxy나 Ingress Controller가 필요하다.
+
+---
+
+## LoadBalancer: cloud load balancer를 Service와 연결
+
+**LoadBalancer**는 `Service`를 외부 load balancer로 노출하는 방식이다. cloud provider가 지원하는 환경에서는 `type: LoadBalancer` Service를 만들면 외부 load balancer와 external IP가 생성될 수 있다.
+
+### LoadBalancer Service 예시
+
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: api
+spec:
+  type: LoadBalancer
+  selector:
+    app: api
+  ports:
+    - port: 80
+      targetPort: 3000
+```
+
+일반적인 흐름은 다음과 같다.
+
+```text
+External Load Balancer
+  ↓
+NodePort 또는 provider-specific forwarding
+  ↓
+Service
+  ↓
+Pod
+```
+
+외부 IP가 할당되면 다음처럼 확인할 수 있다.
+
+```bash
+kubectl get svc api
+```
+
+예시:
+
+```text
+NAME   TYPE           CLUSTER-IP      EXTERNAL-IP      PORT(S)
+api    LoadBalancer   10.96.120.15    203.0.113.10     80:31456/TCP
+```
+
+사용자는 `203.0.113.10:80`으로 접근할 수 있다.
+
+### LoadBalancer의 장점
+
+| 장점 | 설명 |
+|---|---|
+| 외부 IP 제공 | cloud provider가 외부 IP 또는 DNS를 제공할 수 있음 |
+| 운영 단순성 | Service 하나로 외부 load balancer와 연결 |
+| L4 traffic 처리 | TCP/UDP 수준 load balancing에 적합 |
+| cloud integration | cloud provider의 LB, health check, firewall과 통합 가능 |
+
+### LoadBalancer의 한계
+
+`LoadBalancer`는 편하지만, service마다 하나씩 만들면 문제가 생긴다.
+
+예를 들어 microservice가 여러 개 있다고 하자.
+
+```text
+frontend-service
+user-service
+order-service
+payment-service
+admin-service
+```
+
+각각을 `type: LoadBalancer`로 만들면 외부 load balancer도 여러 개 생길 수 있다.
+
+```text
+frontend-service → LoadBalancer #1
+user-service     → LoadBalancer #2
+order-service    → LoadBalancer #3
+payment-service  → LoadBalancer #4
+admin-service    → LoadBalancer #5
+```
+
+문제는 다음이다.
+
+```text
+비용 증가
+외부 IP 증가
+TLS 인증서 관리 복잡
+domain mapping 복잡
+routing policy 중복
+WAF/security 설정 중복
+운영 관찰성 분산
+```
+
+따라서 HTTP/HTTPS service가 많아질수록 service마다 `LoadBalancer`를 붙이는 방식보다, 하나의 Ingress Controller를 외부에 노출하고 그 뒤에서 여러 Service로 routing하는 방식이 관리하기 쉽다.
+
+---
+
+## Ingress: HTTP/HTTPS routing rule
+
+**Ingress**는 외부에서 cluster 내부 Service로 들어오는 HTTP/HTTPS route를 정의하는 Kubernetes API object다.
+
+Ingress는 다음 기능을 제공할 수 있다.
+
+```text
+externally reachable URL
+host-based routing
+path-based routing
+TLS termination
+name-based virtual hosting
+여러 Service를 하나의 진입점 뒤로 묶기
+```
+
+### Ingress의 기본 개념
+
+Ingress는 `Service` 앞에 놓이는 HTTP routing rule이다.
+
+```text
+External User
+  ↓
+Ingress Controller
+  ↓
+Ingress Resource의 routing rule
+  ↓
+Service
+  ↓
+Pod
+```
+
+중요한 점은 **Ingress Resource만 만들어서는 동작하지 않는다는 것**이다. Ingress에는 두 가지가 필요하다.
+
+```text
+1. Ingress Resource
+   → 어떤 host/path를 어떤 Service로 보낼지 정의
+
+2. Ingress Controller
+   → 실제 traffic을 받아 rule에 따라 proxy/load balancing 수행
+```
+
+### Ingress Resource와 Ingress Controller의 차이
+
+| 구분 | 역할 |
+|---|---|
+| `Ingress Resource` | Kubernetes API object. routing rule을 선언한다. |
+| `Ingress Controller` | 실제 proxy/load balancer. Ingress rule을 읽고 traffic을 처리한다. |
+
+Ingress Resource 예시:
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: app-ingress
+spec:
+  rules:
+    - host: example.com
+      http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: api
+                port:
+                  number: 80
+```
+
+이 YAML만 만들면 끝이 아니다. cluster 안에 Ingress Controller가 있어야 한다.
+
+대표적인 Ingress Controller는 다음과 같다.
+
+```text
+ingress-nginx
+NGINX Ingress Controller
+Traefik
+HAProxy Ingress
+Contour
+Kong Ingress Controller
+cloud provider ingress controller
+```
+
+Controller는 Kubernetes API를 watch하다가 Ingress resource를 발견하면, 그 rule을 실제 proxy configuration으로 변환한다.
+
+```text
+Ingress Resource 생성
+  ↓
+Ingress Controller가 API watch
+  ↓
+routing rule 읽기
+  ↓
+proxy 설정 반영
+  ↓
+외부 traffic 처리
+```
+
+---
+
+## Ingress가 해결하는 핵심 문제
+
+### 단일 IP로 여러 Service 라우팅
+
+Ingress의 대표적인 장점은 단일 외부 IP 또는 단일 load balancer를 통해 여러 Service를 라우팅할 수 있다는 점이다.
+
+예를 들어 다음 service들이 있다고 하자.
+
+```text
+frontend-service
+user-service
+order-service
+payment-service
+```
+
+`LoadBalancer`만 사용하면 각 service마다 외부 load balancer가 필요할 수 있다.
+
+```text
+frontend-service → LB #1
+user-service     → LB #2
+order-service    → LB #3
+payment-service  → LB #4
+```
+
+Ingress를 사용하면 다음처럼 하나의 entrypoint로 묶을 수 있다.
+
+```text
+External Load Balancer / Ingress Controller
+  ↓
+example.com/          → frontend-service
+example.com/users     → user-service
+example.com/orders    → order-service
+example.com/payments  → payment-service
+```
+
+이 구조는 production 환경에서 더 관리하기 쉽다.
+
+```text
+하나의 public IP
+하나의 domain entrypoint
+중앙화된 TLS termination
+중앙화된 routing policy
+서비스별 path/host routing
+```
+
+### Path-based routing
+
+Ingress는 path를 기준으로 traffic을 나눌 수 있다.
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: path-routing
+spec:
+  rules:
+    - host: example.com
+      http:
+        paths:
+          - path: /users
+            pathType: Prefix
+            backend:
+              service:
+                name: user-service
+                port:
+                  number: 80
+          - path: /orders
+            pathType: Prefix
+            backend:
+              service:
+                name: order-service
+                port:
+                  number: 80
+          - path: /payments
+            pathType: Prefix
+            backend:
+              service:
+                name: payment-service
+                port:
+                  number: 80
+```
+
+traffic 흐름:
+
+```text
+https://example.com/users
+  → user-service
+
+https://example.com/orders
+  → order-service
+
+https://example.com/payments
+  → payment-service
+```
+
+이것은 HTTP path를 이해하는 L7 routing이다.
+
+### Host-based routing
+
+Ingress는 host name을 기준으로도 routing할 수 있다.
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: host-routing
+spec:
+  rules:
+    - host: api.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: api-service
+                port:
+                  number: 80
+    - host: admin.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: admin-service
+                port:
+                  number: 80
+```
+
+traffic 흐름:
+
+```text
+https://api.example.com
+  → api-service
+
+https://admin.example.com
+  → admin-service
+```
+
+이 방식은 여러 domain 또는 subdomain을 하나의 Ingress Controller로 처리할 때 유용하다.
+
+### TLS termination
+
+Ingress는 HTTPS 인증서 termination 지점으로도 사용할 수 있다.
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: tls-ingress
+spec:
+  tls:
+    - hosts:
+        - api.example.com
+      secretName: api-tls
+  rules:
+    - host: api.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: api-service
+                port:
+                  number: 80
+```
+
+여기서 `api-tls` Secret에는 TLS certificate와 private key가 들어간다.
+
+```bash
+kubectl create secret tls api-tls \
+  --cert=./tls.crt \
+  --key=./tls.key
+```
+
+구조는 다음과 같다.
+
+```text
+Client
+  ↓ HTTPS
+Ingress Controller
+  ↓ HTTP or HTTPS
+Service
+  ↓
+Pod
+```
+
+TLS를 Ingress Controller에서 종료하면 backend service는 HTTP로 받을 수도 있다. 내부 구간까지 암호화가 필요한 환경이라면 backend HTTPS 또는 service mesh mTLS를 고려해야 한다.
+
+---
+
+## Ingress의 실제 traffic 경로
+
+Ingress를 처음 배울 때 가장 헷갈리는 부분은 “요청이 정확히 어디를 거쳐 Pod까지 가는가?”이다.
+
+일반적인 cloud 환경에서는 대략 다음과 같다.
+
+```text
+Client
+  ↓
+DNS
+  ↓
+External Load Balancer
+  ↓
+Ingress Controller Service
+  ↓
+Ingress Controller Pod
+  ↓
+Kubernetes Service
+  ↓
+EndpointSlice / Pod IP
+  ↓
+Application Pod
+```
+
+단계별로 보면 다음과 같다.
+
+```text
+1. 사용자가 https://api.example.com 호출
+2. DNS가 api.example.com을 external load balancer IP로 해석
+3. external load balancer가 cluster의 Ingress Controller로 traffic 전달
+4. Ingress Controller가 Host/Path rule 확인
+5. backend Service를 선택
+6. Service가 selector로 연결된 Pod endpoint로 traffic 전달
+7. application container가 요청 처리
+```
+
+예를 들어 다음 요청이 들어온다고 하자.
+
+```text
+https://shop.example.com/orders/123
+```
+
+Ingress rule이 다음과 같다면:
+
+```text
+host = shop.example.com
+path = /orders
+```
+
+요청은 다음 흐름으로 이동한다.
+
+```text
+https://shop.example.com/orders/123
+  ↓
+Ingress rule:
+  host = shop.example.com
+  path = /orders
+  ↓
+order-service
+  ↓
+order Pod
+```
+
+다만 실제 경로는 환경에 따라 달라질 수 있다.
+
+```text
+cloud provider LoadBalancer 구현
+CNI plugin
+kube-proxy mode
+NodePort 사용 여부
+Ingress Controller 배포 방식
+externalTrafficPolicy
+service type
+bare metal load balancer 사용 여부
+```
+
+따라서 운영 문서에서는 “Ingress traffic path는 항상 이렇다”라고 단정하기보다, 사용하는 cloud provider, Ingress Controller, CNI, Service 설정을 함께 확인해야 한다.
+
+---
+
+## Ingress YAML을 단계적으로 이해하기
+
+### 1단계: Deployment
+
+먼저 backend application이 있어야 한다.
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: api
+  template:
+    metadata:
+      labels:
+        app: api
+    spec:
+      containers:
+        - name: api
+          image: registry.example.com/api:1.0.0
+          ports:
+            - containerPort: 3000
+```
+
+이 `Deployment`는 `app=api` label을 가진 Pod 3개를 유지한다.
+
+### 2단계: Service
+
+Ingress는 보통 Pod가 아니라 `Service`를 backend로 삼는다.
+
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: api
+spec:
+  type: ClusterIP
+  selector:
+    app: api
+  ports:
+    - name: http
+      port: 80
+      targetPort: 3000
+```
+
+이 `Service`는 `app=api` Pod들의 `3000`번 port로 traffic을 보낸다.
+
+### 3단계: Ingress
+
+이제 외부 domain을 `Service`에 연결한다.
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: api
+spec:
+  rules:
+    - host: api.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: api
+                port:
+                  number: 80
+```
+
+의미는 다음이다.
+
+```text
+api.example.com으로 들어오는 HTTP 요청 중
+/ 이하 path는
+api Service의 80번 port로 보낸다.
+```
+
+### 4단계: TLS 추가
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: api
+spec:
+  tls:
+    - hosts:
+        - api.example.com
+      secretName: api-tls
+  rules:
+    - host: api.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: api
+                port:
+                  number: 80
+```
+
+TLS Secret 생성 예시:
+
+```bash
+kubectl create secret tls api-tls \
+  --cert=./tls.crt \
+  --key=./tls.key
+```
+
+운영에서는 보통 cert-manager 같은 도구를 사용해 certificate lifecycle을 자동화하기도 한다.
+
+---
+
+## Ingress Controller가 하는 일
+
+Ingress Resource는 “규칙”이다. 실제 traffic을 처리하는 것은 Ingress Controller다.
+
+예를 들어 `ingress-nginx`를 쓴다고 하자.
+
+```text
+Ingress Resource
+  ↓
+ingress-nginx controller가 watch
+  ↓
+NGINX configuration 생성/갱신
+  ↓
+외부 요청을 backend Service로 proxy
+```
+
+Ingress Controller는 보통 다음 기능을 담당한다.
+
+```text
+HTTP reverse proxy
+host/path 기반 routing
+TLS termination
+redirect
+rewrite
+header 처리
+timeout 설정
+body size 제한
+backend health 확인
+observability metric 제공
+```
+
+하지만 모든 기능이 Kubernetes Ingress 표준에 완전히 들어있는 것은 아니다. 많은 controller는 annotation으로 추가 기능을 제공한다.
+
+예를 들어 NGINX Ingress에서는 다음과 같은 annotation을 사용할 수 있다.
+
+```yaml
+metadata:
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+```
+
+주의할 점은 annotation이 controller-specific이라는 것이다. NGINX Ingress에서 동작하는 annotation이 Traefik이나 HAProxy에서는 다르게 동작하거나 아예 동작하지 않을 수 있다.
+
+이 때문에 Ingress는 portable한 API처럼 보이지만, 실제 운영에서는 controller별 차이를 반드시 확인해야 한다.
+
+---
+
+## Ingress와 LoadBalancer는 경쟁 관계가 아니다
+
+자주 생기는 오해가 있다.
+
+> Ingress를 쓰면 LoadBalancer는 필요 없는가?
+
+대부분의 cloud 환경에서는 그렇지 않다. Ingress Controller 자체를 외부에 노출하려면 보통 `LoadBalancer` type Service를 사용한다.
+
+구조는 다음과 같다.
+
+```text
+External Load Balancer
+  ↓
+Ingress Controller Service, type: LoadBalancer
+  ↓
+Ingress Controller Pods
+  ↓
+ClusterIP Services
+  ↓
+Application Pods
+```
+
+즉 `LoadBalancer`와 `Ingress`는 계층이 다르다.
+
+```text
+LoadBalancer
+  → cluster 밖에서 Ingress Controller까지 traffic을 가져오는 L4 진입점
+
+Ingress
+  → HTTP/HTTPS 요청을 host/path rule에 따라 Service로 분배하는 L7 routing rule
+```
+
+서비스마다 `LoadBalancer`를 하나씩 만드는 대신, Ingress Controller 하나에 `LoadBalancer`를 붙이고 그 뒤에서 여러 Service를 routing하는 방식이 일반적이다.
+
+```text
+Bad pattern:
+  service-a → LoadBalancer A
+  service-b → LoadBalancer B
+  service-c → LoadBalancer C
+
+Ingress pattern:
+  External LoadBalancer
+    ↓
+  Ingress Controller
+    ├─ /a → service-a
+    ├─ /b → service-b
+    └─ /c → service-c
+```
+
+---
+
+## Ingress가 production에서 선호되는 이유
+
+Ingress가 production에서 자주 쓰이는 이유는 다음과 같다.
+
+### 단일 진입점
+
+여러 service를 하나의 domain 또는 하나의 external load balancer 뒤에 둘 수 있다.
+
+```text
+example.com/
+example.com/api
+example.com/admin
+example.com/static
+```
+
+### TLS 중앙화
+
+인증서를 각 service마다 따로 붙이는 대신 Ingress Controller에서 관리할 수 있다.
+
+```text
+TLS termination at Ingress Controller
+  ↓
+internal service traffic
+```
+
+### HTTP routing
+
+Host와 path를 기준으로 service를 나눌 수 있다.
+
+```text
+api.example.com       → api-service
+admin.example.com     → admin-service
+example.com/payments  → payment-service
+```
+
+### 비용 절감
+
+서비스마다 `LoadBalancer`를 만들지 않아도 된다.
+
+```text
+1개의 external LB
+  ↓
+N개의 backend service
+```
+
+### 정책 중앙화
+
+Ingress Controller에서 다음을 중앙화할 수 있다.
+
+```text
+TLS
+redirect
+rewrite
+rate limiting
+authentication 연동
+WAF 연동
+logging
+metrics
+timeout
+request size limit
+```
+
+다만 모든 기능이 기본 Ingress spec에 들어있는 것은 아니고, controller별 annotation 또는 custom resource를 사용하는 경우가 많다.
+
+---
+
+## Ingress의 한계
+
+Ingress는 강력하지만 만능은 아니다.
+
+### HTTP/HTTPS 중심이다
+
+Ingress는 주로 HTTP/HTTPS traffic을 다룬다. 다음과 같은 경우에는 Ingress가 바로 맞지 않을 수 있다.
+
+```text
+raw TCP
+UDP
+database protocol
+MQTT
+gRPC with special requirement
+custom binary protocol
+```
+
+일부 Ingress Controller는 TCP/UDP forwarding을 지원하지만, 그것은 controller-specific 기능이다. 표준 Ingress API의 핵심은 HTTP/HTTPS routing이다.
+
+### Ingress Controller 없이는 동작하지 않는다
+
+Ingress resource만 만들면 traffic이 흐르지 않는다.
+
+```yaml
+kind: Ingress
+```
+
+이 object는 rule일 뿐이다. 실제 controller가 있어야 한다.
+
+```bash
+kubectl get pods -n ingress-nginx
+```
+
+또는 controller별 namespace를 확인해야 한다.
+
+```bash
+kubectl get ingressclass
+```
+
+### Controller별 annotation 차이가 있다
+
+Ingress spec은 비교적 단순하다. 복잡한 기능은 annotation으로 처리되는 경우가 많다.
+
+```yaml
+metadata:
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+```
+
+이 annotation은 NGINX Ingress Controller에 특화된 것이다. 다른 controller에서는 동작하지 않을 수 있다.
+
+### 대규모 multi-team 환경에서는 정책 경계가 부족할 수 있다
+
+Ingress는 단순하고 널리 쓰이지만, platform team과 application team의 역할을 세밀하게 분리하는 데는 한계가 있다.
+
+예를 들어 다음 요구가 있다고 하자.
+
+```text
+platform team은 shared gateway를 관리
+app team은 route만 관리
+namespace 간 route delegation 필요
+TLS policy를 중앙에서 강제
+traffic splitting을 표준 API로 표현
+```
+
+이런 요구는 Ingress보다 Gateway API가 더 적합할 수 있다.
+
+---
+
+## Gateway API와 Ingress의 관계
+
+Ingress는 안정적이고 널리 사용되는 HTTP/HTTPS routing API다. 하지만 새로운 고급 routing 요구나 platform-level 역할 분리에는 Gateway API가 더 적합할 수 있다.
+
+현재 기준으로는 다음처럼 이해하면 된다.
+
+```text
+Ingress
+  → 널리 쓰이고 안정적인 HTTP/HTTPS routing API
+  → 기존 cluster와 일반적인 web service 노출에 여전히 많이 사용
+
+Gateway API
+  → Ingress의 후속 성격
+  → 더 풍부한 routing, 역할 분리, extensibility를 제공하는 방향
+```
+
+운영 판단은 다음처럼 할 수 있다.
+
+| 상황 | 선택 |
+|---|---|
+| 기존 cluster에서 일반 HTTP/HTTPS routing | Ingress 유지 가능 |
+| NGINX Ingress 등 기존 운영 경험이 충분함 | Ingress 적합 |
+| 신규 platform에서 역할 분리와 고급 routing이 중요함 | Gateway API 검토 |
+| multi-tenant platform traffic policy 표준화 필요 | Gateway API 검토 |
+| 단순 web app 노출 | Ingress로 충분한 경우 많음 |
+
+Ingress가 당장 사라지는 것은 아니다. 다만 신규 platform을 설계한다면 Gateway API까지 함께 검토하는 것이 좋다.
+
+---
+
+## IngressClass
+
+Kubernetes cluster에는 여러 Ingress Controller가 있을 수 있다.
+
+```text
+nginx ingress controller
+traefik ingress controller
+internal ingress controller
+external ingress controller
+```
+
+이때 어떤 Ingress resource를 어떤 controller가 처리할지 지정해야 한다. 현대 Kubernetes에서는 보통 `ingressClassName`을 사용한다.
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: api
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: api.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: api
+                port:
+                  number: 80
+```
+
+IngressClass 확인:
+
+```bash
+kubectl get ingressclass
+```
+
+예시:
+
+```text
+NAME    CONTROLLER             PARAMETERS
+nginx   k8s.io/ingress-nginx   <none>
+```
+
+자칫 실수하기 쉬운 부분은 IngressClass가 맞지 않으면 Ingress resource가 생성되어도 controller가 처리하지 않을 수 있다는 점이다.
+
+---
+
+## pathType: Prefix, Exact, ImplementationSpecific
+
+Ingress path rule에는 `pathType`이 있다.
+
+```yaml
+pathType: Prefix
+```
+
+대표적인 값은 다음과 같다.
+
+| pathType | 의미 |
+|---|---|
+| `Exact` | path가 정확히 일치해야 한다. |
+| `Prefix` | path prefix가 일치하면 matching된다. |
+| `ImplementationSpecific` | Ingress Controller 구현에 따라 해석된다. |
+
+예를 들어 다음 rule이 있다고 하자.
+
+```yaml
+- path: /api
+  pathType: Prefix
+```
+
+이 rule은 보통 다음과 matching된다.
+
+```text
+/api
+/api/
+/api/users
+/api/orders/123
+```
+
+반면 `Exact`라면 `/api`만 matching되고 `/api/users`는 matching되지 않는다.
+
+routing 문제가 생길 때 `pathType`을 잘못 설정한 경우가 많다.
+
+---
+
+## Service selector와 endpoint 확인
+
+Ingress가 정상인데도 요청이 503 또는 404가 나는 경우가 있다. 이때는 Ingress만 보면 안 된다. Ingress 뒤의 `Service`와 Pod endpoint를 확인해야 한다.
+
+### Service 확인
+
+```bash
+kubectl get svc api
+```
+
+### Endpoint 확인
+
+```bash
+kubectl get endpoints api
+```
+
+또는 EndpointSlice도 확인할 수 있다.
+
+```bash
+kubectl get endpointslice
+```
+
+endpoint가 비어 있다면 Service selector가 Pod label과 맞지 않는 것이다.
+
+예를 들어 Service는 다음 selector를 갖고 있다.
+
+```yaml
+selector:
+  app: api
+```
+
+그런데 Pod label이 다음과 같다면:
+
+```yaml
+labels:
+  app: backend
+```
+
+Service는 Pod를 찾지 못한다.
+
+```text
+Service selector: app=api
+Pod label:        app=backend
+결과: endpoint 없음
+```
+
+Ingress는 Service로 traffic을 보냈지만, Service 뒤에 endpoint가 없으므로 정상 응답이 나오지 않는다.
+
+---
+
+## Ingress troubleshooting 흐름
+
+Ingress 문제를 볼 때는 바깥에서 안쪽으로 확인하는 것이 좋다.
+
+```text
+DNS
+  ↓
+External Load Balancer
+  ↓
+Ingress Controller
+  ↓
+Ingress Resource
+  ↓
+Service
+  ↓
+Endpoint
+  ↓
+Pod
+  ↓
+Application
+```
+
+### 1단계: Ingress resource 확인
+
+```bash
+kubectl get ingress
+kubectl describe ingress api
+```
+
+확인할 것:
+
+```text
+host가 맞는가?
+path가 맞는가?
+backend service name이 맞는가?
+backend service port가 맞는가?
+ingressClassName이 맞는가?
+TLS secret이 존재하는가?
+events에 error가 있는가?
+```
+
+### 2단계: Ingress Controller 확인
+
+```bash
+kubectl get pods -n ingress-nginx
+kubectl logs -n ingress-nginx <controller-pod>
+```
+
+확인할 것:
+
+```text
+controller Pod가 Running인가?
+controller가 IngressClass를 watch하고 있는가?
+configuration reload error가 있는가?
+backend service를 찾지 못한다는 log가 있는가?
+TLS secret 관련 error가 있는가?
+```
+
+### 3단계: Service 확인
+
+```bash
+kubectl get svc api
+kubectl describe svc api
+```
+
+확인할 것:
+
+```text
+Service port가 Ingress backend port와 일치하는가?
+targetPort가 Pod containerPort와 맞는가?
+selector가 Pod label과 일치하는가?
+```
+
+### 4단계: Endpoint 확인
+
+```bash
+kubectl get endpoints api
+```
+
+endpoint가 비어 있으면 Ingress 문제가 아니라 Service selector 또는 Pod readiness 문제일 가능성이 크다.
+
+### 5단계: Pod 확인
+
+```bash
+kubectl get pods -l app=api
+kubectl describe pod <pod-name>
+kubectl logs <pod-name>
+```
+
+확인할 것:
+
+```text
+Pod가 Running인가?
+Readiness probe를 통과했는가?
+container가 실제 targetPort에서 listen하고 있는가?
+application log에 error가 있는가?
+```
+
+### 6단계: DNS와 TLS 확인
+
+외부에서 domain이 Ingress Controller의 external IP를 가리키는지 확인한다.
+
+```bash
+nslookup api.example.com
+```
+
+TLS 인증서 확인:
+
+```bash
+curl -vk https://api.example.com
+```
+
+HTTP routing 확인:
+
+```bash
+curl -H "Host: api.example.com" http://<ingress-ip>/
+```
+
+---
+
+## Ingress와 DNS
+
+Ingress 자체가 DNS record를 만들어주지는 않는다. Ingress는 Kubernetes 내부 routing rule이고, 외부 DNS는 별도로 설정해야 한다.
+
+일반적인 흐름은 다음과 같다.
+
+```text
+api.example.com
+  ↓ DNS A/CNAME record
+External Load Balancer IP or hostname
+  ↓
+Ingress Controller
+  ↓
+Service
+```
+
+예를 들어 cloud load balancer hostname이 다음과 같다고 하자.
+
+```text
+abc123.elb.example-cloud.com
+```
+
+DNS에는 다음처럼 CNAME을 둘 수 있다.
+
+```text
+api.example.com CNAME abc123.elb.example-cloud.com
+```
+
+static IP가 있다면 A record를 둘 수 있다.
+
+```text
+api.example.com A 203.0.113.10
+```
+
+ExternalDNS 같은 도구를 사용하면 Ingress resource를 기반으로 DNS record를 자동 생성하도록 구성할 수 있다. 하지만 이것은 Ingress 기본 기능이 아니라 별도 controller를 통한 자동화다.
+
+---
+
+## TLS와 cert-manager
+
+Ingress에서 TLS를 수동으로 관리하면 인증서 갱신이 번거롭다.
+
+수동 방식:
+
+```bash
+kubectl create secret tls api-tls \
+  --cert=./tls.crt \
+  --key=./tls.key
+```
+
+문제:
+
+```text
+인증서 만료일 관리 필요
+갱신 후 Secret 업데이트 필요
+여러 domain 관리 복잡
+환경별 인증서 관리 필요
+```
+
+그래서 Kubernetes에서는 보통 cert-manager 같은 controller를 사용해 certificate lifecycle을 자동화한다.
+
+구조:
+
+```text
+Ingress
+  ↓
+cert-manager annotation 또는 Certificate resource
+  ↓
+ACME issuer / internal CA
+  ↓
+TLS Secret 자동 생성/갱신
+  ↓
+Ingress Controller가 Secret 사용
+```
+
+예시 흐름:
+
+```text
+api.example.com Ingress 생성
+  ↓
+cert-manager가 certificate 요청
+  ↓
+Let's Encrypt 또는 내부 CA에서 certificate 발급
+  ↓
+Kubernetes Secret 생성
+  ↓
+Ingress Controller가 TLS termination
+```
+
+이렇게 하면 인증서 갱신을 사람이 직접 관리하는 부담이 줄어든다.
+
+---
+
+## Ingress와 보안
+
+Ingress는 외부 traffic의 첫 Kubernetes-level entrypoint가 되는 경우가 많다. 따라서 보안 설정이 중요하다.
+
+### TLS 강제
+
+HTTP를 HTTPS로 redirect해야 할 수 있다. 이 기능은 controller별 annotation 또는 설정으로 처리한다.
+
+예시, NGINX Ingress:
+
+```yaml
+metadata:
+  annotations:
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+```
+
+### request size 제한
+
+대용량 request를 제한해야 할 수 있다.
+
+```yaml
+metadata:
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+```
+
+### timeout 설정
+
+backend가 오래 걸리는 요청을 처리한다면 timeout 설정이 필요할 수 있다.
+
+```yaml
+metadata:
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "60"
+```
+
+### IP allowlist
+
+관리자 페이지는 특정 IP에서만 접근하게 할 수 있다.
+
+```yaml
+metadata:
+  annotations:
+    nginx.ingress.kubernetes.io/whitelist-source-range: "203.0.113.0/24"
+```
+
+### 인증과 인가
+
+Ingress Controller 또는 외부 auth proxy와 연동해 인증을 처리할 수 있다.
+
+```text
+Client
+  ↓
+Ingress Controller
+  ↓
+external auth
+  ↓
+Service
+```
+
+주의할 점은 annotation과 기능이 controller마다 다르다는 것이다. 운영 문서에는 어떤 controller를 기준으로 어떤 annotation을 사용하는지 반드시 명시해야 한다.
+
+---
+
+## Ingress와 observability
+
+Ingress Controller는 외부 traffic이 cluster로 들어오는 지점이므로 observability 관점에서도 중요하다.
+
+확인해야 할 metric:
+
+```text
+request count
+status code distribution
+latency
+upstream response time
+4xx / 5xx rate
+TLS handshake error
+backend unavailable
+ingress controller reload error
+```
+
+로그에서 볼 수 있는 것:
+
+```text
+client IP
+host
+path
+method
+status code
+upstream service
+response time
+user agent
+```
+
+운영에서 중요한 질문은 다음이다.
+
+```text
+5xx가 늘어난 원인이 Ingress Controller인가, backend Pod인가?
+특정 path만 느린가?
+특정 host만 certificate 문제가 있는가?
+backend endpoint가 비어 있는가?
+Ingress Controller replica가 부족한가?
+```
+
+Ingress는 L7 entrypoint이기 때문에 application 장애와 infra 장애를 구분하는 데 중요한 관찰 지점이다.
+
+---
+
+## Ingress Controller의 고가용성
+
+Production에서는 Ingress Controller 자체도 고가용성으로 구성해야 한다.
+
+Ingress Controller Pod를 하나만 띄우면 문제가 된다.
+
+```text
+Ingress Controller Pod 1개
+  ↓
+Pod 장애
+  ↓
+외부 traffic 전체 장애 가능
+```
+
+보통 여러 replica로 구성한다.
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ingress-controller
+spec:
+  replicas: 2
+```
+
+추가로 고려할 것:
+
+```text
+PodDisruptionBudget
+anti-affinity
+resource requests/limits
+HPA
+node failure 대비
+LoadBalancer health check
+controller configuration reload 안정성
+```
+
+예를 들어 anti-affinity를 사용하면 Ingress Controller Pod가 서로 다른 node에 배치되도록 유도할 수 있다.
+
+```text
+node-1 → ingress-controller-1
+node-2 → ingress-controller-2
+```
+
+이렇게 하면 node 하나가 죽어도 다른 node의 controller가 traffic을 받을 수 있다.
+
+---
+
+## Ingress와 application architecture
+
+Ingress는 microservices architecture에서 특히 유용하다.
+
+예를 들어 쇼핑몰 애플리케이션이 있다고 하자.
+
+```text
+frontend-service
+user-service
+product-service
+order-service
+payment-service
+admin-service
+```
+
+Ingress는 다음처럼 routing할 수 있다.
+
+```text
+shop.example.com/           → frontend-service
+shop.example.com/users      → user-service
+shop.example.com/products   → product-service
+shop.example.com/orders     → order-service
+shop.example.com/payments   → payment-service
+admin.shop.example.com/     → admin-service
+```
+
+Ingress YAML은 다음처럼 구성할 수 있다.
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: shop
+spec:
+  rules:
+    - host: shop.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend-service
+                port:
+                  number: 80
+          - path: /users
+            pathType: Prefix
+            backend:
+              service:
+                name: user-service
+                port:
+                  number: 80
+          - path: /products
+            pathType: Prefix
+            backend:
+              service:
+                name: product-service
+                port:
+                  number: 80
+          - path: /orders
+            pathType: Prefix
+            backend:
+              service:
+                name: order-service
+                port:
+                  number: 80
+    - host: admin.shop.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: admin-service
+                port:
+                  number: 80
+```
+
+이렇게 하면 외부 사용자는 domain과 URL path만 사용하고, 내부 service 구조는 Kubernetes가 관리한다.
+
+---
+
+## Ingress 사용 시 흔한 실수
+
+### Ingress Controller 설치를 잊음
+
+Ingress resource는 있는데 controller가 없으면 traffic이 처리되지 않는다.
+
+확인:
+
+```bash
+kubectl get ingressclass
+kubectl get pods -A | grep ingress
+```
+
+### Service port와 targetPort 혼동
+
+Service:
+
+```yaml
+ports:
+  - port: 80
+    targetPort: 3000
+```
+
+Ingress backend에는 Service port를 써야 한다.
+
+```yaml
+backend:
+  service:
+    name: api
+    port:
+      number: 80
+```
+
+`targetPort: 3000`을 Ingress backend에 쓰는 것이 아니라, Service가 노출하는 port인 `80`을 참조하는 것이 일반적이다.
+
+### selector와 label mismatch
+
+Service selector:
+
+```yaml
+selector:
+  app: api
+```
+
+Pod label:
+
+```yaml
+labels:
+  app: backend
+```
+
+이러면 endpoint가 비어 있다.
+
+확인:
+
+```bash
+kubectl get endpoints api
+```
+
+### path rewrite를 이해하지 못함
+
+예를 들어 Ingress가 `/api`를 backend로 보내면 backend application은 실제로 `/api/users`를 받을 수 있다.
+
+하지만 backend는 `/users`만 기대할 수도 있다. 이 경우 rewrite 설정이 필요하다.
+
+```text
+external path: /api/users
+backend expected path: /users
+```
+
+rewrite는 controller-specific annotation을 사용하는 경우가 많다.
+
+### TLS Secret namespace 착각
+
+Ingress가 있는 namespace와 TLS Secret이 있는 namespace가 다르면 찾지 못할 수 있다. 일반적으로 Ingress는 같은 namespace의 Secret을 참조한다.
+
+```text
+Ingress namespace: production
+Secret namespace: default
+→ TLS Secret not found 가능
+```
+
+### DNS가 Ingress Controller를 가리키지 않음
+
+Ingress YAML이 맞아도 DNS가 잘못되어 있으면 외부 접속은 실패한다.
+
+확인:
+
+```bash
+nslookup api.example.com
+kubectl get svc -n ingress-nginx
+```
+
+---
+
+## Ingress 선택 기준
+
+Ingress를 쓰면 좋은 경우:
+
+```text
+HTTP/HTTPS web service를 외부에 노출해야 한다.
+여러 service를 하나의 domain 또는 IP 뒤에 두고 싶다.
+path-based routing이 필요하다.
+host-based routing이 필요하다.
+TLS termination을 중앙화하고 싶다.
+cloud load balancer 비용과 IP 수를 줄이고 싶다.
+production에서 API/web traffic entrypoint를 표준화하고 싶다.
+```
+
+Ingress보다 다른 방식이 나을 수 있는 경우:
+
+```text
+cluster 내부 통신만 필요함 → ClusterIP
+간단한 local test 노출 → NodePort
+단일 TCP service 외부 노출 → LoadBalancer
+HTTP 외 protocol 중심 → LoadBalancer/NodePort 또는 controller-specific TCP forwarding
+신규 platform에서 더 정교한 routing과 역할 분리가 필요함 → Gateway API 검토
+```
+
+---
+
+## 전체 mental model
+
+Ingress를 이해하려면 Kubernetes의 외부 노출 방식을 단계적으로 보는 것이 좋다.
+
+```text
+1. Pod는 직접 외부에 노출하기에 적합하지 않다.
+   Pod는 ephemeral하고 IP가 바뀔 수 있다.
+
+2. Service는 Pod 집합 앞에 stable endpoint를 제공한다.
+
+3. ClusterIP는 cluster 내부 통신용이다.
+   외부 사용자는 접근할 수 없다.
+
+4. NodePort는 각 Node의 static port로 Service를 노출한다.
+   단순하지만 production HTTP routing에는 한계가 있다.
+
+5. LoadBalancer는 cloud provider의 external load balancer로 Service를 노출한다.
+   편하지만 service마다 만들면 비용과 관리 부담이 증가한다.
+
+6. Ingress는 HTTP/HTTPS traffic을 단일 진입점에서 받아
+   host/path rule에 따라 여러 Service로 라우팅한다.
+
+7. Ingress를 사용하려면 Ingress Resource뿐 아니라
+   실제 traffic을 처리하는 Ingress Controller가 필요하다.
+
+8. Ingress는 production에서 domain, TLS, routing, 비용, 정책 중앙화 측면에서 유리하다.
+
+9. 신규 고급 routing 요구에는 Gateway API도 함께 검토할 수 있다.
+```
+
+---
+
+## 요약
+
+Kubernetes에서 외부 traffic을 노출하는 방식은 다음처럼 구분할 수 있다.
+
+```text
+ClusterIP
+  → cluster 내부 전용 Service
+
+NodePort
+  → 각 Node의 특정 port로 Service 노출
+
+LoadBalancer
+  → cloud provider의 external load balancer로 Service 노출
+
+Ingress
+  → HTTP/HTTPS traffic을 host/path rule에 따라 여러 Service로 라우팅
+```
+
+Ingress는 `Service` type이 아니라 별도의 routing API object다. 그리고 Ingress resource만으로는 동작하지 않으며, 반드시 Ingress Controller가 필요하다.
+
+운영 관점에서 Ingress의 가장 큰 가치는 다음이다.
+
+```text
+하나의 외부 진입점
+여러 backend Service로 routing
+domain 기반 routing
+path 기반 routing
+TLS termination
+LoadBalancer 비용 절감
+HTTP routing 정책 중앙화
+```
+
+다만 Ingress는 주로 HTTP/HTTPS용이며, controller별 동작 차이와 annotation 의존성을 주의해야 한다. 또한 신규 platform 설계에서는 Gateway API도 함께 검토할 수 있다.
+
+한 문장으로 정리하면 다음과 같다.
+
+**Ingress는 Kubernetes cluster 외부의 HTTP/HTTPS 요청을 하나의 진입점에서 받아, host와 path rule에 따라 내부 Service로 전달하는 L7 routing layer다.**

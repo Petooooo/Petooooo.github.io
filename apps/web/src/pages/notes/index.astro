@@ -26,7 +26,7 @@ const areaGroups = sortAreas([...new Set(entries.map(getEntryArea))], areaOrder)
 ---
 <BaseLayout title="Notes" description="Technical notes and reusable references.">
   <section class="py-12 md:py-14">
-    <SectionHeader eyebrow="Notes" title="Study And Implementation Notes" description="A technical study notebook for cloud infrastructure, digital logic, system software, networks, operating systems, algorithms, coding-test preparation, Baekjoon strategies, debugging observations, and concise concept summaries." />
+    <SectionHeader eyebrow="Notes" title="Study And Concept Notes" description="A technical study notebook for cloud infrastructure, Kubernetes, networking, databases, operating systems, algorithms, digital logic, security, implementation techniques, and concise concept summaries." />
     {areaGroups.length > 0 && (
       <nav class="mb-8 border-y border-white/10 py-3" aria-label="Notes areas">
         <div class="flex flex-wrap gap-2">

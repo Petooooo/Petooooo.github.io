@@ -1,0 +1,1239 @@
+---
+area: "Cloud Infrastructure"
+type: "concept"
+series: "Kubernetes Essentials"
+title: "K8s 13. Managed 책임 범위"
+slug: "k8s-13-managed-responsibility"
+date: "2026-06-02"
+updated: "2026-06-02"
+draft: false
+reviewed: true
+category: "Notes"
+tags: ["Kubernetes", "Managed Kubernetes", "Cloud Native", "Control Plane", "Worker Node", "Shared Responsibility", "Security", "Cluster Upgrade", "Cloud Integration", "Portability"]
+description: "Managed Kubernetes의 장점과 한계를 control plane 운영, cluster lifecycle, cloud integration, 보안 책임 분담, portability, upgrade 관점에서 정리한다."
+---
+Kubernetes는 containerized workload를 실행하고 운영하기 위한 강력한 open source platform이다. 하지만 production Kubernetes cluster를 직접 운영하는 일은 단순히 `kubectl`을 설치하고 YAML을 적용하는 수준이 아니다.
+
+직접 Kubernetes를 운영하려면 control plane, `etcd`, API server, scheduler, controller-manager, worker node, CNI, CSI, ingress, load balancer, security patch, upgrade, monitoring, logging까지 모두 고려해야 한다.
+
+```text
+control plane 고가용성
+etcd backup/restore
+API server certificate 관리
+scheduler/controller-manager 운영
+worker node provisioning
+node OS patch
+Kubernetes version upgrade
+container runtime 관리
+CNI plugin 설치와 upgrade
+CSI driver 설치와 storage 연동
+Ingress controller 구성
+LoadBalancer 연동
+cluster autoscaling
+logging/monitoring
+RBAC/IAM 연동
+security patch 대응
+장애 대응
+```
+
+**Managed Kubernetes**는 이 부담의 일부를 cloud provider에게 위임하고, 사용자가 application 배포와 운영에 더 집중할 수 있게 해주는 Kubernetes 운영 모델이다.
+
+---
+
+## 핵심 요약
+
+Managed Kubernetes는 Kubernetes 자체를 바꾸는 기술이 아니다. 사용자는 여전히 `Pod`, `Deployment`, `Service`, `Ingress`, `ConfigMap`, `Secret`, `Namespace`, `RBAC` 같은 Kubernetes object를 사용한다.
+
+달라지는 것은 **cluster lifecycle을 누가 어디까지 책임지는가**다.
+
+```text
+Self-managed Kubernetes
+  → 사용자가 control plane, etcd, API server, scheduler, node, upgrade, patch를 직접 관리
+
+Managed Kubernetes
+  → cloud provider가 control plane과 cluster lifecycle의 큰 부분을 관리
+  → 사용자는 application, data, workload security, configuration에 집중
+```
+
+한 문장으로 정리하면 다음과 같다.
+
+**Managed Kubernetes는 Kubernetes cluster의 control plane과 infrastructure 운영 부담을 cloud provider에게 일부 위임하고, 사용자가 containerized application의 배포·확장·보안·관측에 더 집중할 수 있게 해주는 shared-responsibility 기반 Kubernetes 운영 모델이다.**
+
+---
+
+## Managed Kubernetes가 필요한 이유
+
+Kubernetes는 강력하지만, cluster 자체도 하나의 복잡한 distributed system이다.
+
+운영자는 다음 component를 안정적으로 관리해야 한다.
+
+```text
+kube-apiserver
+etcd
+kube-scheduler
+kube-controller-manager
+kubelet
+container runtime
+CNI plugin
+CSI driver
+Ingress controller
+cluster add-ons
+```
+
+Self-managed Kubernetes에서는 이 모든 것을 직접 설계하고 운영해야 한다.
+
+```text
+사용자가 직접 해야 하는 일:
+  VM 준비
+  OS 설치
+  container runtime 설치
+  Kubernetes component 설치
+  control plane bootstrap
+  worker node join
+  CNI 설치
+  storage class 구성
+  load balancer 구성
+  kubeconfig 배포
+  upgrade와 patch 적용
+  장애 대응
+```
+
+Managed Kubernetes는 이 과정 중 상당 부분을 provider의 managed service로 제공한다.
+
+```text
+cloud provider가 도와주는 일:
+  cluster provisioning
+  managed control plane
+  Kubernetes version 제공
+  control plane availability
+  cloud load balancer 연동
+  worker node lifecycle 일부
+  security update 제공
+  cloud IAM/logging/registry 통합
+```
+
+다만 모든 책임이 사라지는 것은 아니다. Managed Kubernetes는 **책임 제거**가 아니라 **책임 분담**이다.
+
+```text
+사용자가 계속 책임져야 하는 일:
+  application manifest 작성
+  workload 배포
+  Service/Ingress 설계
+  resource requests/limits 설정
+  application monitoring
+  data protection
+  namespace/RBAC 운영
+  Secret 관리
+  NetworkPolicy 설계
+  image security
+```
+
+---
+
+## Self-managed Kubernetes와 Managed Kubernetes 비교
+
+둘의 차이를 가장 단순하게 정리하면 다음과 같다.
+
+| 구분 | Self-managed Kubernetes | Managed Kubernetes |
+|---|---|---|
+| control plane 설치 | 직접 설치 | provider가 관리 |
+| `etcd` 운영 | 직접 관리 | 보통 provider가 관리 |
+| API server HA | 직접 구성 | provider가 제공 |
+| cluster 생성 | `kubeadm`, `kops`, Kubespray, custom automation 등 | console, CLI, API로 생성 |
+| worker node 관리 | 직접 provision/patch/upgrade | provider가 일부 자동화 또는 도구 제공 |
+| cloud LB 연동 | 직접 구성 | provider service와 통합 |
+| IAM 연동 | 직접 구성 | cloud IAM과 통합 가능 |
+| 보안 patch | 직접 추적 및 적용 | provider가 제공·알림·일부 자동화 |
+| 자유도 | 높음 | provider 제약 존재 |
+| 운영 부담 | 큼 | 상대적으로 작음 |
+| 학습 효과 | 깊음 | 빠른 사용에 유리 |
+| production 진입 속도 | 느릴 수 있음 | 빠름 |
+
+Self-managed 방식은 완전한 제어권이 있다. CNI, control plane topology, kubelet 설정, OS image, container runtime, upgrade path까지 세밀하게 조정할 수 있다.
+
+반면 그만큼 다음 책임도 직접 져야 한다.
+
+```text
+장애 대응
+control plane 복구
+etcd backup
+security patch
+Kubernetes minor version upgrade
+node drain
+CNI/CSI 호환성 검증
+certificate rotation
+```
+
+Managed Kubernetes는 제어권 일부를 cloud provider에게 넘기는 대신, cluster lifecycle을 더 빠르고 안정적으로 가져갈 수 있다.
+
+---
+
+## 첫 번째 장점: cluster 생성이 빠르다
+
+Self-managed Kubernetes에서는 cluster를 만들기 위해 다음 작업을 직접 수행해야 한다.
+
+```text
+VM 준비
+OS 설치
+container runtime 설치
+kubeadm 또는 배포 도구 설치
+control plane bootstrap
+worker node join
+CNI 설치
+storage class 구성
+load balancer 구성
+kubeconfig 배포
+```
+
+Managed Kubernetes에서는 이 과정을 더 추상화한다.
+
+```text
+cluster 이름 선택
+region/zone 선택
+worker node type 선택
+worker node 수 선택
+생성 버튼 또는 CLI/API 실행
+cluster ready 상태 확인
+kubeconfig 연결
+```
+
+예시 흐름은 다음과 같다.
+
+```text
+Create Kubernetes cluster
+  ↓
+Select region
+  ↓
+Select worker node flavor
+  ↓
+Select number of worker nodes
+  ↓
+Provision cluster
+  ↓
+Download or configure kubeconfig
+  ↓
+kubectl get nodes
+```
+
+운영 관점에서 cluster 생성이 빠르다는 것은 단순한 편의 기능이 아니다.
+
+```text
+개발/테스트 cluster를 빠르게 만들 수 있다.
+팀별 sandbox cluster를 쉽게 제공할 수 있다.
+PoC 환경을 빠르게 구성할 수 있다.
+장애 복구나 신규 region 확장 시 provisioning 시간이 줄어든다.
+cluster-as-a-service 형태의 내부 platform을 만들기 쉬워진다.
+```
+
+다만 빠르게 만들 수 있다고 해서 무계획적으로 cluster를 늘리면 안 된다. cluster가 많아질수록 다음 관리 대상도 늘어난다.
+
+```text
+cluster version
+node pool
+IAM 권한
+network policy
+logging/monitoring integration
+cost
+secret 관리
+backup 정책
+```
+
+---
+
+## 두 번째 장점: compute power를 쉽게 조절할 수 있다
+
+Kubernetes에서 compute capacity는 결국 worker node에서 나온다.
+
+```text
+worker node CPU
+worker node memory
+worker node disk
+GPU
+network bandwidth
+```
+
+Managed Kubernetes에서는 workload 특성에 따라 node pool을 나눌 수 있다.
+
+```text
+general-purpose node pool
+memory-optimized node pool
+compute-optimized node pool
+GPU node pool
+bare metal node pool
+```
+
+예를 들어 일반 web workload는 standard VM node pool에 올리고, machine learning inference는 GPU node pool에 올릴 수 있다.
+
+```text
+frontend Deployment
+  → general-purpose node pool
+
+API server
+  → general-purpose or compute-optimized node pool
+
+ML inference Pod
+  → GPU node pool
+
+database-like stateful workload
+  → storage-optimized or dedicated node pool
+```
+
+Kubernetes scheduling 정책과 함께 쓰면 더 명확해진다.
+
+```yaml
+spec:
+  nodeSelector:
+    accelerator: nvidia
+```
+
+또는 taint/toleration을 사용할 수 있다.
+
+```bash
+kubectl taint nodes gpu-node dedicated=gpu:NoSchedule
+```
+
+```yaml
+tolerations:
+  - key: "dedicated"
+    operator: "Equal"
+    value: "gpu"
+    effect: "NoSchedule"
+```
+
+Managed Kubernetes의 장점은 이런 compute pool을 직접 물리 서버 단위로 조달하지 않고, provider의 infrastructure abstraction을 통해 빠르게 구성할 수 있다는 점이다.
+
+---
+
+## 세 번째 장점: cloud provider 서비스와 통합된다
+
+Kubernetes 자체는 portable한 API를 제공하지만, 실제 production에서는 Kubernetes만으로 끝나지 않는다.
+
+보통 다음 cloud service와 연결된다.
+
+```text
+Load Balancer
+Block Storage
+Object Storage
+Container Registry
+IAM
+DNS
+Certificate
+Logging
+Monitoring
+Key Management
+VPC / Subnet / Firewall
+Secrets Manager
+```
+
+Managed Kubernetes는 이런 cloud provider service와 통합된 경험을 제공한다.
+
+예를 들어 `Service` type을 `LoadBalancer`로 만들면 cloud load balancer가 자동으로 생성될 수 있다.
+
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: api
+spec:
+  type: LoadBalancer
+  selector:
+    app: api
+  ports:
+    - port: 80
+      targetPort: 3000
+```
+
+Self-managed 환경에서는 외부 load balancer 연동을 직접 구성해야 한다. 반면 Managed Kubernetes에서는 provider integration이 이미 준비되어 있는 경우가 많다.
+
+Storage도 마찬가지다.
+
+```yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: data
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 100Gi
+```
+
+Managed Kubernetes에서는 `StorageClass`를 통해 cloud block storage와 연결할 수 있다.
+
+```text
+PVC 생성
+  ↓
+CSI driver
+  ↓
+cloud block storage volume 생성
+  ↓
+worker node에 attach
+  ↓
+Pod에 mount
+```
+
+이런 통합은 운영 속도를 크게 높인다. 하지만 동시에 provider-specific 설정이 들어갈 수 있다는 점도 기억해야 한다.
+
+```text
+Kubernetes API 자체
+  → portable
+
+cloud LoadBalancer annotation
+cloud StorageClass
+cloud IAM integration
+cloud logging integration
+  → provider-specific 가능성 있음
+```
+
+즉 Managed Kubernetes는 open Kubernetes API의 장점과 cloud provider integration의 편의성을 함께 제공하지만, 세부 구현은 provider에 따라 달라질 수 있다.
+
+---
+
+## 네 번째 장점: Open Standards와 portability
+
+Kubernetes가 중요한 이유는 application deployment model이 상당 부분 표준화되기 때문이다.
+
+```text
+Deployment
+Service
+ConfigMap
+Secret
+Ingress
+Namespace
+RBAC
+HorizontalPodAutoscaler
+```
+
+예를 들어 다음 `Deployment` YAML은 여러 Kubernetes cluster에서 대체로 비슷하게 동작할 수 있다.
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: api
+  template:
+    metadata:
+      labels:
+        app: api
+    spec:
+      containers:
+        - name: api
+          image: registry.example.com/api:1.0.0
+```
+
+하지만 portability는 “아무 provider에나 그대로 옮기면 100% 동일하게 동작한다”는 뜻은 아니다.
+
+Portable한 부분:
+
+```text
+Pod
+Deployment
+Service
+ConfigMap
+Secret
+Namespace
+basic RBAC
+standard Kubernetes API
+```
+
+Provider 차이가 생기기 쉬운 부분:
+
+```text
+LoadBalancer implementation
+Ingress Controller
+StorageClass
+CSI driver
+IAM integration
+DNS automation
+certificate integration
+container registry
+observability stack
+network policy implementation
+node pool flavor
+GPU device plugin
+```
+
+따라서 Managed Kubernetes를 사용할 때 portability를 높이려면 다음 원칙이 필요하다.
+
+```text
+표준 Kubernetes object를 우선 사용한다.
+provider-specific annotation을 최소화한다.
+Helm/Kustomize values로 provider 차이를 분리한다.
+StorageClass, IngressClass, LoadBalancer 설정은 환경별로 분리한다.
+application image와 manifest를 cloud provider에 종속시키지 않는다.
+CI/CD pipeline에서 target cluster만 바꿔 배포할 수 있게 한다.
+```
+
+즉 Managed Kubernetes는 portability의 기반을 제공하지만, 실제 portability는 설계 방식에 달려 있다.
+
+---
+
+## 다섯 번째 장점: 보안 운영 부담이 줄어든다
+
+Kubernetes security는 범위가 넓다.
+
+```text
+control plane security
+etcd encryption
+API server authentication
+RBAC authorization
+node OS patch
+container runtime vulnerability
+image vulnerability
+network policy
+secret management
+Pod security
+admission control
+audit logging
+supply chain security
+```
+
+Managed Kubernetes는 이 중 일부를 provider가 관리하거나 지원한다.
+
+Provider가 주로 맡을 수 있는 영역:
+
+```text
+managed control plane
+master availability
+일부 security patch
+infrastructure layer
+cloud service endpoint
+provider-managed encryption 기본값
+cluster component 취약점 공지/업데이트 제공
+```
+
+사용자가 계속 맡아야 하는 영역:
+
+```text
+application image 선택
+container vulnerability 대응
+RBAC 설계
+namespace 격리
+NetworkPolicy 설정
+Secret 관리
+Pod securityContext
+workload resource limits
+application data 보호
+compliance 요구사항 충족
+```
+
+따라서 Managed Kubernetes를 쓴다고 해서 다음을 생략하면 안 된다.
+
+```text
+RBAC 최소 권한
+Secret 외부 노출 방지
+container image scanning
+NetworkPolicy 적용
+rootless 또는 non-root container
+readOnlyRootFilesystem
+resource requests/limits
+audit log 확인
+CI/CD supply chain 검증
+```
+
+---
+
+## Managed Kubernetes의 보안 모델
+
+Managed Kubernetes에서 보안은 **shared responsibility**로 이해해야 한다.
+
+예를 들어 control plane은 provider가 관리할 수 있지만, 사용자가 `cluster-admin` 권한을 너무 넓게 부여하면 application layer 보안은 여전히 취약해진다.
+
+나쁜 예:
+
+```text
+모든 개발자에게 cluster-admin 부여
+모든 namespace에 default ServiceAccount 사용
+Secret 값을 Git repo에 commit
+container를 root로 실행
+NetworkPolicy 없음
+public LoadBalancer 남발
+```
+
+좋은 운영 방식:
+
+```text
+namespace별 권한 분리
+ServiceAccount별 최소 권한
+Secret은 external secret manager 또는 encrypted secret flow 사용
+image registry는 private registry 사용
+image scanning과 admission policy 적용
+Pod Security Standards 적용
+NetworkPolicy로 east-west traffic 제한
+audit log와 alerting 구성
+```
+
+즉 managed라고 해도 서비스 유형과 cluster 종류에 따라 책임 경계가 다를 수 있으므로, 실제 운영 전에 책임 범위를 문서로 확인해야 한다.
+
+확인 필요:
+
+```text
+control plane은 provider가 완전히 관리하는가?
+worker node patch는 자동인가 수동인가?
+node OS update는 누가 수행하는가?
+container runtime 취약점은 누가 대응하는가?
+사용자 workload의 취약점은 누가 책임지는가?
+data backup은 누가 책임지는가?
+```
+
+---
+
+## 여섯 번째 장점: 운영 자동화와 upgrade 부담 감소
+
+Kubernetes를 직접 운영할 때 가장 부담스러운 작업 중 하나가 upgrade다.
+
+Kubernetes upgrade는 단순히 binary 하나를 바꾸는 일이 아니다.
+
+```text
+control plane version 확인
+etcd backup
+API deprecation 확인
+admission webhook 호환성 확인
+CNI/CSI 호환성 확인
+worker node drain
+kubelet upgrade
+container runtime 확인
+addon upgrade
+rollback path 검토
+```
+
+Managed Kubernetes는 이 중 상당 부분을 provider의 tooling과 lifecycle management로 지원한다.
+
+```text
+새 Kubernetes version 제공
+control plane upgrade workflow 제공
+worker node update workflow 제공
+security patch 알림
+cluster health check
+node replace/reload 기능
+```
+
+다만 사용자가 아무것도 하지 않아도 된다는 뜻은 아니다. Managed Kubernetes는 upgrade 도구를 제공하지만, application compatibility는 여전히 사용자의 책임이다.
+
+운영 관점에서 upgrade 전 확인해야 할 것은 다음이다.
+
+```text
+현재 Kubernetes version
+target Kubernetes version
+deprecated API 사용 여부
+Ingress Controller 호환성
+CNI/CSI 호환성
+Helm chart 호환성
+CRD conversion webhook
+PodDisruptionBudget
+stateful workload backup
+node pool별 drain 영향
+```
+
+---
+
+## 일곱 번째 장점: 빠른 실험과 PoC
+
+Managed Kubernetes는 빠르게 cluster를 만들 수 있기 때문에 PoC에 유리하다.
+
+예를 들어 새로운 platform component를 테스트할 때 다음처럼 별도 cluster를 빠르게 만들 수 있다.
+
+```text
+Knative PoC cluster
+Istio PoC cluster
+GPU inference test cluster
+CI runner test cluster
+observability stack test cluster
+multi-zone HA test cluster
+```
+
+Self-managed cluster에서는 이런 실험 환경을 만드는 데 시간이 오래 걸릴 수 있다. 반면 managed service에서는 console/CLI/API로 cluster를 만들고, 실험 후 삭제하는 방식이 가능하다.
+
+하지만 PoC cluster도 보안과 비용을 무시하면 안 된다.
+
+```text
+public endpoint 노출 여부 확인
+LoadBalancer resource 정리
+PVC 삭제 여부 확인
+container registry image 정리
+IAM 권한 회수
+cluster 삭제 확인
+```
+
+빠른 생성은 빠른 폐기와 함께 설계되어야 한다.
+
+---
+
+## Managed Kubernetes가 해결하지 않는 것
+
+Managed Kubernetes는 많은 것을 편하게 해주지만, Kubernetes 운영의 모든 문제를 해결하지는 않는다.
+
+해결해주지 않는 대표 영역:
+
+```text
+application architecture
+DB HA 설계
+application-level failover
+schema migration
+container image 품질
+memory leak
+bad readinessProbe
+잘못된 Service selector
+RBAC 과다 권한
+Secret 유출
+비효율적인 resource requests/limits
+비용 최적화
+SLO/SLA 설계
+장애 대응 runbook
+```
+
+예를 들어 managed Kubernetes를 쓴다고 해도 다음 `Deployment`가 잘못되어 있으면 장애가 난다.
+
+```yaml
+resources: {}
+```
+
+`requests`/`limits`가 없으면 scheduler가 resource 요구량을 제대로 판단하기 어렵고, noisy neighbor 문제가 생길 수 있다.
+
+또 `readinessProbe`가 없으면 준비되지 않은 Pod로 traffic이 갈 수 있다.
+
+```yaml
+readinessProbe:
+  httpGet:
+    path: /ready
+    port: 3000
+```
+
+Managed Kubernetes는 cluster 운영 부담을 줄여주지만, application 운영 품질은 여전히 사용자가 만들어야 한다.
+
+---
+
+## Managed Kubernetes와 self-managed 선택 기준
+
+둘 중 무엇을 선택할지는 상황에 따라 다르다.
+
+Managed Kubernetes가 잘 맞는 경우:
+
+```text
+빠르게 production-ready cluster를 만들고 싶다.
+control plane 운영 부담을 줄이고 싶다.
+cloud provider의 LoadBalancer, Storage, IAM, Logging과 통합하고 싶다.
+팀이 Kubernetes cluster 자체보다 application 운영에 집중해야 한다.
+여러 개발/테스트 cluster를 빠르게 만들어야 한다.
+보안 patch와 upgrade lifecycle을 provider tooling으로 관리하고 싶다.
+```
+
+Self-managed Kubernetes가 더 적합할 수 있는 경우:
+
+```text
+폐쇄망 또는 air-gapped 환경
+특정 OS/hypervisor/network stack을 강하게 통제해야 하는 환경
+control plane 설정을 세밀하게 바꿔야 하는 환경
+cloud provider 종속을 최소화해야 하는 환경
+edge 또는 on-premise 특수 환경
+Kubernetes 자체를 깊게 학습하거나 연구해야 하는 경우
+비용 구조상 직접 운영이 더 유리한 경우
+```
+
+선택 기준을 표로 정리하면 다음과 같다.
+
+| 질문 | Managed Kubernetes 쪽 | Self-managed 쪽 |
+|---|---|---|
+| control plane 운영을 직접 할 수 있는가? | 어렵거나 원치 않음 | 가능하고 필요함 |
+| cloud 서비스 통합이 중요한가? | 중요함 | 직접 통합 가능 |
+| 완전한 설정 자유도가 필요한가? | 제한되어도 됨 | 매우 중요함 |
+| 보안 patch와 upgrade를 누가 관리할 것인가? | provider 도움 필요 | 직접 관리 가능 |
+| 환경이 on-prem/air-gap인가? | 제한적일 수 있음 | 더 적합할 수 있음 |
+| 팀의 목표가 app 개발인가 cluster 연구인가? | app 개발/운영 | cluster 자체 운영/연구 |
+
+---
+
+## Managed Kubernetes를 도입할 때 확인할 체크리스트
+
+Managed Kubernetes를 선택하기 전에 다음을 확인해야 한다.
+
+```text
+지원 Kubernetes version
+control plane HA 구조
+cluster upgrade 방식
+worker node upgrade 방식
+region/zone 지원
+multi-zone cluster 지원
+node pool 기능
+GPU node 지원
+bare metal 지원 여부
+private cluster 지원
+VPC/subnet/firewall 모델
+LoadBalancer 비용과 동작 방식
+StorageClass와 CSI driver
+Ingress/Gateway 지원 방식
+container registry integration
+image scanning 지원
+IAM/RBAC 연동 방식
+audit log 제공 여부
+monitoring/logging integration
+backup/restore 책임 범위
+SLA
+지원되는 CNI/NetworkPolicy
+cluster autoscaler 지원
+```
+
+특히 책임 경계는 반드시 확인해야 한다.
+
+```text
+control plane은 provider가 완전히 관리하는가?
+worker node patch는 자동인가 수동인가?
+node OS update는 누가 수행하는가?
+container runtime 취약점은 누가 대응하는가?
+사용자 workload의 취약점은 누가 책임지는가?
+data backup은 누가 책임지는가?
+```
+
+---
+
+## Managed Kubernetes의 운영 흐름
+
+Managed Kubernetes를 사용하는 일반적인 운영 흐름은 다음과 같다.
+
+```text
+1. Cluster 생성
+2. kubeconfig 또는 access 설정
+3. Namespace와 RBAC 구성
+4. Container registry 연동
+5. Ingress/Gateway 구성
+6. StorageClass 확인
+7. Observability stack 연결
+8. Application 배포
+9. HPA/Cluster Autoscaler 설정
+10. Backup/restore 정책 수립
+11. Security policy 적용
+12. Upgrade와 patch lifecycle 운영
+```
+
+Application 배포는 여전히 Kubernetes 방식이다.
+
+```bash
+kubectl apply -f deployment.yaml
+kubectl apply -f service.yaml
+kubectl apply -f ingress.yaml
+```
+
+또는 Helm을 사용할 수 있다.
+
+```bash
+helm upgrade --install api ./chart \
+  -f values-prod.yaml
+```
+
+Managed Kubernetes는 cluster를 쉽게 제공하지만, application 배포 이후에는 일반 Kubernetes 운영 지식이 그대로 필요하다.
+
+```bash
+kubectl get pods
+kubectl describe pod <pod-name>
+kubectl logs <pod-name>
+kubectl rollout status deployment/api
+kubectl get events --sort-by=.metadata.creationTimestamp
+```
+
+---
+
+## Managed Kubernetes와 DevOps workflow
+
+Managed Kubernetes는 DevOps workflow를 단순화할 수 있다.
+
+일반적인 흐름:
+
+```text
+Source code
+  ↓
+CI test
+  ↓
+container image build
+  ↓
+image scan
+  ↓
+private registry push
+  ↓
+manifest or Helm values update
+  ↓
+GitOps sync or CD deploy
+  ↓
+managed Kubernetes cluster rollout
+  ↓
+monitoring / logging / alerting
+```
+
+Managed Kubernetes가 제공하는 것은 주로 아래쪽 platform foundation이다.
+
+```text
+cluster provisioning
+node lifecycle
+cloud LB integration
+cloud storage integration
+IAM integration
+security patch support
+observability integration
+```
+
+하지만 CI/CD pipeline의 품질은 사용자가 설계해야 한다.
+
+```text
+immutable image tag 사용
+image vulnerability scan
+SBOM 생성
+manifest validation
+policy-as-code
+rollout status 확인
+automatic rollback 기준
+environment promotion
+```
+
+즉 Managed Kubernetes는 좋은 기반이지만, DevOps maturity를 자동으로 만들어주지는 않는다.
+
+---
+
+## Managed Kubernetes와 보안 pipeline
+
+Managed Kubernetes의 보안 장점은 DevSecOps pipeline과 연결된다.
+
+좋은 흐름은 다음과 같다.
+
+```text
+1. Source code commit
+2. Dependency scan
+3. Container image build
+4. Image vulnerability scan
+5. Image signing
+6. Private registry push
+7. Admission policy 검증
+8. Kubernetes deploy
+9. Runtime monitoring
+10. Continuous vulnerability monitoring
+```
+
+Managed Kubernetes provider가 image scanning, private registry, vulnerability notice, cluster patch를 제공하더라도, 사용자는 다음을 설계해야 한다.
+
+```text
+어떤 CVE severity부터 배포를 막을 것인가?
+base image를 어떻게 관리할 것인가?
+latest tag를 금지할 것인가?
+서명되지 않은 image를 admission에서 차단할 것인가?
+production namespace에는 어떤 registry만 허용할 것인가?
+runtime threat detection을 사용할 것인가?
+```
+
+보안은 provider가 대신 “완성”해주는 것이 아니라, provider 기능을 기반으로 사용자가 policy를 세우는 영역이다.
+
+---
+
+## Managed Kubernetes에서 자주 생기는 오해
+
+### 오해 1: Managed Kubernetes를 쓰면 Kubernetes를 몰라도 된다
+
+아니다. Managed Kubernetes는 cluster 생성과 일부 운영을 단순화하지만, Kubernetes object와 troubleshooting은 여전히 알아야 한다.
+
+```text
+Pod
+Deployment
+ReplicaSet
+Service
+Ingress
+PVC
+ConfigMap
+Secret
+RBAC
+Namespace
+NetworkPolicy
+```
+
+Application 문제가 생기면 결국 다음 명령을 써야 한다.
+
+```bash
+kubectl get pods
+kubectl describe pod <pod-name>
+kubectl logs <pod-name>
+kubectl get events --sort-by=.metadata.creationTimestamp
+```
+
+### 오해 2: Managed Kubernetes를 쓰면 보안 책임이 사라진다
+
+아니다. Provider는 control plane과 infrastructure layer를 관리할 수 있지만, 사용자가 취약한 image를 배포하거나 Secret을 Git에 올리면 managed service가 자동으로 해결해주지 않는다.
+
+### 오해 3: Managed Kubernetes는 vendor lock-in이 없다
+
+Kubernetes API 자체는 portable하지만, cloud integration은 provider-specific일 수 있다.
+
+```text
+LoadBalancer annotation
+StorageClass
+IAM binding
+DNS automation
+Logging agent
+Ingress implementation
+```
+
+Portable하게 운영하려면 provider-specific 설정을 values나 overlay로 분리해야 한다.
+
+### 오해 4: Managed Kubernetes는 항상 더 싸다
+
+항상 그렇지는 않다. 운영 인력 비용까지 고려하면 managed가 유리할 수 있지만, workload 규모, node 사용률, cloud load balancer 비용, storage 비용, data transfer 비용에 따라 달라진다.
+
+```text
+managed service 비용
+worker node 비용
+load balancer 비용
+storage 비용
+network egress 비용
+logging/monitoring 비용
+```
+
+### 오해 5: control plane만 managed면 production-ready다
+
+아니다. Production-ready cluster에는 다음이 필요하다.
+
+```text
+namespace/RBAC 설계
+network policy
+ingress/TLS
+monitoring/logging
+backup/restore
+resource quota
+limit range
+pod security
+image policy
+autoscaling
+disaster recovery
+runbook
+```
+
+Managed Kubernetes는 기반일 뿐이다.
+
+---
+
+## Managed Kubernetes troubleshooting 관점
+
+Managed Kubernetes에서 문제가 생기면 책임 영역을 나눠서 봐야 한다.
+
+### Cluster provisioning 문제
+
+```text
+cluster 생성이 오래 걸림
+worker node provisioning 실패
+quota 부족
+region/zone capacity 부족
+IAM 권한 부족
+```
+
+확인할 것:
+
+```text
+cloud console event
+cluster status
+quota
+billing/account 상태
+IAM permission
+region/zone availability
+```
+
+### Node 문제
+
+```text
+node NotReady
+worker node update 실패
+kubelet 문제
+container runtime 문제
+disk pressure
+memory pressure
+```
+
+확인 명령:
+
+```bash
+kubectl get nodes
+kubectl describe node <node-name>
+kubectl get pods -A -o wide
+```
+
+### Workload 문제
+
+```text
+ImagePullBackOff
+CrashLoopBackOff
+Pending
+Running but not Ready
+Service endpoint 없음
+```
+
+확인 명령:
+
+```bash
+kubectl describe pod <pod-name>
+kubectl logs <pod-name>
+kubectl get events --sort-by=.metadata.creationTimestamp
+kubectl get endpoints <service-name>
+```
+
+### Cloud integration 문제
+
+```text
+LoadBalancer pending
+PVC pending
+DNS record 생성 실패
+Ingress certificate 실패
+```
+
+확인할 것:
+
+```text
+cloud load balancer quota
+subnet/firewall
+StorageClass
+CSI driver 상태
+Ingress Controller 상태
+cert-manager 상태
+IAM 권한
+```
+
+Managed Kubernetes에서는 Kubernetes 내부 상태와 cloud provider resource 상태를 함께 봐야 한다.
+
+---
+
+## Managed Kubernetes를 잘 쓰는 운영 패턴
+
+### Cluster는 cattle로, data는 신중하게
+
+Managed Kubernetes에서는 cluster를 비교적 쉽게 만들 수 있다. 따라서 cluster 자체는 재생성 가능한 대상으로 보고, 중요한 것은 workload manifest와 data backup이다.
+
+```text
+Git에 저장:
+  Helm chart
+  Kustomize overlay
+  Terraform/IaC
+  RBAC
+  NetworkPolicy
+  monitoring config
+
+별도로 보호:
+  database data
+  object storage
+  persistent volume backup
+  secret material
+```
+
+### GitOps와 결합
+
+Managed Kubernetes는 GitOps와 잘 맞는다.
+
+```text
+Git repository
+  ↓
+Argo CD / Flux
+  ↓
+Managed Kubernetes cluster
+  ↓
+Application rollout
+```
+
+cluster 자체는 provider가 관리하고, application desired state는 Git으로 관리하는 구조다.
+
+### Node pool 분리
+
+workload 성격별로 node pool을 분리하면 운영이 쉬워진다.
+
+```text
+system node pool
+general app node pool
+GPU node pool
+stateful workload node pool
+CI runner node pool
+```
+
+이렇게 하면 taint/toleration, resource quota, autoscaling 정책을 더 명확하게 적용할 수 있다.
+
+### Upgrade를 작은 단위로 검증
+
+Managed service가 upgrade를 지원해도, production에 바로 적용하면 위험하다.
+
+권장 흐름:
+
+```text
+dev cluster upgrade
+  ↓
+staging cluster upgrade
+  ↓
+production canary node pool upgrade
+  ↓
+production 전체 upgrade
+```
+
+확인할 것:
+
+```text
+deprecated API
+CRD compatibility
+Ingress behavior
+CNI/CSI behavior
+application readiness
+monitoring/logging agent
+```
+
+---
+
+## 전체 mental model
+
+Managed Kubernetes를 이해하는 흐름은 다음과 같다.
+
+```text
+1. Kubernetes는 containerized workload를 실행하는 open source platform이다.
+
+2. 하지만 production Kubernetes cluster를 직접 운영하려면
+   control plane, etcd, scheduler, worker node, upgrade, patch, networking,
+   storage, security를 직접 관리해야 한다.
+
+3. Managed Kubernetes는 cloud provider가 cluster lifecycle의 많은 부분을
+   service 형태로 제공하는 운영 모델이다.
+
+4. 사용자는 region, zone, worker node type, worker node 수, GPU 여부 등을 선택해
+   cluster를 빠르게 만들 수 있다.
+
+5. Managed Kubernetes는 cloud LoadBalancer, storage, registry, IAM,
+   logging/monitoring 같은 provider service와 통합되기 쉽다.
+
+6. Kubernetes API와 CNCF ecosystem을 기반으로 portability를 기대할 수 있지만,
+   provider-specific integration은 별도로 분리해서 관리해야 한다.
+
+7. Managed Kubernetes는 보안 측면의 지원을 제공하지만,
+   application, data, RBAC, Secret, image security, NetworkPolicy는 여전히 사용자 책임이다.
+
+8. 따라서 Managed Kubernetes는 “운영 책임 제거”가 아니라
+   “cluster infrastructure 책임 일부 위임 + application 운영 집중”으로 이해해야 한다.
+```
+
+---
+
+## 요약
+
+Managed Kubernetes는 Kubernetes를 더 쉽게 시작하고 운영하기 위한 cloud provider 기반 서비스다. cluster 생성, control plane 운영, worker node lifecycle 일부, cloud load balancer/storage/IAM/registry/logging 통합, security update 지원 등에서 장점을 가진다.
+
+핵심은 다음이다.
+
+```text
+Self-managed Kubernetes
+  → 모든 cluster lifecycle을 직접 관리
+  → 높은 자유도
+  → 높은 운영 부담
+
+Managed Kubernetes
+  → provider가 control plane과 infrastructure lifecycle의 큰 부분을 관리
+  → 빠른 cluster 생성
+  → cloud service integration
+  → shared responsibility model
+```
+
+하지만 Managed Kubernetes는 application 운영 책임까지 없애주지 않는다. 사용자는 여전히 `Deployment`, `Service`, `Ingress`, `ConfigMap`, `Secret`, `RBAC`, `NetworkPolicy`, `PVC`, `readinessProbe`, `resource requests/limits`, monitoring, logging, backup을 이해하고 설계해야 한다.
+
+한 문장으로 정리하면 다음과 같다.
+
+**Managed Kubernetes는 Kubernetes cluster의 control plane과 infrastructure 운영 부담을 cloud provider에게 일부 위임하고, 사용자가 containerized application의 배포·확장·보안·관측에 더 집중할 수 있게 해주는 shared-responsibility 기반 Kubernetes 운영 모델이다.**

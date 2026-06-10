@@ -1,0 +1,53 @@
+---
+title: "MetalLB Layer2 VIP"
+description: "Layer2 모드에서 VIP가 ARP와 leader election을 통해 노드 장애 시 이동하는 방식을 정리한 노트."
+date: "2026-05-25"
+updated: "2026-05-25"
+draft: true
+reviewed: false
+category: "Notes"
+area: "Computer Networks"
+type: "concept"
+series: "k3s-networking"
+tags: ["metallb", "vip", "arp", "kubernetes", "networking"]
+slug: "metallb-layer2-vip"
+---
+
+## VIP 개념
+
+MetalLB Layer2 모드에서 VIP는 특정 Service에 할당되는 가상 IP다. 외부 client는 이 VIP로 접근하고, cluster 내부에서는 현재 leader 역할을 하는 node가 해당 VIP에 대한 ARP 응답을 담당한다.
+
+## ARP Cache와 Gratuitous ARP
+
+Layer2 네트워크에서는 IP 주소에 대응하는 MAC 주소를 ARP로 찾는다. MetalLB는 VIP가 어느 node에 붙어 있는지 알리기 위해 ARP 응답을 제공한다.
+
+leader node가 바뀌면 새 node는 gratuitous ARP를 보내 주변 장비의 ARP cache 갱신을 유도한다. 이 갱신이 늦으면 client가 잠시 이전 node로 트래픽을 보낼 수 있다.
+
+## Leader Node 장애 시 흐름
+
+1. 기존 leader node가 장애 상태가 된다.
+2. MetalLB speaker들이 새 leader를 선택한다.
+3. 새 leader가 VIP에 대한 ARP 응답을 시작한다.
+4. 주변 장비의 ARP cache가 갱신된다.
+5. client 트래픽이 새 node로 이동한다.
+
+## NAC 환경에서 주의할 점
+
+NAC나 switch 보안 정책이 MAC/IP 이동을 제한하면 VIP failover가 기대대로 동작하지 않을 수 있다. VIP가 다른 node의 MAC으로 이동하는 것을 네트워크 장비가 비정상 동작으로 판단할 수 있기 때문이다.
+
+확인할 항목:
+
+- ARP spoofing 방지 정책
+- port security 설정
+- MAC 이동 제한
+- static ARP 설정 여부
+- 같은 L2 segment 안에서 VIP가 허용되는지
+
+## 검증 체크리스트
+
+- Service에 VIP가 할당되는지 확인한다.
+- 외부 client에서 VIP로 접근 가능한지 확인한다.
+- leader node를 drain/stop했을 때 VIP가 다른 node로 이동하는지 확인한다.
+- failover 동안 연결 끊김 시간이 허용 범위인지 측정한다.
+- switch/NAC 로그에 차단 이벤트가 없는지 확인한다.
+

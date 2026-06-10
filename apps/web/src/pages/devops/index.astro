@@ -25,7 +25,7 @@ const areaGroups = sortAreas([...new Set(entries.map(getEntryArea))], areaOrder)
 ---
 <BaseLayout title="DevOps Logs" description="Infrastructure operation notes.">
   <section class="py-12 md:py-14">
-    <SectionHeader eyebrow="DevOps" title="Operations And Troubleshooting" description="Runbooks and recovery notes for Kubernetes issues, CoreDNS/Nexus problems, CI/CD, Docker, networking, RP4 deployment, bootstrap dependencies, monitoring, GitOps, and deployment strategy." />
+    <SectionHeader eyebrow="DevOps" title="Operations And Troubleshooting" description="Runbooks, troubleshooting records, deployment decisions, bootstrap dependency notes, and infrastructure recovery paths. Conceptual cloud and networking notes live under Notes." />
     {areaGroups.length > 0 && (
       <nav class="mb-8 border-y border-white/10 py-3" aria-label="DevOps areas">
         <div class="flex flex-wrap gap-2">

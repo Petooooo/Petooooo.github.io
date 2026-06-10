@@ -1,0 +1,996 @@
+---
+area: "Computer Networks"
+type: "concept"
+series: "Cloud Networking"
+title: "Virtual Networking과 Overlay SDN"
+slug: "virtual-networking-overlay-sdn"
+date: "2026-06-02"
+updated: "2026-06-02"
+draft: false
+reviewed: true
+category: "Notes"
+tags: ["virtual-networking", "network-virtualization", "overlay-network", "underlay-network", "vxlan", "sdn", "nfv", "vnic", "vswitch", "kubernetes-networking"]
+description: "Virtual networking이 physical network 위에서 isolated logical network를 구성하는 방식과 vNIC, vSwitch, underlay/overlay, VXLAN, SDN, NFV, Kubernetes networking까지 정리한 DevOps 네트워킹 개념 노트"
+---
+## 개요
+
+**Virtual networking**은 물리 네트워크 장비와 케이블 위에 software-defined 방식으로 만든 논리적 네트워크다. 기존 네트워크에서는 switch, router, firewall, load balancer 같은 기능을 물리 장비 중심으로 구성했지만, cloud 환경에서는 이러한 기능의 상당 부분이 software layer에서 생성되고 제어된다.
+
+핵심 질문은 다음과 같다.
+
+```text
+물리 switch와 router는 그대로 있는데,
+cloud 사용자는 어떻게 자기만의 network, subnet, firewall, gateway, load balancer를 만들 수 있는가?
+```
+
+이 질문에 대한 답이 **network virtualization**이다.
+
+Virtual networking은 물리 네트워크를 없애는 기술이 아니다. 물리 네트워크 위에 abstraction layer를 만들고, 그 위에서 여러 isolated logical network를 생성할 수 있게 하는 기술이다.
+
+```text
+사용자가 보는 논리적 네트워크
+  ↓
+Virtual network / SDN / overlay
+  ↓
+Cloud provider의 물리 네트워크
+```
+
+---
+
+## Virtual Networking이 중요한 이유
+
+Cloud 환경에서 사용자는 물리 switch에 직접 cable을 꽂거나 router configuration을 직접 수정하지 않는다. 대신 console, API, Terraform, Kubernetes manifest 같은 방식으로 network를 선언한다.
+
+```text
+VPC 생성
+Subnet 생성
+Security Group rule 추가
+Load Balancer 생성
+VPN 연결
+Private endpoint 구성
+Kubernetes Service 생성
+```
+
+하지만 실제 데이터센터에는 여전히 physical server, NIC, switch, router, cable, uplink, firewall, optical fiber, data center fabric이 존재한다.
+
+Virtual networking은 사용자가 보는 논리적 네트워크와 cloud provider가 운영하는 물리 네트워크 사이를 연결한다.
+
+```text
+사용자 관점:
+내 VPC, 내 subnet, 내 security group, 내 load balancer
+
+실제 인프라 관점:
+공유 physical server, shared fabric, provider-managed underlay
+
+연결 계층:
+virtual networking layer
+```
+
+즉 cloud 사용자는 자신만의 isolated network를 쓰는 것처럼 보지만, 실제로는 여러 tenant가 같은 physical infrastructure를 공유한다. 이 공유 구조에서 isolation, routing, security, traffic policy를 가능하게 만드는 핵심이 virtual networking이다.
+
+---
+
+## Physical Networking과 Virtual Networking
+
+물리 네트워크는 구조가 직관적이다.
+
+```text
+Server A ── cable ── Switch ── Router ── Internet
+Server B ── cable ── Switch
+Server C ── cable ── Switch
+```
+
+각 server는 physical NIC를 가지고 있고, NIC는 cable을 통해 switch에 연결된다. Switch는 Layer 2 frame을 전달하고, router는 Layer 3 packet을 다른 network로 전달한다.
+
+Virtual networking에서는 VM이나 container가 물리 cable에 직접 연결되지 않는다. VM에는 **vNIC**가 붙고, 이 vNIC는 hypervisor나 host 안의 **virtual switch**에 연결된다.
+
+```text
+Physical Host
+├── VM 1
+│   └── vNIC
+├── VM 2
+│   └── vNIC
+│
+└── Virtual Switch
+    ↓
+Physical NIC
+    ↓
+Physical Switch
+```
+
+| 구분 | Physical Networking | Virtual Networking |
+|---|---|---|
+| 연결 단위 | 물리 NIC, cable, switch port | vNIC, vSwitch, virtual port |
+| 구성 방식 | 장비 설정, cable 연결, VLAN 구성 | software/API 기반 생성 |
+| 확장 방식 | 장비 증설, port 확장 | logical network 추가 |
+| 격리 방식 | VLAN, ACL, 물리 분리 | VLAN, VXLAN, overlay, policy |
+| 운영 방식 | 수동 작업과 장비 설정 중심 | 자동화, orchestration, IaC 중심 |
+| cloud 적합성 | multi-tenancy와 자동화에 제약 | dynamic provisioning과 multi-tenancy에 적합 |
+
+---
+
+## Virtual Network의 기본 구조
+
+Virtual networking을 이해하려면 workload에서 physical network까지 이어지는 계층을 잡아야 한다.
+
+```text
+Application / Workload
+  ↓
+VM or Container
+  ↓
+vNIC
+  ↓
+Virtual Switch / Bridge
+  ↓
+Overlay Network
+  ↓
+Physical NIC
+  ↓
+Physical Network
+```
+
+| 구성 요소 | 역할 |
+|---|---|
+| VM / Container | 실제 workload가 실행되는 단위 |
+| vNIC | workload가 network에 연결됐다고 인식하게 하는 virtual network interface |
+| Virtual Switch | 같은 host 안의 VM/container 간 traffic 또는 외부 network로 traffic 전달 |
+| Overlay Network | 물리 network 위에 만든 논리적 network |
+| Physical NIC | host가 물리 network와 통신하는 실제 interface |
+| Physical Network | switch, router, cable, underlay network |
+
+핵심은 VM이나 container가 physical NIC를 직접 독점하지 않는다는 점이다. 여러 workload가 같은 physical host의 NIC와 switching fabric을 공유하지만, 각각은 자기만의 network interface와 network segment를 가진 것처럼 동작한다.
+
+---
+
+## vNIC
+
+**vNIC**는 Virtual Network Interface Card의 줄임말이다. VM이나 container가 사용하는 가상 NIC이며, 운영체제 입장에서는 실제 network adapter처럼 보인다.
+
+VM 안에서 보면 일반 interface처럼 나타날 수 있다.
+
+```bash
+ip addr
+```
+
+```text
+eth0: 10.0.1.25/24
+```
+
+VM은 `eth0`가 실제 NIC인지 vNIC인지 크게 신경 쓰지 않는다. Guest OS는 IP address, subnet mask, gateway, DNS 등을 설정하고 packet을 보낸다.
+
+하지만 실제 흐름은 다음과 같다.
+
+```text
+VM application
+  ↓
+Guest OS network stack
+  ↓
+vNIC
+  ↓
+Hypervisor virtual switch
+  ↓
+Physical NIC
+```
+
+이 구조 덕분에 하나의 physical server 위에 여러 VM이 올라가도 각 VM은 독립적인 network interface를 가진 것처럼 동작한다.
+
+---
+
+## Virtual Switch
+
+**Virtual Switch**, 또는 **vSwitch**는 hypervisor나 host 내부에서 동작하는 software switch다. 물리 switch가 여러 물리 port를 연결하듯, virtual switch는 여러 vNIC와 physical NIC를 연결한다.
+
+```text
+Physical Host
+├── VM A vNIC ─┐
+├── VM B vNIC ─┼── vSwitch ── Physical NIC ── Physical Network
+└── VM C vNIC ─┘
+```
+
+vSwitch의 역할은 다음과 같다.
+
+- 같은 host 안의 VM 간 traffic 전달
+- VM에서 외부 network로 나가는 traffic 전달
+- 외부 network에서 VM으로 들어오는 traffic 전달
+- VLAN tagging 또는 overlay encapsulation 처리
+- security policy 적용
+- QoS, mirroring, monitoring 기능 제공
+
+예를 들어 VM A와 VM B가 같은 host에 있고 같은 virtual network에 있다면 traffic이 physical switch까지 나가지 않고 host 내부의 vSwitch에서 처리될 수 있다.
+
+```text
+VM A
+  ↓
+vSwitch
+  ↓
+VM B
+```
+
+반대로 VM A와 VM C가 서로 다른 physical host에 있다면 traffic은 vSwitch를 거쳐 physical network로 나가야 한다.
+
+```text
+Host 1 VM A
+  ↓
+Host 1 vSwitch
+  ↓
+Physical Network
+  ↓
+Host 2 vSwitch
+  ↓
+Host 2 VM C
+```
+
+---
+
+## Underlay와 Overlay
+
+Virtual networking에서 가장 중요한 구분 중 하나가 **underlay**와 **overlay**다.
+
+### Underlay Network
+
+**Underlay**는 실제 물리 네트워크다.
+
+```text
+Physical NIC
+Physical Switch
+Physical Router
+Cable
+Data Center Fabric
+```
+
+Underlay는 실제 packet을 물리적으로 전달한다. cloud provider나 데이터센터 운영자가 관리하는 영역이다.
+
+### Overlay Network
+
+**Overlay**는 underlay 위에 만든 논리적 네트워크다.
+
+```text
+Virtual Network A
+Virtual Network B
+Tenant Network
+Kubernetes Pod Network
+VXLAN Network
+```
+
+Overlay는 workload가 자기만의 network에 연결된 것처럼 보이게 한다.
+
+```text
+Tenant A Virtual Network
+  ↓ encapsulation
+Shared Physical Network
+  ↑ decapsulation
+Tenant A Virtual Network
+```
+
+즉 overlay는 물리 network를 바꾸지 않고도 여러 논리 network를 만들 수 있게 해준다.
+
+---
+
+## Overlay가 필요한 이유
+
+기존 물리 네트워크에서 tenant나 application별로 network를 분리하려면 VLAN을 많이 사용했다.
+
+```text
+VLAN 10: Web
+VLAN 20: App
+VLAN 30: DB
+VLAN 40: Management
+```
+
+하지만 대규모 cloud 환경에서는 VLAN만으로는 한계가 있다.
+
+- VLAN ID는 표현 가능한 network 수가 제한된다.
+- VLAN은 physical switch configuration과 강하게 연결된다.
+- 새로운 tenant network를 만들 때마다 물리 장비 설정에 영향을 줄 수 있다.
+- VM migration, dynamic provisioning, auto scaling 같은 cloud 동작과 잘 맞지 않을 수 있다.
+
+Overlay network는 physical network의 topology와 logical network의 topology를 분리한다.
+
+```text
+기존 방식:
+physical network configuration 변경 필요
+
+overlay 방식:
+physical network 위에 logical network 추가
+```
+
+이 분리가 cloud-scale networking의 핵심이다.
+
+---
+
+## VXLAN, VNI, VTEP
+
+**VXLAN**은 Virtual Extensible LAN의 약자다. 기존 physical Layer 3 network 위에 virtual Layer 2 network를 만드는 overlay 기술이다.
+
+```text
+Original Ethernet Frame
+  ↓ encapsulation
+VXLAN Packet
+  ↓
+IP Network
+  ↓ decapsulation
+Original Ethernet Frame
+```
+
+VM은 같은 Layer 2 network에 있다고 생각하지만, 실제로는 physical Layer 3 network를 통해 packet이 이동할 수 있다.
+
+**VNI**는 Virtual Network Identifier다. VXLAN에서 어떤 virtual network에 속한 traffic인지 식별하는 값이다.
+
+```text
+VNI 10001: Tenant A Web Network
+VNI 10002: Tenant A DB Network
+VNI 20001: Tenant B Web Network
+```
+
+VNI는 overlay packet에 포함되어 receiver가 이 packet이 어느 virtual network에 속하는지 판단할 수 있게 한다.
+
+```text
+Outer IP header:
+underlay에서 host 간 packet 전달
+
+VXLAN header:
+어느 virtual network의 traffic인지 식별
+
+Inner Ethernet frame:
+원래 workload가 보낸 frame
+```
+
+**VTEP**는 VXLAN Tunnel Endpoint다. VTEP는 VXLAN encapsulation과 decapsulation을 수행하는 endpoint다.
+
+```text
+VM A
+  ↓
+VTEP A: encapsulation
+  ↓
+Physical IP Network
+  ↓
+VTEP B: decapsulation
+  ↓
+VM B
+```
+
+| 단계 | VTEP 동작 |
+|---|---|
+| 송신 | 원래 Ethernet frame에 VXLAN header와 outer IP/UDP header를 추가 |
+| underlay 전달 | physical network는 outer IP header를 기준으로 packet 전달 |
+| 수신 | VXLAN header를 제거하고 원래 frame을 대상 VM 또는 container에 전달 |
+
+즉 VM이나 container는 overlay의 존재를 모를 수 있다. Encapsulation과 decapsulation은 VTEP가 처리한다.
+
+---
+
+## Packet 흐름으로 보는 Virtual Networking
+
+VM A가 VM B에게 packet을 보낸다고 가정한다. 두 VM은 같은 virtual network에 있지만 서로 다른 physical host에 있다.
+
+```text
+Host 1
+└── VM A
+
+Host 2
+└── VM B
+```
+
+논리적으로는 다음처럼 보인다.
+
+```text
+VM A ── same virtual network ── VM B
+```
+
+하지만 실제 흐름은 다음과 같다.
+
+```text
+1. VM A가 packet 생성
+2. VM A의 vNIC가 packet을 vSwitch로 전달
+3. vSwitch 또는 VTEP가 packet에 overlay header 추가
+4. physical NIC를 통해 underlay network로 전송
+5. physical switch/router가 outer IP header 기준으로 packet 전달
+6. 목적지 host의 VTEP가 overlay header 제거
+7. Host 2의 vSwitch가 VM B vNIC로 전달
+8. VM B가 원래 packet 수신
+```
+
+도식화하면 다음과 같다.
+
+```text
+VM A
+  ↓
+vNIC
+  ↓
+vSwitch / VTEP
+  ↓ encapsulated packet
+Physical Network
+  ↓
+vSwitch / VTEP
+  ↓
+vNIC
+  ↓
+VM B
+```
+
+VM A와 VM B는 그냥 같은 network에 연결된 것처럼 packet을 주고받지만, 실제로는 overlay tunnel과 underlay network를 거친다.
+
+---
+
+## Multi-Tenancy와 Virtual Networking
+
+Cloud에서 virtual networking이 중요한 가장 큰 이유 중 하나는 **multi-tenancy**다.
+
+Public cloud에서는 여러 고객이 같은 physical infrastructure를 공유한다.
+
+```text
+Physical Data Center
+├── Tenant A workloads
+├── Tenant B workloads
+├── Tenant C workloads
+└── Tenant D workloads
+```
+
+이때 다음 조건이 반드시 만족되어야 한다.
+
+- Tenant A의 traffic이 Tenant B에게 보이면 안 된다.
+- tenant별 security policy가 독립적으로 적용되어야 한다.
+- 서로 같은 private IP range를 사용하더라도 충돌하지 않아야 한다.
+- tenant별 routing domain이 분리되어야 한다.
+- tenant가 자신의 logical network만 볼 수 있어야 한다.
+
+Virtual networking은 tenant별 isolated virtual network를 제공한다.
+
+```text
+Tenant A VPC: 10.0.0.0/16
+Tenant B VPC: 10.0.0.0/16
+```
+
+두 tenant가 같은 private IP range를 사용해도 서로 다른 virtual network에 속하면 충돌하지 않을 수 있다. Overlay network는 VNI, namespace, VRF, policy 등을 통해 같은 physical network 위에서 논리적 분리를 제공한다.
+
+---
+
+## VPC와의 관계
+
+VPC는 virtual networking의 대표적인 cloud 사용자 경험이다.
+
+사용자는 cloud에서 다음과 같은 논리 network를 만든다.
+
+```text
+VPC: 10.0.0.0/16
+├── Public Subnet: 10.0.1.0/24
+├── Private App Subnet: 10.0.2.0/24
+└── Private DB Subnet: 10.0.3.0/24
+```
+
+사용자 입장에서는 실제 물리 switch나 router를 만지지 않는다. cloud provider가 제공하는 virtual networking layer를 통해 subnet, routing, security group, gateway를 정의한다.
+
+```text
+Virtual Networking 기술
+  ↓
+VPC, Subnet, Security Group, Route Table 같은 cloud construct
+```
+
+VPC는 virtual networking을 사용자가 다루기 쉽게 만든 product-level abstraction으로 볼 수 있다.
+
+---
+
+## Software-Defined Networking
+
+**SDN**은 Software-Defined Networking의 약자다. Network의 control plane과 data plane을 분리하고, network behavior를 software controller로 제어하는 접근 방식이다.
+
+```text
+기존 네트워크:
+각 switch/router가 자체 설정과 제어 로직을 가짐
+
+SDN:
+중앙 controller 또는 control layer가 policy와 forwarding rule을 관리
+```
+
+구조는 다음처럼 볼 수 있다.
+
+```text
+Application / Orchestrator
+  ↓
+SDN Controller
+  ↓
+Virtual Switch / Physical Switch
+  ↓
+Packet Forwarding
+```
+
+Virtual networking은 SDN과 결합될 때 더 강력해진다.
+
+예를 들어 사용자가 “새 subnet 생성”을 요청하면 control plane은 다음 작업을 자동화할 수 있다.
+
+```text
+1. virtual network ID 할당
+2. route/policy 생성
+3. virtual switch rule 배포
+4. security rule 적용
+5. gateway 연결
+6. monitoring state 반영
+```
+
+사용자는 API 하나를 호출했지만, 내부에서는 여러 network component가 자동으로 업데이트된다.
+
+---
+
+## Network Functions Virtualization
+
+**NFV**는 Network Functions Virtualization의 약자다. 전통적으로 전용 physical hardware appliance에서 수행하던 network function을 VM이나 container 같은 software workload로 실행하는 접근 방식이다.
+
+전통적인 방식에서는 다음 기능들이 전용 장비로 제공된다.
+
+```text
+Firewall appliance
+Load balancer appliance
+Router appliance
+VPN appliance
+IDS/IPS appliance
+WAN optimizer appliance
+```
+
+NFV에서는 이러한 기능을 software로 구현한다.
+
+```text
+Virtual Firewall
+Virtual Router
+Virtual Load Balancer
+Virtual VPN Gateway
+Virtual IDS/IPS
+```
+
+| 구분 | Virtual Networking | NFV |
+|---|---|---|
+| 주된 관심 | network 자체를 가상화 | network 기능 장비를 software화 |
+| 예시 | VPC, virtual subnet, overlay network, vSwitch | virtual firewall, virtual router, virtual load balancer |
+| 목적 | logical network 생성, tenant isolation, automation | 전용 appliance 의존도 감소, 유연한 network service 배포 |
+| 관계 | NFV가 동작할 기반 network를 제공 | virtual network 위에서 실행될 수 있음 |
+
+---
+
+## Virtual Networking의 핵심 장점
+
+### 빠른 Provisioning
+
+물리 네트워크에서는 새 network segment를 만들기 위해 switch 설정, VLAN trunk, firewall rule, routing 변경이 필요할 수 있다.
+
+Virtual networking에서는 API로 network를 생성할 수 있다.
+
+```text
+Create VPC
+Create Subnet
+Attach Gateway
+Add Security Rule
+Deploy Instance
+```
+
+이 방식은 infrastructure automation과 잘 맞는다.
+
+### Multi-Tenant Isolation
+
+여러 고객이나 여러 application이 같은 physical network를 공유해도 virtual network를 통해 서로 분리할 수 있다.
+
+```text
+Tenant A Virtual Network
+Tenant B Virtual Network
+Tenant C Virtual Network
+```
+
+각 tenant는 자신만의 IP range와 policy를 가진 것처럼 동작할 수 있다.
+
+### 유연한 확장성
+
+Virtual network는 물리 port 수에 직접 묶이지 않는다. 물론 physical capacity의 한계는 있지만, 논리 network 생성 자체는 software적으로 이루어진다.
+
+```text
+새 application team 추가
+  ↓
+새 virtual network 생성
+  ↓
+subnet, policy, routing 적용
+```
+
+### 자동화와 IaC
+
+Virtual networking은 Infrastructure as Code와 잘 어울린다.
+
+```text
+VPC
+Subnet
+Route Table
+Security Group
+Network ACL
+Load Balancer
+VPN Gateway
+Private Endpoint
+```
+
+Network도 application 배포처럼 version control, review, automation pipeline에 포함될 수 있다.
+
+### Workload Mobility
+
+Virtual networking은 VM이나 container가 다른 host로 이동해도 network identity나 policy를 유지하는 데 도움을 준다.
+
+```text
+VM A: Host 1에서 실행
+  ↓ migration
+VM A: Host 2에서 실행
+
+Virtual network identity 유지
+```
+
+물리 network에 강하게 묶여 있으면 workload 이동이 어렵지만, overlay network와 SDN을 사용하면 workload mobility가 쉬워진다.
+
+---
+
+## Trade-off와 운영 비용
+
+Virtual networking은 강력하지만 software abstraction이 늘어나면 복잡도와 overhead가 생긴다.
+
+| 장점 | Trade-off |
+|---|---|
+| network 생성 자동화 | control plane 복잡도 증가 |
+| tenant isolation | overlay/encapsulation 구조 이해 필요 |
+| 유연한 확장성 | MTU, fragmentation 문제 가능 |
+| 물리 장비 의존도 감소 | troubleshooting 계층 증가 |
+| workload mobility | observability 설계 필요 |
+| centralized policy | controller 장애와 state consistency 고려 필요 |
+
+특히 overlay network에서는 packet에 추가 header가 붙는다. VXLAN 같은 encapsulation을 사용하면 outer IP/UDP/VXLAN header가 추가되므로 MTU를 고려해야 한다.
+
+```text
+Original packet
+  +
+Overlay header
+  =
+Larger packet
+```
+
+MTU를 잘못 설계하면 fragmentation이나 packet drop이 발생할 수 있다.
+
+---
+
+## MTU와 Encapsulation 문제
+
+Virtual networking에서 자주 발생하는 문제 중 하나가 MTU다.
+
+일반 Ethernet MTU는 보통 1500 bytes다. 그런데 overlay network가 packet에 header를 추가하면 실제 physical network를 지나는 packet 크기가 커질 수 있다.
+
+```text
+Original packet: 1500 bytes
+VXLAN overhead: additional bytes
+Physical packet: 1500 bytes 초과 가능
+```
+
+Underlay network가 더 큰 MTU를 지원하지 않으면 다음 문제가 생길 수 있다.
+
+- packet fragmentation
+- packet drop
+- TCP connection 지연
+- 특정 크기 이상의 request 실패
+- TLS handshake 또는 large response 문제
+- Kubernetes pod 간 통신 간헐적 실패
+
+따라서 overlay network를 사용할 때는 underlay MTU와 overlay MTU를 함께 설계해야 한다.
+
+```text
+Underlay MTU: 9000
+Overlay MTU: 1450 또는 1500 이하 조정
+```
+
+---
+
+## Virtual Networking과 Security
+
+Virtual networking은 security boundary를 software로 만들 수 있게 해준다.
+
+예를 들어 cloud에서 다음과 같은 정책을 구성할 수 있다.
+
+```text
+Internet → Load Balancer: allow 443
+Load Balancer → App: allow 8080
+App → DB: allow 5432
+Internet → DB: deny
+```
+
+이 정책은 물리 firewall 하나에만 의존하지 않고 여러 계층에서 적용될 수 있다.
+
+```text
+Security Group
+Network ACL
+Virtual Firewall
+Route Table
+Service Mesh Policy
+Kubernetes NetworkPolicy
+```
+
+Virtual networking의 보안 장점은 다음과 같다.
+
+- tenant별 traffic isolation
+- application tier별 segmentation
+- microsegmentation 가능
+- policy as code 가능
+- dynamic workload에 대한 자동 policy 적용 가능
+
+하지만 policy가 여러 계층에 흩어지면 troubleshooting이 어려워진다.
+
+```text
+Security Group deny
+Network ACL deny
+Route table 누락
+Virtual firewall deny
+Kubernetes NetworkPolicy deny
+Service mesh policy deny
+OS firewall deny
+Application bind address 문제
+```
+
+따라서 virtual networking에서는 network path와 policy evaluation order를 명확히 이해해야 한다.
+
+---
+
+## Kubernetes와 Virtual Networking
+
+Kubernetes 환경에서도 virtual networking 개념은 중요하다. Kubernetes에서는 Pod가 계속 생성되고 삭제된다. 각 Pod는 IP를 갖고 다른 Pod와 통신해야 하지만, Pod는 물리 switch에 직접 연결되지 않는다.
+
+```text
+Pod
+  ↓
+veth pair
+  ↓
+Linux bridge / OVS / eBPF datapath
+  ↓
+Node network
+  ↓
+Other node
+```
+
+Kubernetes CNI plugin은 이 network 연결을 구성한다.
+
+```text
+Pod IP 할당
+Pod veth 생성
+Node network와 연결
+Routing rule 구성
+Overlay tunnel 구성
+NetworkPolicy 적용
+```
+
+| Cloud Virtual Networking | Kubernetes Networking |
+|---|---|
+| VPC | Cluster network |
+| Subnet | Node subnet 또는 Pod CIDR |
+| Security Group | NetworkPolicy, cloud SG |
+| Load Balancer | Service type LoadBalancer, Ingress |
+| Overlay Network | CNI overlay, VXLAN, Geneve |
+| Virtual Switch | Linux bridge, Open vSwitch, eBPF datapath |
+
+예를 들어 Flannel VXLAN, Calico VXLAN/IPIP, Cilium Geneve/VXLAN/eBPF 같은 방식은 overlay 또는 advanced datapath를 사용해 Pod 간 통신을 구현할 수 있다.
+
+---
+
+## Service Chaining
+
+NFV와 virtual networking을 결합하면 **service chaining**도 가능해진다.
+
+Service chaining은 traffic이 여러 network function을 순서대로 거치도록 만드는 구조다.
+
+```text
+Client
+  ↓
+Firewall
+  ↓
+Load Balancer
+  ↓
+IDS/IPS
+  ↓
+Application Server
+```
+
+물리 장비 환경에서는 이 경로를 cable과 routing으로 구성해야 했다. Virtual networking에서는 software policy로 traffic path를 정의할 수 있다.
+
+```text
+Traffic from Internet
+  → Virtual Firewall
+  → Virtual Load Balancer
+  → App Tier
+```
+
+---
+
+## Troubleshooting 관점
+
+Virtual networking은 계층이 많기 때문에 troubleshooting할 때 “어디서 packet이 사라지는가?”를 계층별로 확인해야 한다.
+
+### VM에서 외부 통신이 안 되는 경우
+
+| 계층 | 확인할 내용 |
+|---|---|
+| Guest OS | IP, route, DNS, firewall |
+| vNIC | interface up/down, MAC, attachment |
+| vSwitch | port 연결, VLAN/VNI mapping |
+| Overlay | tunnel 상태, VTEP reachability |
+| Underlay | host 간 IP connectivity |
+| Security | SG, ACL, firewall, policy |
+| Gateway | NAT, public gateway, route |
+| DNS | name resolution 여부 |
+
+단순히 `ping`이 안 된다고 해서 application 문제라고 보면 안 된다. virtual networking에서는 guest OS 밖의 계층에서 문제가 생길 수 있다.
+
+### 같은 subnet인데 통신이 안 되는 경우
+
+같은 virtual subnet에 있는 workload끼리 통신이 안 된다면 다음을 확인한다.
+
+```text
+1. 두 workload가 같은 virtual network/VNI에 속하는가?
+2. IP range가 올바른가?
+3. vSwitch 또는 CNI rule이 올바른가?
+4. Security policy가 east-west traffic을 막고 있지 않은가?
+5. 서로 다른 host라면 VTEP 간 underlay connectivity가 되는가?
+6. MTU 문제로 큰 packet만 실패하는 것은 아닌가?
+```
+
+Virtual networking에서는 “같은 subnet”처럼 보여도 실제 physical path는 여러 host와 overlay tunnel을 거칠 수 있다.
+
+### 특정 크기 이상의 packet만 실패하는 경우
+
+이 경우 MTU 문제가 유력한 후보가 될 수 있다.
+
+```text
+작은 ping은 성공
+큰 파일 전송은 실패
+TLS handshake가 간헐적으로 실패
+HTTP request는 되는데 response가 큰 경우 timeout
+Kubernetes pod 간 통신이 특정 workload에서만 실패
+```
+
+확인할 포인트는 다음과 같다.
+
+```text
+Overlay encapsulation overhead
+Underlay MTU
+Pod/VM interface MTU
+Path MTU Discovery
+Firewall의 ICMP 차단 여부
+```
+
+### Load Balancer health check가 실패하는 경우
+
+Virtual network 위의 Load Balancer가 backend를 unhealthy로 판단한다면 다음을 확인한다.
+
+```text
+1. Backend application이 health check port에서 listen 중인가?
+2. Health check path가 올바른가?
+3. Load Balancer subnet에서 backend subnet으로 route가 있는가?
+4. Security Group이 Load Balancer source를 허용하는가?
+5. Network ACL이 return traffic을 허용하는가?
+6. Backend OS firewall이 막고 있지 않은가?
+7. Overlay tunnel 또는 underlay connectivity 문제가 없는가?
+```
+
+Health check 실패는 application 문제일 수도 있지만, virtual network policy나 route 문제일 수도 있다.
+
+---
+
+## Physical Network는 사라지는 것이 아니다
+
+Virtual networking을 설명할 때 자주 생기는 오해가 있다.
+
+> Network가 virtual이면 물리 네트워크는 중요하지 않은가?
+
+그렇지 않다. Virtual network는 physical network 위에서 동작한다.
+
+```text
+Virtual network가 아무리 잘 구성되어도
+underlay physical network가 불안정하면
+전체 통신은 불안정해진다.
+```
+
+Underlay에서 문제가 생기면 overlay도 영향을 받는다.
+
+예를 들어 다음 문제는 virtual network에서도 그대로 영향을 준다.
+
+- physical switch 장애
+- routing loop
+- packet loss
+- MTU mismatch
+- NIC driver 문제
+- host kernel networking 문제
+- uplink saturation
+- ToR switch congestion
+- BGP 문제
+
+즉 virtual networking은 physical networking을 대체해서 없애는 것이 아니라, physical networking 위에 logical abstraction을 추가하는 것이다.
+
+---
+
+## 앞선 개념들과의 연결
+
+### Load Balancer
+
+Load Balancer는 traffic을 여러 backend로 분산한다. Virtual networking 환경에서는 Load Balancer 자체도 virtual resource일 수 있고, backend server들은 private virtual network 안에 있을 수 있다.
+
+```text
+Internet
+  ↓
+Virtual Load Balancer
+  ↓
+Virtual Network
+  ↓
+App Instances
+```
+
+### DNS
+
+DNS는 domain name을 endpoint로 변환한다. 그 endpoint는 virtual Load Balancer, CDN, VPC endpoint, ingress gateway일 수 있다.
+
+```text
+www.example.com
+  ↓ DNS
+Load Balancer address
+  ↓
+Virtual network 내부 backend
+```
+
+### VPC
+
+VPC는 virtual networking의 cloud product abstraction이다. 사용자는 VPC, subnet, route table, security group을 만들지만, 내부적으로는 overlay, SDN, virtual switching, policy enforcement가 동작한다.
+
+```text
+User creates VPC
+  ↓
+Cloud control plane configures virtual network
+  ↓
+Workloads communicate over shared physical infrastructure
+```
+
+---
+
+## 운영 설계 원칙
+
+Virtual networking을 production에서 사용할 때는 다음 원칙이 중요하다.
+
+| 원칙 | 설명 |
+|---|---|
+| Underlay 안정성 확보 | overlay는 physical network 위에서 동작하므로 underlay 품질이 중요 |
+| IP/CIDR 계획 | VPC, subnet, pod CIDR, VPN, peering 충돌 방지 |
+| MTU 설계 | overlay encapsulation overhead 고려 |
+| Policy 일관성 | SG, ACL, NetworkPolicy, firewall rule 충돌 방지 |
+| Observability | flow log, packet capture, metrics, tracing 필요 |
+| Automation | network resource를 IaC로 관리 |
+| Least privilege | 필요한 traffic만 허용 |
+| Segmentation | tenant, environment, tier별 network 분리 |
+| Failure domain 분리 | zone, subnet, route, gateway 장애 범위 고려 |
+
+---
+
+## 자칫 실수하기 쉬운 부분
+
+| 실수 | 문제 |
+|---|---|
+| virtual network가 physical network를 대체한다고 생각 | underlay 장애가 overlay에 영향을 준다는 사실을 놓침 |
+| 같은 subnet이면 항상 단순 L2라고 가정 | 실제로는 overlay tunnel과 host 간 path를 거칠 수 있음 |
+| MTU를 고려하지 않음 | 특정 크기 이상의 packet 실패, TLS 지연, pod 간 통신 문제 발생 가능 |
+| policy 계층을 분리하지 않음 | SG, ACL, NetworkPolicy, firewall 중 어디서 막히는지 파악 어려움 |
+| IP/CIDR 계획 없이 확장 | VPC peering, VPN, Kubernetes Pod CIDR에서 충돌 가능 |
+| observability 없이 운영 | packet이 어느 계층에서 drop되는지 확인 어려움 |
+| overlay만 보고 underlay를 무시 | physical congestion, routing, packet loss 원인 파악 실패 |
+
+---
+
+## 정리
+
+Virtual networking은 shared physical network 위에 software-defined logical network를 만드는 기술이다. Cloud에서 VPC, subnet, security group, virtual router, virtual firewall, load balancer, Kubernetes network 같은 구조가 동적으로 생성될 수 있는 이유가 바로 virtual networking layer에 있다.
+
+| 항목 | 정리 |
+|---|---|
+| 기본 역할 | physical network 위에 isolated logical network 생성 |
+| 주요 구성 | vNIC, vSwitch, overlay, underlay, SDN control plane |
+| underlay | 실제 packet을 전달하는 physical network |
+| overlay | underlay 위에 만든 logical network |
+| VXLAN | L3 network 위에 L2 segment를 만드는 overlay 기술 |
+| VNI | VXLAN traffic이 속한 virtual network를 식별하는 값 |
+| VTEP | VXLAN encapsulation과 decapsulation을 수행하는 endpoint |
+| SDN | control plane과 data plane을 분리해 network를 software로 제어 |
+| NFV | firewall, router, load balancer 같은 network function을 software화 |
+| Kubernetes 연결 | Pod networking, CNI, overlay, NetworkPolicy와 연결 |
+| 운영 주의점 | MTU, policy 충돌, underlay 안정성, observability |
+
+Virtual networking을 이해할 때 가장 중요한 점은 physical network가 사라지는 것이 아니라는 사실이다. 실제 packet은 여전히 physical NIC, switch, router를 지난다. 다만 그 위에 software-defined abstraction을 올려 tenant별, application별, workload별 isolated network를 만들고, 이를 API와 automation으로 제어할 수 있게 만든다.

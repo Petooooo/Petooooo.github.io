@@ -1,0 +1,97 @@
+---
+import BaseLayout from "@/layouts/BaseLayout.astro";
+import SectionHeader from "@/components/SectionHeader.astro";
+---
+
+<BaseLayout title="CV" description="A concise CV for Jihwan Park focused on AI infrastructure, cloud-native systems, and resource-constrained systems work.">
+  <section class="border-b border-white/10 py-12 lg:py-16">
+    <p class="font-mono text-xs uppercase tracking-[0.18em] text-slate-500">CV</p>
+    <h1 class="mt-4 text-4xl font-semibold text-white md:text-5xl">Jihwan Park</h1>
+    <p class="mt-5 max-w-3xl text-base leading-8 text-slate-300 md:text-lg">
+      Systems-first engineer focused on reliable cloud-native systems for constrained environments, including air-gapped Kubernetes/K3S platforms, stateful service recovery, private artifact supply chains, degraded AI serving, and resource-constrained AI systems.
+    </p>
+    <div class="mt-6 flex flex-wrap gap-3 text-sm text-slate-300">
+      <a class="rounded border border-white/15 px-3 py-2 hover:border-signal hover:text-signal" href="https://github.com/Petooooo">GitHub</a>
+    </div>
+  </section>
+
+  <section class="py-12 lg:py-16">
+    <SectionHeader eyebrow="Interests" title="Research And Engineering Interests" description="The main direction is infrastructure for AI and internal services under operational constraints." />
+    <div class="grid gap-4 md:grid-cols-3">
+      {[
+        ["AI Infrastructure / ML Systems", "Degraded serving, full-GPU workload constraints, inference service availability, and infrastructure around AI workloads."],
+        ["Cloud-Native / Distributed Systems", "K3S, Kubernetes reliability, internal platforms, GitOps-style workflows, service exposure, and constrained deployment environments."],
+        ["Storage / Reliable Systems", "Stateful workload recovery, Longhorn-like PVC behavior, RTO/RPO-aware service design, bootstrap dependency paths, and fault-tolerant recovery."]
+      ].map(([title, body]) => (
+        <div class="border-b border-white/10 py-4">
+          <h2 class="text-base font-semibold text-white">{title}</h2>
+          <p class="mt-2 text-sm leading-6 text-slate-300">{body}</p>
+        </div>
+      ))}
+    </div>
+  </section>
+
+  <section class="border-t border-white/10 py-12 lg:py-16">
+    <SectionHeader eyebrow="Education" title="Education" description="A software and hardware background for systems work across the stack." />
+    <div class="border-b border-white/10 py-4">
+      <h2 class="text-lg font-semibold text-white">Kyung Hee University</h2>
+      <p class="mt-2 text-sm leading-6 text-slate-300">B.E. in Computer Science and Engineering; double major in Electronic Engineering.</p>
+      <p class="mt-1 font-mono text-xs uppercase tracking-[0.16em] text-slate-500">2021 - 2025</p>
+    </div>
+  </section>
+
+  <section class="border-t border-white/10 py-12 lg:py-16">
+    <SectionHeader eyebrow="Experience" title="Selected Infrastructure Work" description="Publicly described at the level of constraints, architecture choices, and technical direction." />
+    <div class="grid gap-5">
+      <div class="rounded-md border border-white/10 bg-white/[0.03] p-5">
+        <h2 class="text-xl font-semibold text-white">Air-Gapped AI/Internal Service Infrastructure</h2>
+        <p class="mt-2 font-mono text-xs uppercase tracking-[0.16em] text-slate-500">2025 - Present</p>
+        <ul class="mt-4 grid gap-3 text-sm leading-6 text-slate-300">
+          <li>Migrated Docker-only service operation toward a K3S-based internal cloud-native platform under restricted network conditions.</li>
+          <li>Worked through private registry, Nexus, image mirroring, service exposure, persistent storage, and deployment standardization concerns.</li>
+          <li>Analyzed stateful workload recovery with Longhorn PVCs, including detach/attach delay, recovery time, and the gap between hot failover and fault-tolerant recovery.</li>
+          <li>Evaluated internal CI/CD and GitOps-style flows connecting source changes, image builds, registry pushes, manifest updates, sync, and rollback through Git history.</li>
+          <li>Considered degraded serving strategies for full-GPU AI workloads where fine-grained GPU sharing is not always the practical operating model.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="border-t border-white/10 py-12 lg:py-16">
+    <SectionHeader eyebrow="Projects" title="Selected Systems Projects" description="Graduation-level projects that connect lower-level resource constraints with AI workload execution." />
+    <div class="grid gap-5 md:grid-cols-2">
+      {[
+        [
+          "Lifecycle-Aware Memory Analysis for TensorFlow Lite Micro",
+          "TinyML runtime memory management project that analyzed tensor lifetimes, conflict relationships, BFS-style allocation ordering, and in-place update opportunities. Project evaluation reduced peak memory by 28.33% on Person Detect and 14.06% on Tiny U-Net compared with the original size-based allocation plan."
+        ],
+        [
+          "Area-Efficient CNN Accelerator Using Bit-Shift Operations on Zynq FPGA",
+          "Hardware-aware AI inference project using bit-shift operations, INQ/STE-based quantization, IM2COL, systolic array dataflow, and AXI4-Lite PS/PL integration. Project evaluation reported 36.5% FPGA area decrease and 8.83ms PS+PL runtime compared with 15.9ms PS-only execution."
+        ]
+      ].map(([title, body]) => (
+        <div class="rounded-md border border-white/10 bg-white/[0.03] p-5">
+          <h2 class="text-lg font-semibold text-white">{title}</h2>
+          <p class="mt-3 text-sm leading-6 text-slate-300">{body}</p>
+        </div>
+      ))}
+    </div>
+  </section>
+
+  <section class="border-t border-white/10 py-12 lg:py-16">
+    <SectionHeader eyebrow="Skills" title="Technical Skills" description="Grouped by the systems layers that show up repeatedly in the work." />
+    <div class="grid gap-4 md:grid-cols-2">
+      {[
+        ["Systems / Infrastructure", "Linux, Docker, Kubernetes/K3S, Longhorn, private registry, Nexus, internal CI/CD, GitOps concepts, Traefik, NodePort/hostPort, TLS/HTTPS."],
+        ["Data / Backend Systems", "MinIO, ClickHouse, MongoDB, RabbitMQ, asynchronous processing, SQL."],
+        ["Programming", "C/C++, Python, JavaScript, TypeScript, Java, Go, SQL, Verilog."],
+        ["Hardware / Embedded", "FPGA, Zynq, Vivado, Quartus, STM32, Arduino, Raspberry Pi."]
+      ].map(([title, body]) => (
+        <div class="border-b border-white/10 py-4">
+          <h2 class="font-mono text-xs uppercase tracking-[0.16em] text-slate-500">{title}</h2>
+          <p class="mt-2 text-sm leading-6 text-slate-300">{body}</p>
+        </div>
+      ))}
+    </div>
+  </section>
+</BaseLayout>

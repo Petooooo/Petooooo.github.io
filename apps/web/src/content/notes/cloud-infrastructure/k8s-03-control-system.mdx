@@ -1,0 +1,1397 @@
+---
+area: "Cloud Infrastructure"
+type: "concept"
+series: "Kubernetes Essentials"
+title: "K8s 03. Control System"
+slug: "k8s-03-control-system"
+date: "2026-06-02"
+updated: "2026-06-02"
+draft: false
+reviewed: true
+category: "Notes"
+tags: ["Kubernetes", "container orchestration", "control plane", "worker node", "Pod", "Deployment", "Service", "self-healing", "rolling update"]
+description: "Kubernetes를 container 실행기가 아니라 desired state와 actual state를 계속 맞추는 orchestration control system으로 이해하고, cluster, control plane, worker node, Pod, Deployment, Service, self-healing, rollout 구조를 정리한다."
+---
+# Kubernetes를 container 실행기가 아니라 control system으로 이해하기
+
+**Kubernetes**는 containerized application을 여러 machine 위에서 안정적으로 배포, 확장, 복구, 네트워킹, 업데이트할 수 있게 해주는 **container orchestration platform**이다.
+
+Docker와 containerization이 애플리케이션을 어떤 실행 단위로 packaging할 것인가에 가깝다면, Kubernetes는 그다음 단계의 문제를 다룬다.
+
+```text
+container를 어느 서버에 띄울 것인가?
+container가 죽으면 누가 다시 살릴 것인가?
+사용자 요청은 여러 container 중 어디로 보낼 것인가?
+새 버전 배포 중 장애가 나면 어떻게 되돌릴 것인가?
+traffic이 늘어나면 몇 개까지 늘릴 것인가?
+서버 하나가 죽으면 그 안의 workload는 어떻게 복구할 것인가?
+```
+
+Kubernetes의 핵심은 단순히 container를 실행하는 것이 아니다. 사용자가 cluster의 **desired state**를 선언하면, Kubernetes control plane이 현재 cluster의 **actual state**를 계속 관찰하고 조정한다.
+
+```text
+선언 → 관찰 → 비교 → 조정 → 반복
+```
+
+이 구조를 이해하면 Kubernetes의 Pod, Deployment, ReplicaSet, Service, rolling update, self-healing이 하나의 흐름으로 연결된다.
+
+---
+
+## Kubernetes가 필요한 이유
+
+### Container 하나는 쉽지만, container 수백 개는 어렵다
+
+개발 환경이나 작은 테스트 환경에서는 container 몇 개를 직접 실행하는 것만으로도 충분할 수 있다.
+
+```bash
+docker run -d --name frontend frontend:1.0.0
+docker run -d --name api api:1.0.0
+docker run -d --name worker worker:1.0.0
+```
+
+하지만 production 환경에서는 container가 몇 개가 아니라 수십 개, 수백 개, 수천 개로 늘어날 수 있다. 이때 문제는 단순히 `docker run`을 많이 실행하는 것이 아니다.
+
+| 운영 문제 | 설명 |
+|---|---|
+| 배치 | 어느 node에 어떤 container를 배치할 것인가? |
+| 복구 | container가 죽었을 때 누가 다시 실행할 것인가? |
+| 네트워킹 | container IP가 바뀌는데 service끼리 어떻게 통신할 것인가? |
+| 확장 | traffic이 늘어났을 때 어떤 service만 몇 개 더 늘릴 것인가? |
+| 배포 | 새 버전을 무중단에 가깝게 어떻게 교체할 것인가? |
+| 관찰 | 어느 Pod가 죽었고, 어느 node가 부족한지 어떻게 볼 것인가? |
+| 설정 | 환경 변수, secret, config를 image와 분리해 어떻게 주입할 것인가? |
+
+이 문제들을 shell script로 처리할 수도 있다. 하지만 container 수가 늘고 service가 많아질수록 script는 점점 작은 orchestration system처럼 변한다.
+
+```text
+1. node별 CPU/memory 사용량 확인
+2. 여유 있는 node 선택
+3. image pull
+4. container 실행
+5. load balancer 설정 변경
+6. health check 등록
+7. 장애 발생 시 재실행
+8. 배포 실패 시 rollback
+9. log 확인
+10. traffic routing 검증
+```
+
+Kubernetes는 이런 작업을 표준화된 API와 object model로 다룬다.
+
+### Kubernetes는 상태 조정 시스템이다
+
+Kubernetes를 처음 배울 때 다음과 같이 이해하기 쉽다.
+
+> Kubernetes는 container를 실행해주는 도구다.
+
+이 설명은 일부만 맞다. 더 정확히는 다음과 같다.
+
+> Kubernetes는 사용자가 선언한 desired state와 현재 cluster의 actual state를 계속 비교하고, 차이가 생기면 이를 줄이는 방향으로 동작하는 distributed control system이다.
+
+예를 들어 사용자가 다음 상태를 선언했다고 하자.
+
+```yaml
+replicas: 3
+image: my-api:1.0.0
+```
+
+이 선언은 다음 의미에 가깝다.
+
+```text
+my-api:1.0.0 image를 사용하는 application instance가
+항상 3개 실행되고 있어야 한다.
+```
+
+현재 상태가 3개라면 Kubernetes는 추가 조치를 하지 않는다.
+
+```text
+desired state = 3
+actual state  = 3
+action        = no-op
+```
+
+하나가 죽어서 실제 상태가 2개가 되면 Kubernetes는 replacement Pod를 만든다.
+
+```text
+desired state = 3
+actual state  = 2
+action        = create 1 replacement Pod
+```
+
+사용자가 replica 수를 5로 바꾸면 Kubernetes는 2개를 추가한다.
+
+```text
+desired state = 5
+actual state  = 3
+action        = create 2 Pods
+```
+
+이 반복 구조가 Kubernetes의 핵심이다.
+
+```text
+Observe current state
+Compare with desired state
+Act to reduce the difference
+Repeat
+```
+
+이런 동작 방식을 **reconciliation loop**라고 볼 수 있다.
+
+---
+
+## Kubernetes cluster의 기본 구조
+
+Kubernetes는 여러 machine을 하나의 cluster로 묶어 containerized workloads를 실행한다. Cluster는 크게 **control plane**과 **worker node**로 나뉜다.
+
+```text
+Kubernetes Cluster
+├─ Control Plane
+│  ├─ kube-apiserver
+│  ├─ etcd
+│  ├─ kube-scheduler
+│  └─ kube-controller-manager
+│
+├─ Worker Node 1
+│  ├─ kubelet
+│  ├─ container runtime
+│  ├─ kube-proxy
+│  └─ Pods
+│
+├─ Worker Node 2
+│  ├─ kubelet
+│  ├─ container runtime
+│  ├─ kube-proxy
+│  └─ Pods
+│
+└─ Worker Node 3
+   ├─ kubelet
+   ├─ container runtime
+   ├─ kube-proxy
+   └─ Pods
+```
+
+## Control Plane
+
+**Control Plane**은 cluster의 두뇌에 해당한다. 사용자가 `kubectl apply`로 manifest를 제출하면, 그 요청은 Kubernetes API Server를 통해 cluster state에 반영된다. 이후 scheduler와 controller들이 움직여 실제 worker node에 workload를 배치하고 상태를 유지한다.
+
+| 구성요소 | 역할 |
+|---|---|
+| `kube-apiserver` | Kubernetes API의 진입점. 모든 요청이 이곳을 통과한다. |
+| `etcd` | cluster state를 저장하는 key-value store. |
+| `kube-scheduler` | 아직 node에 배치되지 않은 Pod를 어느 node에 실행할지 결정한다. |
+| `kube-controller-manager` | Deployment, ReplicaSet, Node 등 여러 controller를 실행해 desired state를 유지한다. |
+
+Control plane은 사용자의 명령을 단순히 실행하는 곳이 아니라, cluster 전체의 상태를 관리하는 중심 계층이다.
+
+```text
+User / CI/CD / GitOps
+  ↓
+kube-apiserver
+  ↓
+etcd에 desired state 저장
+  ↓
+scheduler / controller가 actual state 조정
+```
+
+### `kube-apiserver`
+
+`kube-apiserver`는 Kubernetes API의 관문이다. `kubectl`, CI/CD pipeline, GitOps controller, dashboard, operator는 대부분 API Server를 통해 cluster와 상호작용한다.
+
+예를 들어 다음 명령을 실행하면:
+
+```bash
+kubectl apply -f deployment.yaml
+```
+
+요청 흐름은 대략 다음과 같다.
+
+```text
+kubectl
+  ↓
+kube-apiserver
+  ↓
+authentication / authorization / admission
+  ↓
+etcd에 object state 저장
+```
+
+### `etcd`
+
+`etcd`는 cluster state를 저장한다. Kubernetes object의 선언 상태, node 정보, Pod 정보, ConfigMap, Secret 등 cluster의 핵심 상태가 저장된다.
+
+운영 관점에서 `etcd`는 매우 중요하다.
+
+| 주의할 점 | 설명 |
+|---|---|
+| backup | cluster state 복구를 위해 정기 backup이 필요하다. |
+| 접근 통제 | `etcd` 접근 권한은 강하게 제한해야 한다. |
+| 고가용성 | production에서는 control plane HA와 함께 고려해야 한다. |
+| 성능 | `etcd` 지연은 cluster 전체 반응성에 영향을 줄 수 있다. |
+
+### `kube-scheduler`
+
+`kube-scheduler`는 아직 node가 정해지지 않은 Pod를 적절한 worker node에 배치한다.
+
+Scheduler는 여러 조건을 고려한다.
+
+```text
+node의 CPU/memory 여유
+Pod의 resource requests
+nodeSelector
+affinity / anti-affinity
+taints / tolerations
+volume binding
+이미 실행 중인 workload 분포
+```
+
+예를 들어 Pod에 다음 resource request가 있다면:
+
+```yaml
+resources:
+  requests:
+    cpu: "500m"
+    memory: "256Mi"
+  limits:
+    cpu: "1"
+    memory: "512Mi"
+```
+
+Scheduler는 최소한 `500m` CPU와 `256Mi` memory request를 수용할 수 있는 node를 찾는다.
+
+### `kube-controller-manager`
+
+`kube-controller-manager`는 여러 controller를 실행한다. Controller는 특정 object의 desired state와 actual state를 비교하고, 차이가 있으면 조정한다.
+
+예를 들어 Deployment를 만들면 controller가 ReplicaSet과 Pod 상태를 맞춘다.
+
+```text
+Deployment desired replicas = 3
+actual Pods = 2
+controller action = create 1 Pod
+```
+
+이 controller model이 Kubernetes의 self-healing과 선언형 운영의 기반이다.
+
+---
+
+## Worker Node
+
+**Worker Node**는 실제 application container가 실행되는 machine이다. Node는 물리 서버일 수도 있고 VM일 수도 있다.
+
+| 구성요소 | 역할 |
+|---|---|
+| `kubelet` | node의 agent. control plane과 통신하며 Pod가 실제로 실행되도록 관리한다. |
+| container runtime | container image를 pull하고 container를 실행한다. 예: `containerd`, `CRI-O` |
+| `kube-proxy` | Service networking을 위해 node-level network rule을 관리한다. |
+| Pods | 실제 application container가 들어 있는 Kubernetes의 최소 배포 단위 |
+
+Worker node는 단순히 Linux server가 아니다. Kubernetes control plane의 명령을 받아 Pod를 실행하고, 상태를 보고하고, network routing에 참여하는 실행 계층이다.
+
+```text
+Control Plane
+  ↓ scheduling result
+Worker Node
+  ↓ kubelet
+Container Runtime
+  ↓
+Container 실행
+```
+
+### `kubelet`
+
+`kubelet`은 각 node에서 실행되는 agent다. Control plane으로부터 “이 node에서 이 Pod를 실행하라”는 정보를 받고, container runtime을 통해 실제 container를 실행한다.
+
+또한 node와 Pod 상태를 control plane에 보고한다.
+
+```text
+kubelet responsibilities
+├─ assigned Pod 확인
+├─ container runtime에 container 실행 요청
+├─ Pod 상태 보고
+├─ probe 결과 반영
+└─ container 재시작 관리
+```
+
+### Container runtime
+
+Container runtime은 image를 pull하고 container를 실행한다. Kubernetes는 runtime과 직접 결합하기보다 CRI를 통해 runtime과 통신한다.
+
+대표 runtime은 다음과 같다.
+
+| Runtime | 설명 |
+|---|---|
+| `containerd` | 널리 사용되는 container runtime. |
+| `CRI-O` | Kubernetes CRI에 맞춰 설계된 runtime. |
+
+주의할 점은 Kubernetes가 “Docker image” 형태의 OCI-compatible image를 사용할 수 있지만, cluster 내부 runtime이 반드시 Docker Engine이어야 하는 것은 아니라는 점이다.
+
+---
+
+## Pod: Kubernetes의 최소 배포 단위
+
+Kubernetes를 이해할 때 가장 먼저 잡아야 하는 object는 **Pod**다.
+
+많은 경우 Kubernetes가 container를 직접 배포한다고 생각하지만, Kubernetes의 기본 배포 단위는 container가 아니라 Pod다.
+
+```text
+Container = 실제 process 실행 단위
+Pod       = Kubernetes가 scheduling하고 관리하는 최소 배포 단위
+```
+
+### Pod 하나에 container 하나
+
+가장 단순한 경우 Pod 하나에 container 하나가 들어간다.
+
+```text
+Pod
+└─ Container: api
+```
+
+예시 manifest는 다음과 같다.
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: api
+spec:
+  containers:
+    - name: api
+      image: my-api:1.0.0
+```
+
+하지만 실무에서는 이 방식으로 Pod를 직접 관리하기보다 Deployment를 통해 Pod를 생성하는 경우가 많다.
+
+### Pod 하나에 여러 container
+
+Pod는 여러 container를 담을 수 있다.
+
+```text
+Pod
+├─ Container: app
+└─ Container: sidecar
+```
+
+같은 Pod 안의 container들은 다음을 공유한다.
+
+```text
+network namespace
+storage volume
+lifecycle
+localhost 통신 공간
+```
+
+예를 들어 app container와 log sidecar가 같은 Pod에 들어갈 수 있다.
+
+```text
+Pod: api-pod
+├─ api container
+└─ log-sidecar container
+```
+
+이때 sidecar는 app container의 log file을 읽거나, proxy 역할을 하거나, 보조 기능을 수행할 수 있다.
+
+### 왜 container가 아니라 Pod가 최소 단위인가
+
+어떤 container들은 독립적으로 scale되어야 한다.
+
+```text
+api Pod × 5
+worker Pod × 2
+frontend Pod × 3
+```
+
+반대로 어떤 container들은 항상 함께 배치되어야 한다.
+
+```text
+main app + sidecar proxy
+main app + log shipper
+main app + init helper
+```
+
+이런 container들을 서로 다른 node에 흩어놓으면 의미가 없다. 그래서 Kubernetes는 “항상 같이 움직여야 하는 container 묶음”을 Pod로 추상화한다.
+
+| 구분 | 설명 |
+|---|---|
+| Container | 실제 process 실행 단위 |
+| Pod | Kubernetes가 배포·스케줄링하는 최소 단위 |
+| Deployment | Pod replica 집합을 관리하는 상위 object |
+| Service | Pod 집합에 안정적인 network endpoint 제공 |
+
+---
+
+## Deployment: Pod를 직접 관리하지 않는 이유
+
+Pod를 직접 만들 수는 있지만, 운영 환경에서는 보통 **Deployment**를 사용한다.
+
+이유는 단순하다.
+
+> Pod는 언제든지 죽고, 사라지고, 새로 만들어질 수 있는 disposable object에 가깝다.
+
+Deployment는 Pod replica를 원하는 개수로 유지하고, rolling update와 rollback을 제공한다.
+
+## Deployment 기본 예시
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: api
+  template:
+    metadata:
+      labels:
+        app: api
+    spec:
+      containers:
+        - name: api
+          image: registry.example.com/api:1.0.0
+          ports:
+            - containerPort: 3000
+```
+
+이 manifest의 의미는 다음과 같다.
+
+```text
+api라는 Deployment를 만들고,
+app=api label을 가진 Pod를 관리하며,
+항상 Pod 3개를 유지하고,
+각 Pod 안에는 registry.example.com/api:1.0.0 image로 실행되는 container가 있어야 한다.
+```
+
+여기서 핵심은 `replicas: 3`이다.
+
+```text
+desired replicas = 3
+actual replicas  = 3 → 유지
+actual replicas  = 2 → 하나 생성
+actual replicas  = 4 → 하나 제거
+```
+
+## Deployment, ReplicaSet, Pod의 관계
+
+Deployment를 만들면 내부적으로 ReplicaSet이 생기고, ReplicaSet이 Pod 수를 유지한다.
+
+```text
+Deployment
+└─ ReplicaSet
+   ├─ Pod
+   ├─ Pod
+   └─ Pod
+```
+
+사용자가 보통 직접 다루는 것은 Deployment다.
+
+```bash
+kubectl get deployments
+kubectl describe deployment api
+kubectl rollout status deployment/api
+kubectl rollout undo deployment/api
+```
+
+ReplicaSet은 Deployment가 rollout history와 replica 관리를 위해 사용하는 중간 계층으로 이해하면 된다.
+
+## Deployment가 제공하는 운영 기능
+
+| 기능 | 설명 |
+|---|---|
+| replica 유지 | 지정한 Pod 개수를 유지한다. |
+| self-healing | Pod나 node 장애 시 replacement Pod를 만든다. |
+| rolling update | 새 image로 점진적 교체가 가능하다. |
+| rollback | 문제가 있으면 이전 revision으로 되돌릴 수 있다. |
+| 선언형 관리 | YAML manifest로 원하는 상태를 저장할 수 있다. |
+
+이 점 때문에 Kubernetes는 단순 container 실행 도구가 아니라 application lifecycle manager에 가깝다.
+
+---
+
+## Service: Pod IP가 바뀌어도 안정적으로 접근하기
+
+Pod는 자주 생성되고 사라진다. Pod가 새로 만들어지면 IP도 바뀔 수 있다.
+
+```text
+api-pod-1: 10.244.1.10
+api-pod-2: 10.244.2.11
+api-pod-3: 10.244.3.12
+```
+
+`api-pod-2`가 죽고 새 Pod가 만들어지면 IP가 바뀐다.
+
+```text
+api-pod-2: deleted
+api-pod-4: 10.244.4.21
+```
+
+Frontend가 backend Pod IP를 직접 알고 있다면 문제가 생긴다.
+
+```text
+frontend → 10.244.2.11
+```
+
+이 IP는 더 이상 존재하지 않을 수 있다.
+
+그래서 Kubernetes는 **Service**를 제공한다. Service는 여러 Pod 앞에 안정적인 network abstraction을 만든다.
+
+## Service 예시
+
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: api
+spec:
+  selector:
+    app: api
+  ports:
+    - port: 80
+      targetPort: 3000
+```
+
+이 Service는 `app=api` label을 가진 Pod들을 찾아서 traffic을 전달한다.
+
+```text
+frontend
+  ↓
+Service: api
+  ↓
+api Pod 중 하나
+```
+
+Frontend는 더 이상 Pod IP를 몰라도 된다.
+
+```text
+http://api
+```
+
+이 이름으로 접근하면 Kubernetes 내부 DNS와 Service routing을 통해 적절한 Pod로 연결된다.
+
+## Label selector가 중요한 이유
+
+Kubernetes의 많은 object는 **label**과 **selector**로 연결된다.
+
+Pod에 이런 label이 있다고 하자.
+
+```yaml
+metadata:
+  labels:
+    app: api
+```
+
+Service는 이 label을 기준으로 backend Pod를 찾는다.
+
+```yaml
+selector:
+  app: api
+```
+
+Service는 특정 Pod 이름을 직접 가리키지 않는다. 대신 label 조건에 맞는 Pod 집합을 동적으로 바라본다.
+
+```text
+old Pod deleted
+new Pod created with app=api
+Service automatically includes new Pod
+```
+
+이 구조 덕분에 Pod가 삭제되고 새로 생겨도 Service는 계속 작동한다.
+
+> 주의할 점: Service는 Pod를 생성하거나 소유하지 않는다. Pod를 만드는 것은 Deployment/ReplicaSet이고, Service는 label selector로 Pod 집합을 찾아 traffic을 보낸다.
+
+---
+
+## Kubernetes의 self-healing
+
+Kubernetes의 큰 장점 중 하나는 **self-healing**이다. 다만 self-healing은 application bug를 자동으로 고쳐준다는 뜻이 아니다.
+
+Kubernetes가 하는 일은 다음에 가깝다.
+
+```text
+선언된 replica 수 유지
+실패한 container 재시작
+삭제된 Pod 대체
+node 장애 시 replacement Pod 배치
+ready하지 않은 Pod를 traffic 대상에서 제외
+```
+
+## Container가 죽는 경우
+
+Pod 안의 container process가 죽으면 `kubelet`이 restart policy에 따라 container를 재시작할 수 있다.
+
+```text
+container process crashed
+  ↓
+kubelet detects failure
+  ↓
+container restarted
+```
+
+하지만 application bug로 계속 죽는 경우에는 `CrashLoopBackOff`가 발생할 수 있다.
+
+```bash
+kubectl get pods
+```
+
+예시:
+
+```text
+NAME                  READY   STATUS             RESTARTS
+api-7b9c9f9c8-abcde   0/1     CrashLoopBackOff   5
+```
+
+이 상태는 Kubernetes가 자동으로 문제를 해결했다는 의미가 아니다. Kubernetes는 계속 재시작을 시도하지만, root cause는 application log와 Pod event를 확인해야 한다.
+
+```bash
+kubectl logs api-7b9c9f9c8-abcde
+kubectl describe pod api-7b9c9f9c8-abcde
+```
+
+## Pod가 삭제되는 경우
+
+Deployment가 관리하는 Pod가 삭제되면 ReplicaSet이 새 Pod를 만든다.
+
+```bash
+kubectl delete pod api-7b9c9f9c8-abcde
+```
+
+이후 ReplicaSet은 replica 수가 부족하다고 판단한다.
+
+```text
+desired replicas = 3
+actual replicas  = 2
+ReplicaSet action = create 1 Pod
+```
+
+이것이 desired state 기반 운영이다.
+
+## Node가 죽는 경우
+
+Node 자체가 unavailable해지면, 해당 node 위의 Pod도 더 이상 정상 동작하지 않는다. Deployment가 관리하는 stateless Pod라면 다른 node에 replacement Pod가 만들어질 수 있다.
+
+```text
+Node 1 down
+  ↓
+Pods on Node 1 unavailable
+  ↓
+Control plane detects node failure
+  ↓
+Replacement Pods scheduled on healthy nodes
+```
+
+단, Kubernetes가 모든 장애를 자동으로 해결하는 것은 아니다.
+
+| 문제 | Kubernetes가 해주는 것 | 직접 확인할 것 |
+|---|---|---|
+| container crash | 재시작 시도 | log, exception, config |
+| Pod 삭제 | replacement Pod 생성 | 왜 삭제됐는지 |
+| node 장애 | 다른 node로 재배치 | capacity, storage, network |
+| app bug | 재시작만 반복 | code fix 필요 |
+| DB 장애 | 자동 해결 아님 | DB HA 설계 필요 |
+
+---
+
+## Scheduling: Pod는 어느 node에 배치되는가
+
+사용자는 보통 “이 Pod를 Node 2에 띄워라”라고 직접 지정하지 않는다. 대신 Kubernetes scheduler가 결정한다.
+
+```text
+새 Pod 생성 요청
+  ↓
+Pod는 아직 node가 없음
+  ↓
+kube-scheduler가 적절한 node 선택
+  ↓
+선택된 node의 kubelet이 Pod 실행
+```
+
+Scheduler는 여러 조건을 고려한다.
+
+```text
+node의 CPU/memory 여유
+Pod의 resource requests
+nodeSelector
+affinity / anti-affinity
+taints / tolerations
+volume binding
+이미 실행 중인 workload 분포
+```
+
+## Resource requests와 limits
+
+Kubernetes 운영에서 `resources.requests`와 `resources.limits`는 매우 중요하다.
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: api
+  template:
+    metadata:
+      labels:
+        app: api
+    spec:
+      containers:
+        - name: api
+          image: registry.example.com/api:1.0.0
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "256Mi"
+            limits:
+              cpu: "1"
+              memory: "512Mi"
+```
+
+| 항목 | 의미 |
+|---|---|
+| `requests.cpu` | scheduling 시 필요한 최소 CPU로 간주 |
+| `requests.memory` | scheduling 시 필요한 최소 memory로 간주 |
+| `limits.cpu` | container가 사용할 수 있는 CPU 상한 |
+| `limits.memory` | 초과 시 OOM kill될 수 있는 memory 상한 |
+
+자칫 실수하기 쉬운 부분은 다음이다.
+
+```text
+requests가 없으면 scheduler가 실제 필요량을 모른다.
+limits.memory가 너무 낮으면 OOMKilled가 발생할 수 있다.
+limits.cpu가 너무 낮으면 throttling이 심해질 수 있다.
+requests가 너무 높으면 cluster utilization이 낮아진다.
+```
+
+Kubernetes는 resource 기반 자동화를 제공하지만, 올바른 requests/limits가 없으면 scheduler와 autoscaler가 좋은 결정을 내리기 어렵다.
+
+---
+
+## Declarative configuration: YAML로 원하는 상태를 선언한다
+
+Kubernetes는 imperative command도 지원한다.
+
+```bash
+kubectl create deployment api --image=registry.example.com/api:1.0.0
+kubectl scale deployment api --replicas=5
+```
+
+하지만 실무에서는 manifest 기반 선언형 관리가 더 중요하다.
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+spec:
+  replicas: 5
+  selector:
+    matchLabels:
+      app: api
+  template:
+    metadata:
+      labels:
+        app: api
+    spec:
+      containers:
+        - name: api
+          image: registry.example.com/api:1.0.0
+```
+
+적용은 다음처럼 한다.
+
+```bash
+kubectl apply -f deployment.yaml
+```
+
+이 방식의 장점은 다음이다.
+
+| 장점 | 설명 |
+|---|---|
+| 재현성 | 같은 YAML로 같은 상태를 다시 만들 수 있다. |
+| Git 관리 | manifest를 Git에 저장해 변경 이력을 추적할 수 있다. |
+| Review 가능 | PR/MR 기반 검토가 가능하다. |
+| 자동화 | CI/CD 또는 GitOps와 연결하기 쉽다. |
+| rollback 용이 | 이전 manifest나 image tag로 되돌릴 수 있다. |
+
+Kubernetes를 잘 쓴다는 것은 운영 상태를 사람이 기억하는 것이 아니라, 선언형 manifest로 운영 의도를 관리하는 것에 가깝다.
+
+---
+
+## Rolling update와 rollback
+
+Kubernetes Deployment의 큰 장점은 rolling update다.
+
+예를 들어 image를 `1.0.0`에서 `1.1.0`으로 바꾼다고 하자.
+
+```bash
+kubectl set image deployment/api api=registry.example.com/api:1.1.0
+```
+
+또는 manifest를 수정한다.
+
+```yaml
+image: registry.example.com/api:1.1.0
+```
+
+그리고 적용한다.
+
+```bash
+kubectl apply -f deployment.yaml
+```
+
+Kubernetes는 기존 Pod를 한 번에 모두 죽이지 않고, 새 Pod를 조금씩 만들고 old Pod를 점진적으로 줄인다.
+
+```text
+old version: api:1.0.0 × 3
+new version: api:1.1.0 × 0
+
+rolling update 진행
+
+old version: api:1.0.0 × 2
+new version: api:1.1.0 × 1
+
+old version: api:1.0.0 × 1
+new version: api:1.1.0 × 2
+
+old version: api:1.0.0 × 0
+new version: api:1.1.0 × 3
+```
+
+상태 확인:
+
+```bash
+kubectl rollout status deployment/api
+```
+
+문제가 생기면 rollback할 수 있다.
+
+```bash
+kubectl rollout undo deployment/api
+```
+
+다만 rolling update가 항상 무중단을 보장하는 것은 아니다. 다음 조건이 함께 맞아야 한다.
+
+```text
+readinessProbe가 정확해야 한다.
+Pod가 graceful shutdown을 처리해야 한다.
+Service가 ready 상태인 Pod로만 traffic을 보내야 한다.
+DB migration이 backward compatible해야 한다.
+새 버전과 구버전이 동시에 떠도 문제없어야 한다.
+```
+
+---
+
+## Readiness probe와 liveness probe
+
+Kubernetes가 Pod를 띄웠다고 해서 application이 준비된 것은 아니다.
+
+```text
+container running = process가 살아 있음
+application ready = traffic을 받아도 됨
+```
+
+이 둘은 다르다.
+
+그래서 Kubernetes에서는 probe를 사용한다.
+
+```yaml
+readinessProbe:
+  httpGet:
+    path: /ready
+    port: 3000
+  initialDelaySeconds: 5
+  periodSeconds: 10
+
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: 3000
+  initialDelaySeconds: 30
+  periodSeconds: 20
+```
+
+| Probe | 목적 |
+|---|---|
+| `readinessProbe` | traffic을 받을 준비가 되었는지 판단 |
+| `livenessProbe` | application이 살아 있는지 판단, 실패하면 재시작 가능 |
+| `startupProbe` | 느리게 시작하는 application의 초기 기동 보호 |
+
+주의할 점은 `livenessProbe`를 너무 공격적으로 잡으면 오히려 장애를 키울 수 있다는 것이다.
+
+예를 들어 일시적인 GC pause나 외부 API 지연 때문에 probe가 실패했는데, Kubernetes가 계속 container를 죽이고 재시작하면 정상 회복 기회를 잃을 수 있다.
+
+---
+
+## Kubernetes networking의 기본 사고방식
+
+Kubernetes network의 기본 원칙은 다음과 같이 잡을 수 있다.
+
+```text
+Pod는 고유한 IP를 가진다.
+Pod끼리는 원칙적으로 서로 통신할 수 있다.
+Service는 Pod 집합 앞에 안정적인 endpoint를 제공한다.
+외부 traffic은 보통 LoadBalancer, NodePort, Ingress, Gateway 등을 통해 들어온다.
+```
+
+기본 흐름은 다음과 같다.
+
+```text
+External User
+  ↓
+LoadBalancer / Ingress
+  ↓
+Service
+  ↓
+Pod
+  ↓
+Container
+```
+
+내부 service 간 통신은 보통 Service 이름으로 한다.
+
+```text
+frontend → http://api
+api      → http://database
+```
+
+이 구조 덕분에 Pod IP 변경을 application code가 직접 알 필요가 없다.
+
+---
+
+## ConfigMap과 Secret: image와 설정을 분리하기
+
+Container image 안에 설정을 bake하면 환경별 배포가 어려워진다.
+
+나쁜 예:
+
+```dockerfile
+ENV DB_HOST=prod-db.example.com
+ENV DB_PASSWORD=my-password
+```
+
+이렇게 하면 image 자체가 특정 환경에 종속된다. 특히 password나 token을 image에 넣는 것은 보안상 매우 위험하다.
+
+Kubernetes에서는 보통 ConfigMap과 Secret을 사용한다.
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: api-config
+data:
+  APP_ENV: "production"
+  LOG_LEVEL: "info"
+```
+
+Secret 예시:
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: api-secret
+type: Opaque
+stringData:
+  DB_PASSWORD: "[REDACTED]"
+```
+
+Deployment에서 주입한다.
+
+```yaml
+env:
+  - name: APP_ENV
+    valueFrom:
+      configMapKeyRef:
+        name: api-config
+        key: APP_ENV
+  - name: DB_PASSWORD
+    valueFrom:
+      secretKeyRef:
+        name: api-secret
+        key: DB_PASSWORD
+```
+
+이렇게 하면 image는 그대로 두고 환경별 설정만 바꿀 수 있다.
+
+```text
+same image
+different config
+different environment
+```
+
+---
+
+## Autoscaling: traffic이 늘어나면 어떻게 대응하는가
+
+Kubernetes는 여러 수준의 scaling을 제공한다.
+
+| 종류 | 대상 | 설명 |
+|---|---|---|
+| Horizontal Pod Autoscaler | Pod replica 수 | CPU, memory, custom metric 기준으로 Pod 수 조정 |
+| Vertical Pod Autoscaler | Pod resource request | Pod가 필요한 CPU/memory request 조정 |
+| Cluster Autoscaler | Node 수 | Pod를 배치할 node가 부족하면 node 추가 |
+| Manual scaling | 사용자가 직접 | `kubectl scale` 또는 manifest 수정 |
+
+가장 기본적인 것은 manual scaling이다.
+
+```bash
+kubectl scale deployment api --replicas=10
+```
+
+이 명령은 `api` Deployment의 desired replica 수를 10으로 바꾼다.
+
+```text
+desired replicas = 10
+Kubernetes action = Pod 수를 10개로 맞춤
+```
+
+Autoscaling은 이 작업을 metric 기반으로 자동화한다.
+
+다만 autoscaling도 magic은 아니다.
+
+```text
+metric-server 또는 custom metrics pipeline 필요
+resource requests 설정 필요
+application이 horizontal scaling에 적합해야 함
+stateful workload는 별도 설계 필요
+external dependency bottleneck 고려 필요
+```
+
+예를 들어 API Pod를 10개로 늘려도 database connection pool이 터지면 전체 시스템은 오히려 불안정해질 수 있다.
+
+---
+
+## Kubernetes가 해결하는 문제와 해결하지 않는 문제
+
+Kubernetes는 많은 운영 문제를 추상화하지만 모든 문제가 자동으로 사라지는 것은 아니다.
+
+## Kubernetes가 잘 해결하는 문제
+
+| 문제 | Kubernetes의 역할 |
+|---|---|
+| container 배치 | scheduler가 node 선택 |
+| replica 유지 | Deployment/ReplicaSet |
+| 장애 복구 | self-healing |
+| service discovery | Service/DNS |
+| rolling update | Deployment rollout |
+| config 분리 | ConfigMap/Secret |
+| resource 제어 | requests/limits |
+| 확장 | HPA/VPA/Cluster Autoscaler |
+| 선언형 운영 | YAML/API 기반 desired state |
+
+## Kubernetes가 직접 해결하지 않는 문제
+
+| 문제 | 설명 |
+|---|---|
+| application bug | Kubernetes는 재시작할 뿐 code bug를 고치지 않는다. |
+| 잘못된 architecture | monolith를 container에 넣는다고 cloud-native가 되지는 않는다. |
+| database HA | DB replication, backup, failover는 별도 설계 필요 |
+| 보안 정책 | RBAC, NetworkPolicy, Pod Security 등을 직접 설계해야 한다. |
+| observability | metric/log/tracing stack을 별도로 구성해야 한다. |
+| 비용 최적화 | requests/limits, autoscaling, node sizing을 계속 조정해야 한다. |
+| 복잡도 관리 | Kubernetes 자체 학습 곡선과 운영 부담이 있다. |
+
+Kubernetes는 복잡도를 제거한다기보다, 복잡도를 표준화된 API와 controller model 안으로 이동시킨다고 보는 것이 정확하다.
+
+---
+
+## DevOps 관점의 Kubernetes delivery 흐름
+
+Kubernetes는 infra team만 쓰는 도구가 아니다. DevOps 관점에서는 application delivery lifecycle 전체와 연결된다.
+
+```text
+Developer
+  ↓
+Code commit
+  ↓
+CI test
+  ↓
+Container image build
+  ↓
+Image push to registry
+  ↓
+Kubernetes manifest update
+  ↓
+Deployment rollout
+  ↓
+Monitoring / logging / alerting
+  ↓
+Rollback or progressive delivery
+```
+
+Kubernetes를 CI/CD와 연결하면 배포 단위는 source code가 아니라 image tag와 manifest가 된다.
+
+예시:
+
+```yaml
+image: registry.example.com/api:git-a1b2c3d
+```
+
+이 tag가 Git commit과 연결되면 어떤 code가 어떤 Pod로 배포되었는지 추적하기 쉬워진다.
+
+운영에서 자주 보는 흐름은 다음과 같다.
+
+```text
+1. 새 image build
+2. registry push
+3. manifest image tag 변경
+4. kubectl apply 또는 GitOps sync
+5. rollout status 확인
+6. readiness 통과 확인
+7. metric/log 확인
+8. 문제 시 rollout undo
+```
+
+검증에 자주 쓰는 명령은 다음과 같다.
+
+```bash
+kubectl get deployments
+kubectl get pods
+kubectl get svc
+kubectl rollout status deployment/api
+kubectl describe pod <pod-name>
+kubectl logs <pod-name>
+```
+
+| 명령 | 확인 목적 |
+|---|---|
+| `kubectl get deployments` | Deployment 상태와 replica 수 확인 |
+| `kubectl get pods` | Pod 상태, restart count, readiness 확인 |
+| `kubectl get svc` | Service 생성 여부와 노출 방식 확인 |
+| `kubectl rollout status deployment/api` | rollout 진행 상태 확인 |
+| `kubectl describe pod <pod-name>` | event, scheduling, probe 실패 원인 확인 |
+| `kubectl logs <pod-name>` | application log 확인 |
+
+---
+
+## Kubernetes object 간 관계를 하나의 예제로 보기
+
+간단한 API application을 Kubernetes에 배포한다고 하자.
+
+## Deployment
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: api
+  template:
+    metadata:
+      labels:
+        app: api
+    spec:
+      containers:
+        - name: api
+          image: registry.example.com/api:1.0.0
+          ports:
+            - containerPort: 3000
+```
+
+이 Deployment는 Pod 3개를 유지한다.
+
+```text
+Deployment
+└─ ReplicaSet
+   ├─ Pod: api-1
+   ├─ Pod: api-2
+   └─ Pod: api-3
+```
+
+## Service
+
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: api
+spec:
+  selector:
+    app: api
+  ports:
+    - port: 80
+      targetPort: 3000
+```
+
+Service는 `app=api` label을 가진 Pod들로 traffic을 보낸다.
+
+```text
+client
+  ↓
+Service: api
+  ↓
+api Pod 중 하나
+```
+
+## ConfigMap
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: api-config
+data:
+  LOG_LEVEL: "info"
+```
+
+## 전체 관계
+
+```text
+Deployment
+  └─ creates ReplicaSet
+       └─ creates Pods
+            └─ run Containers
+
+Service
+  └─ selects Pods by label
+
+ConfigMap / Secret
+  └─ provide configuration to Pods
+
+Scheduler
+  └─ assigns Pods to Nodes
+
+Kubelet
+  └─ runs Pods on assigned Node
+```
+
+이 관계가 Kubernetes의 기본 골격이다.
+
+---
+
+## 자칫 실수하기 쉬운 부분
+
+### Pod와 container를 같은 것으로 보는 것
+
+Pod는 container 하나일 수도 있지만, Kubernetes가 scheduling하는 단위는 container가 아니라 Pod다.
+
+```text
+Container = process 실행 단위
+Pod       = Kubernetes 배포 최소 단위
+```
+
+### Service가 Pod를 소유한다고 생각하는 것
+
+Service는 Pod를 만들거나 소유하지 않는다. Service는 label selector로 Pod 집합을 찾아 network endpoint를 제공한다.
+
+```text
+Deployment → Pod를 만든다.
+Service    → Pod를 찾아 traffic을 보낸다.
+```
+
+### Deployment를 만들면 자동으로 외부 접근이 된다고 생각하는 것
+
+Deployment는 Pod를 띄울 뿐이다. 외부에서 접근하려면 Service, Ingress, Gateway, LoadBalancer 등 network 노출 방식이 필요하다.
+
+### Kubernetes가 high availability를 무조건 보장한다고 생각하는 것
+
+Kubernetes는 HA를 구성할 수 있는 도구를 제공하지만, cluster가 한 node라면 node 장애 시 복구할 곳이 없다.
+
+```text
+single-node cluster
+  node down
+  → workload down
+```
+
+Production에서는 여러 worker node, control plane HA, storage HA, backup, monitoring이 필요하다.
+
+### Kubernetes를 쓰면 monitoring이 자동 완성된다고 생각하는 것
+
+`kubectl get pods`는 운영 관찰성의 시작일 뿐이다.
+
+실제 운영에는 보통 다음이 필요하다.
+
+```text
+metrics: Prometheus, Grafana
+logs: Loki, Elasticsearch, Fluent Bit
+tracing: Jaeger, Tempo, OpenTelemetry
+alerting: Alertmanager
+dashboard: Grafana, Kubernetes Dashboard 등
+```
+
+---
+
+## Kubernetes의 장점과 trade-off
+
+## 장점
+
+| 장점 | 설명 |
+|---|---|
+| portability | cloud, on-prem, hybrid 환경에 비교적 일관된 abstraction 제공 |
+| scalability | Pod replica와 node 확장 구조 제공 |
+| self-healing | 장애 시 replacement와 restart 가능 |
+| declarative operation | YAML/API로 desired state 관리 |
+| ecosystem | Helm, Istio, Argo CD, Prometheus 등 풍부한 생태계 |
+| automation | deployment, rollout, scheduling 자동화 |
+
+## Trade-off
+
+| trade-off | 설명 |
+|---|---|
+| 복잡도 | 기본 개념만으로도 Pod, Deployment, Service, ConfigMap, Secret, Ingress 등 학습 대상이 많다. |
+| 운영 부담 | cluster upgrade, CNI, storage, monitoring, security 관리가 필요하다. |
+| 보안 표면 증가 | API Server, RBAC, admission, container runtime, image supply chain까지 관리해야 한다. |
+| 비용 관리 필요 | 잘못된 requests/limits, 과도한 replica, idle node가 비용을 증가시킬 수 있다. |
+| debugging 난이도 | application, Pod, node, network, DNS, storage 중 어디 문제인지 분리해야 한다. |
+
+---
+
+## 요약
+
+Kubernetes는 container를 단순히 실행하는 도구가 아니라, containerized application을 production 환경에서 운영하기 위한 **orchestration control system**이다.
+
+핵심 구분은 다음과 같다.
+
+```text
+Docker / Containerization
+  → application을 image로 packaging하고 isolated process로 실행
+
+Kubernetes
+  → 여러 node 위에서 containerized application을 배치, 확장, 복구, 노출, 업데이트
+```
+
+Kubernetes의 본질은 다음 문장으로 정리할 수 있다.
+
+> Kubernetes는 사용자가 선언한 desired state를 기준으로 cluster의 actual state를 계속 조정하는 distributed control system이다.
+
+따라서 Kubernetes를 배울 때는 명령어를 먼저 외우기보다 다음 구조를 먼저 잡는 것이 중요하다.
+
+```text
+Cluster
+  ├─ Control Plane
+  └─ Worker Nodes
+
+Workload
+  ├─ Pod
+  ├─ Deployment
+  └─ ReplicaSet
+
+Networking
+  ├─ Service
+  ├─ Ingress
+  └─ DNS
+
+Operation
+  ├─ self-healing
+  ├─ rolling update
+  ├─ scaling
+  └─ observability
+```
+
+Kubernetes는 cloud-native application 운영에서 다음 질문에 대한 표준적인 답을 제공한다.
+
+```text
+어디에 배치할 것인가?
+몇 개를 유지할 것인가?
+죽으면 어떻게 복구할 것인가?
+어떻게 접근하게 할 것인가?
+어떻게 안전하게 업데이트할 것인가?
+어떻게 선언적으로 관리할 것인가?
+```

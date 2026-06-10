@@ -1,0 +1,1442 @@
+---
+area: "Cloud Infrastructure"
+type: "concept"
+series: "DevOps Explained"
+title: "Tekton CI/CD Pipeline"
+slug: "tekton-cicd-pipeline"
+date: "2026-06-02"
+updated: "2026-06-02"
+draft: false
+reviewed: true
+category: "Notes"
+tags: ["Tekton", "Kubernetes", "CI/CD", "Pipeline", "Task", "PipelineRun", "GitOps", "DevOps"]
+description: "Tekton을 Kubernetes-native CI/CD framework로 이해하고, Task, TaskRun, Pipeline, PipelineRun, Workspace, Trigger, RBAC, GitOps 연계, 운영상 주의점을 정리한다."
+---
+## 개요
+
+**Tekton**은 Kubernetes 위에서 CI/CD pipeline을 정의하고 실행하기 위한 Kubernetes-native CI/CD framework다. 기존 CI/CD 도구가 별도의 CI server와 agent를 중심으로 동작하는 경우가 많았다면, Tekton은 `Task`, `Pipeline`, `PipelineRun` 같은 Kubernetes Custom Resource를 통해 pipeline 자체를 Kubernetes object처럼 다룬다.
+
+핵심을 한 줄로 정리하면 다음과 같다.
+
+```text
+Tekton은 CI/CD pipeline을 Kubernetes Custom Resource로 정의하고,
+각 build/test/deploy step을 container와 pod로 실행하는 framework다.
+```
+
+Tekton의 핵심 관점은 다음과 같다.
+
+```text
+CI/CD pipeline도 Kubernetes object처럼 선언한다.
+Task도 Kubernetes resource다.
+Pipeline도 Kubernetes resource다.
+Pipeline 실행도 Kubernetes resource다.
+각 실행 step은 container로 실행된다.
+```
+
+즉, Tekton은 Kubernetes를 단순히 배포 대상으로만 보지 않는다. Kubernetes cluster 자체를 CI/CD 실행 platform으로 사용한다.
+
+---
+
+## Tekton이 필요한 이유
+
+Cloud-native 환경에서 애플리케이션은 보통 다음 흐름을 가진다.
+
+```text
+source code
+  -> build
+  -> test
+  -> container image build
+  -> image registry push
+  -> Kubernetes manifest update
+  -> deploy
+```
+
+이 흐름은 단일 서버나 단일 cloud provider에만 묶이지 않을 수 있다.
+
+```text
+dev cluster:
+  local 또는 내부 Kubernetes
+
+staging cluster:
+  public cloud A
+
+production cluster:
+  public cloud B 또는 on-premise
+
+registry:
+  private registry 또는 cloud registry
+
+deployment:
+  Kubernetes, OpenShift, VM, serverless 등 혼합
+```
+
+기존 CI/CD 도구로도 이런 흐름을 만들 수 있다. 하지만 Kubernetes 중심의 platform을 운영하다 보면 다음 문제가 자주 생긴다.
+
+| 문제 | 설명 |
+|---|---|
+| 실행 환경 불일치 | CI agent마다 설치된 toolchain이 다를 수 있다. |
+| Kubernetes와의 분리 | pipeline 실행은 외부 CI server, 배포 대상은 Kubernetes로 나뉜다. |
+| multi-cloud 복잡도 | cloud provider별 credential과 deploy 방식이 달라진다. |
+| 재사용성 부족 | 팀마다 비슷한 pipeline script를 새로 작성한다. |
+| 권한 관리 복잡도 | CI server credential과 Kubernetes RBAC가 따로 관리된다. |
+| 확장성 문제 | build agent 확장, queue, resource isolation을 별도로 관리해야 한다. |
+| 표준화 어려움 | 조직 공통 pipeline primitive를 만들기 어렵다. |
+
+Tekton은 이 문제를 Kubernetes resource model로 풀려고 한다.
+
+```text
+Kubernetes가 이미 제공하는 것:
+  pod scheduling
+  container execution
+  namespace isolation
+  secret management
+  service account
+  RBAC
+  volume
+  event
+  controller reconciliation
+
+Tekton이 여기에 추가하는 것:
+  Task
+  Pipeline
+  PipelineRun
+  Trigger
+  Workspace
+  Results
+```
+
+즉, Tekton은 CI/CD 실행을 Kubernetes 안으로 가져와서 pipeline 실행 자체를 cloud-native workload처럼 다루게 한다.
+
+---
+
+## Tekton의 기본 정의
+
+Tekton은 완성형 CI/CD 제품이라기보다, CI/CD system을 만들기 위한 **building blocks**를 제공하는 framework에 가깝다.
+
+Tekton의 핵심 특징은 다음과 같다.
+
+| 개념 | 설명 |
+|---|---|
+| Kubernetes-native | Kubernetes API와 Custom Resource를 사용한다. |
+| Pipeline-as-code | pipeline 정의를 YAML로 작성하고 Git에서 관리할 수 있다. |
+| Container-first | 각 step을 container image로 실행한다. |
+| Vendor-neutral | 특정 cloud provider에 종속되지 않는다. |
+| Extensible | Task, Catalog, custom Task, custom image로 확장 가능하다. |
+| Reusable building blocks | 공통 Task와 Pipeline을 여러 project에서 재사용할 수 있다. |
+| Event-driven | webhook, Git event 등을 Trigger로 연결할 수 있다. |
+
+Tekton의 mental model은 다음과 같다.
+
+```text
+Application workload:
+  Deployment, Pod, Service로 선언
+
+CI/CD workload:
+  Task, Pipeline, PipelineRun으로 선언
+```
+
+Kubernetes를 이미 사용하고 있다면, Tekton은 CI/CD도 같은 declarative resource model로 관리하게 해준다.
+
+---
+
+## Tekton의 핵심 Resource
+
+Tekton을 이해하려면 resource를 역할별로 구분해야 한다.
+
+| Resource | 역할 |
+|---|---|
+| `Task` | 하나 이상의 step으로 구성된 재사용 가능한 작업 단위 |
+| `TaskRun` | 특정 `Task`를 실제로 실행한 인스턴스 |
+| `Pipeline` | 여러 `Task`를 순서와 의존성에 따라 연결한 workflow |
+| `PipelineRun` | 특정 `Pipeline`을 실제로 실행한 인스턴스 |
+| `Workspace` | task 간 파일 공유, source code, credential, config mount |
+| `params` | repository URL, image tag, branch 등 실행 parameter 전달 |
+| `results` | task 실행 결과를 다음 task로 전달 |
+| `Trigger` | Git webhook 등 외부 event를 pipeline 실행으로 연결 |
+| `EventListener` | 외부 event를 수신하는 endpoint |
+| `TriggerTemplate` | event 발생 시 생성할 `PipelineRun` template |
+| `TriggerBinding` | event payload에서 parameter를 추출 |
+
+초기 Tekton 자료에서는 `PipelineResource`가 등장할 수 있다. 하지만 현재 관점에서는 `PipelineResource` 기반으로 새 pipeline을 설계하지 않는 것이 안전하다. 현재는 `params`, `Workspaces`, `results`, `Tasks` 조합으로 input/output과 데이터 흐름을 표현하는 방향으로 이해하는 것이 좋다.
+
+```text
+초기 Tekton 설명:
+  Task
+  Pipeline
+  PipelineResource
+  PipelineRun
+
+현재 Tekton 관점:
+  Task
+  TaskRun
+  Pipeline
+  PipelineRun
+  Params
+  Workspaces
+  Results
+  Triggers
+```
+
+> 오래된 예제에서 `PipelineResource`가 보이면 현재 Tekton API와 migration guide를 기준으로 재검토가 필요하다.
+
+---
+
+## Task: Tekton의 기본 작업 단위
+
+**Task**는 Tekton에서 가장 기본적인 실행 단위다. 하나의 `Task`는 여러 `step`으로 구성될 수 있고, 각 step은 container image로 실행된다.
+
+예를 들어 테스트를 실행하는 `Task`는 다음처럼 생각할 수 있다.
+
+```yaml
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: run-tests
+spec:
+  workspaces:
+    - name: source
+  steps:
+    - name: test
+      image: node:20
+      workingDir: $(workspaces.source.path)
+      script: |
+        npm ci
+        npm test
+```
+
+이 예시에서 중요한 점은 다음이다.
+
+| 요소 | 의미 |
+|---|---|
+| `kind: Task` | Tekton 작업 정의 |
+| `workspaces` | source code나 파일 공유 지점 |
+| `steps` | 실제 실행 단계 |
+| `image` | step이 실행될 container image |
+| `script` | container 안에서 실행할 명령 |
+| `workingDir` | command 실행 위치 |
+
+Jenkins에서는 보통 agent에 Node.js, Maven, Docker, `kubectl` 같은 도구를 설치해두고 pipeline step을 실행한다. Tekton에서는 각 step이 어떤 image에서 실행될지 명시한다.
+
+```text
+Jenkins style:
+  agent machine에 toolchain 설치
+  sh "npm test"
+
+Tekton style:
+  image: node:20
+  script: npm test
+```
+
+이 방식의 장점은 실행 환경이 명확하다는 것이다.
+
+```text
+test step:
+  node:20 image에서 실행
+
+build step:
+  BuildKit, Buildah, Kaniko image에서 실행
+
+deploy step:
+  kubectl 또는 helm image에서 실행
+```
+
+즉, Tekton은 pipeline step의 runtime을 container image로 고정한다.
+
+---
+
+## Step과 Container-first 실행 모델
+
+Tekton의 step은 container다. 하나의 `Task` 안에 여러 step이 있으면, Tekton은 이 step들을 pod 안의 container로 실행한다.
+
+개념적으로는 다음과 같다.
+
+```text
+TaskRun
+  -> Pod 생성
+      -> step 1 container
+      -> step 2 container
+      -> step 3 container
+```
+
+예를 들어 build task가 다음과 같을 수 있다.
+
+```yaml
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: build-and-test
+spec:
+  workspaces:
+    - name: source
+  steps:
+    - name: install
+      image: node:20
+      workingDir: $(workspaces.source.path)
+      script: |
+        npm ci
+
+    - name: test
+      image: node:20
+      workingDir: $(workspaces.source.path)
+      script: |
+        npm test
+
+    - name: build
+      image: node:20
+      workingDir: $(workspaces.source.path)
+      script: |
+        npm run build
+```
+
+Tekton의 container-first 모델은 다음 장점을 가진다.
+
+| 장점 | 설명 |
+|---|---|
+| 실행 환경 명확 | step마다 image로 toolchain 고정 |
+| 재현성 향상 | agent에 설치된 도구 상태에 덜 의존 |
+| 격리성 | 각 step이 container 환경에서 실행 |
+| Kubernetes scheduling | pod resource request/limit 적용 가능 |
+| 확장성 | cluster resource에 따라 pipeline 실행 분산 |
+| 표준화 | 조직 표준 builder image를 만들 수 있음 |
+
+주의할 점도 있다.
+
+```text
+주의할 점:
+  step image를 신뢰할 수 있어야 함
+  image pull 속도가 pipeline 성능에 영향
+  task 간 파일 공유를 workspace로 명확히 설계해야 함
+  Docker socket mount 같은 위험한 build 방식을 피해야 함
+  step image version pinning이 필요함
+```
+
+Tekton을 잘 운영하려면 CI/CD용 container image 자체도 관리 대상이 된다.
+
+---
+
+## Pipeline: Task를 연결한 Workflow
+
+**Pipeline**은 여러 `Task`를 연결한 workflow다.
+
+예를 들어 application CI/CD pipeline은 다음처럼 구성될 수 있다.
+
+```text
+clone-source
+  -> run-tests
+  -> build-image
+  -> push-image
+  -> deploy
+```
+
+Tekton에서는 이를 `Pipeline` resource로 표현한다.
+
+```yaml
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: app-ci
+spec:
+  params:
+    - name: repo-url
+      type: string
+    - name: image-url
+      type: string
+  workspaces:
+    - name: shared-source
+  tasks:
+    - name: clone
+      taskRef:
+        name: git-clone
+      params:
+        - name: url
+          value: $(params.repo-url)
+      workspaces:
+        - name: output
+          workspace: shared-source
+
+    - name: test
+      taskRef:
+        name: run-tests
+      runAfter:
+        - clone
+      workspaces:
+        - name: source
+          workspace: shared-source
+
+    - name: build
+      taskRef:
+        name: build-image
+      runAfter:
+        - test
+      params:
+        - name: image-url
+          value: $(params.image-url)
+      workspaces:
+        - name: source
+          workspace: shared-source
+```
+
+여기서 `Pipeline`은 다음을 정의한다.
+
+| 요소 | 설명 |
+|---|---|
+| `params` | pipeline 실행 시 필요한 입력값 |
+| `workspaces` | 여러 task가 공유할 파일 공간 |
+| `tasks` | 실행할 task 목록 |
+| `taskRef` | 참조할 Task |
+| `runAfter` | task 실행 순서 |
+| `workspaces` mapping | pipeline workspace와 task workspace 연결 |
+
+Pipeline의 핵심은 task의 조립이다.
+
+```text
+Task:
+  재사용 가능한 작은 작업 단위
+
+Pipeline:
+  Task들을 연결한 workflow
+```
+
+이 구조 덕분에 조직은 공통 task를 만들어 여러 pipeline에서 재사용할 수 있다.
+
+---
+
+## PipelineRun: Pipeline의 실행 인스턴스
+
+`Pipeline`은 설계도에 가깝다. 실제 실행은 `PipelineRun`이 담당한다.
+
+```text
+Pipeline:
+  어떤 task를 어떤 순서로 실행할지 정의
+
+PipelineRun:
+  특정 parameter, workspace, service account로 그 pipeline을 실제 실행
+```
+
+예를 들어 같은 `Pipeline`을 여러 commit에 대해 실행할 수 있다.
+
+```text
+Pipeline:
+  app-ci
+
+PipelineRun:
+  app-ci-run-001 for commit a1b2c3
+  app-ci-run-002 for commit d4e5f6
+  app-ci-run-003 for commit f7g8h9
+```
+
+`PipelineRun`에서는 실행 시점의 값을 지정한다.
+
+```yaml
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  name: app-ci-run
+spec:
+  pipelineRef:
+    name: app-ci
+  params:
+    - name: repo-url
+      value: https://github.com/example/app.git
+    - name: image-url
+      value: registry.example.com/app:a1b2c3d
+  workspaces:
+    - name: shared-source
+      volumeClaimTemplate:
+        spec:
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: 1Gi
+```
+
+여기서 중요한 점은 `PipelineRun`도 Kubernetes resource라는 것이다.
+
+```bash
+kubectl get pipelineruns
+kubectl describe pipelinerun app-ci-run
+```
+
+Tekton을 사용하면 CI/CD 실행 상태를 Kubernetes object로 볼 수 있다.
+
+---
+
+## TaskRun: Task의 실행 인스턴스
+
+`PipelineRun`이 실행되면 내부적으로 각 `Task`에 대해 `TaskRun`이 만들어진다.
+
+```text
+PipelineRun:
+  app-ci-run
+
+TaskRuns:
+  clone-run
+  test-run
+  build-run
+  deploy-run
+```
+
+`TaskRun`은 특정 `Task`가 실제로 어떻게 실행되었는지를 나타낸다.
+
+확인할 수 있는 정보는 다음과 같다.
+
+| 정보 | 설명 |
+|---|---|
+| 실행 상태 | 성공, 실패, 진행 중 |
+| 시작/종료 시간 | task duration |
+| 사용한 parameter | task input |
+| 생성된 pod | 실제 실행 pod |
+| step별 상태 | 각 container step 성공/실패 |
+| results | task가 출력한 결과값 |
+| logs | step container log |
+
+Tekton debugging에서는 보통 다음 순서로 본다.
+
+```text
+PipelineRun 상태 확인
+  -> 실패한 TaskRun 확인
+  -> TaskRun이 만든 Pod 확인
+  -> step container log 확인
+  -> workspace, secret, service account 확인
+```
+
+즉, Tekton debugging은 Kubernetes debugging과 거의 연결된다.
+
+---
+
+## Workspace: Task 간 파일 공유
+
+CI/CD pipeline에서는 여러 task가 파일을 공유해야 한다.
+
+예를 들어 source code clone task가 repository를 내려받으면, test task와 build task가 그 source code를 사용해야 한다.
+
+```text
+git clone
+  -> source code 저장
+  -> test task가 읽음
+  -> build task가 읽음
+  -> deploy task가 manifest를 읽음
+```
+
+Tekton에서는 이를 `Workspace`로 표현한다.
+
+```text
+Pipeline workspace:
+  shared-source
+
+Task mapping:
+  clone task output -> shared-source
+  test task source -> shared-source
+  build task source -> shared-source
+```
+
+Workspace는 다양한 방식으로 제공될 수 있다.
+
+| Workspace backing | 설명 |
+|---|---|
+| `emptyDir` | pod lifecycle 동안만 유지되는 임시 공간 |
+| `PersistentVolumeClaim` | 여러 task가 공유할 수 있는 persistent storage |
+| `volumeClaimTemplate` | `PipelineRun`마다 동적으로 PVC 생성 |
+| `Secret` | credential file mount |
+| `ConfigMap` | configuration file mount |
+
+`PipelineRun`에서 workspace를 PVC로 제공하면 다음과 같다.
+
+```yaml
+workspaces:
+  - name: shared-source
+    persistentVolumeClaim:
+      claimName: source-pvc
+```
+
+또는 동적으로 PVC를 만들 수도 있다.
+
+```yaml
+workspaces:
+  - name: shared-source
+    volumeClaimTemplate:
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 1Gi
+```
+
+Workspace 설계에서 주의할 점은 다음이다.
+
+```text
+주의할 점:
+  PipelineRun 종료 후 PVC cleanup 필요
+  task 간 동시 write로 race condition 발생 가능
+  access mode에 따라 node 간 mount 제한 가능
+  credential이 workspace에 남지 않도록 관리 필요
+  build cache가 재현성을 해치지 않도록 주의
+```
+
+Tekton에서 workspace는 매우 중요하다. Jenkins의 workspace directory와 비슷한 역할을 하지만, Kubernetes volume model을 기반으로 명시적으로 정의해야 한다.
+
+---
+
+## Params와 Results
+
+현재 Tekton에서는 `params`, `Workspaces`, `results` 조합을 이해하는 것이 중요하다.
+
+### Params
+
+`params`는 실행 시점에 전달되는 값이다.
+
+예를 들어 다음 값들이 parameter로 들어갈 수 있다.
+
+```text
+repo-url
+branch
+commit-sha
+image-url
+target-namespace
+```
+
+Task나 Pipeline은 parameter를 받아 재사용성을 높일 수 있다.
+
+```yaml
+params:
+  - name: image-url
+    type: string
+```
+
+### Results
+
+`results`는 task가 실행 후 다음 task에 전달할 수 있는 출력값이다.
+
+예를 들어 git clone task가 commit SHA를 result로 남기고, build task가 그 값을 image tag로 사용할 수 있다.
+
+```text
+clone task:
+  result: commit-sha = a1b2c3d
+
+build task:
+  image tag = registry/app:a1b2c3d
+```
+
+이 구조를 사용하면 task 간 데이터 흐름을 명시적으로 표현할 수 있다.
+
+```text
+Params:
+  외부에서 pipeline으로 들어오는 값
+
+Results:
+  task 실행 후 다음 task로 전달되는 값
+
+Workspaces:
+  파일과 directory를 공유하는 공간
+```
+
+이 세 가지를 잘 구분해야 Tekton pipeline이 명확해진다.
+
+---
+
+## Trigger: Event-driven Pipeline 실행
+
+CI/CD pipeline은 보통 Git event로 시작된다.
+
+예를 들어 다음 event가 pipeline을 실행할 수 있다.
+
+```text
+Git push
+Pull request opened
+Pull request merged
+Tag created
+Release created
+```
+
+Tekton에서는 이를 Triggers로 연결할 수 있다.
+
+구성 요소는 다음과 같다.
+
+| Resource | 역할 |
+|---|---|
+| `EventListener` | 외부 webhook event를 수신 |
+| `TriggerBinding` | event payload에서 필요한 값 추출 |
+| `TriggerTemplate` | 추출한 값으로 생성할 resource template 정의 |
+| `Interceptor` | event 검증, filtering, payload 변환 |
+
+기본 흐름은 다음과 같다.
+
+```text
+GitHub push event
+  -> webhook request
+  -> EventListener
+  -> TriggerBinding으로 repo URL, commit SHA 추출
+  -> TriggerTemplate으로 PipelineRun 생성
+  -> Pipeline 실행
+```
+
+예를 들어 push event가 들어오면 `PipelineRun`이 자동 생성된다.
+
+```text
+event payload:
+  repository URL
+  branch
+  commit SHA
+  actor
+
+Trigger:
+  이 값을 PipelineRun params로 변환
+```
+
+Tekton의 Trigger 모델은 강력하지만, 운영상 주의할 점도 있다.
+
+```text
+주의할 점:
+  webhook endpoint 인증 필요
+  signature verification 필요
+  event filtering 필요
+  외부 노출 endpoint 보안 필요
+  TriggerTemplate에서 생성되는 권한 범위 제한 필요
+  payload를 그대로 신뢰하면 안 됨
+```
+
+특히 production pipeline을 자동 실행하는 `EventListener`는 보안상 중요한 entrypoint다.
+
+---
+
+## Tekton과 Pipeline-as-code
+
+Tekton pipeline은 YAML resource로 정의할 수 있고, Git repository에 저장할 수 있다.
+
+```text
+pipeline definition:
+  task.yaml
+  pipeline.yaml
+  trigger.yaml
+  serviceaccount.yaml
+```
+
+이렇게 하면 pipeline 자체도 code처럼 관리할 수 있다.
+
+| 장점 | 설명 |
+|---|---|
+| versioning | pipeline 변경 이력 추적 |
+| review | pull request로 pipeline 변경 검토 |
+| reuse | 공통 Task와 Pipeline template 재사용 |
+| audit | 누가 pipeline을 변경했는지 확인 |
+| rollback | 이전 pipeline definition으로 되돌릴 수 있음 |
+| GitOps | cluster에 선언적 동기화 가능 |
+
+다만 pipeline-as-code에도 주의점이 있다.
+
+```text
+주의할 점:
+  pipeline YAML이 길고 복잡해질 수 있음
+  공통 Task version 관리가 필요함
+  보안상 누구나 pipeline 변경을 할 수 있으면 위험함
+  pipeline이 cluster 권한을 사용하므로 review가 중요함
+```
+
+Pipeline code는 application code만큼 중요하다. 잘못된 pipeline 변경은 production 배포, secret 접근, image push 권한에 영향을 줄 수 있다.
+
+---
+
+## Tekton과 Kubernetes-native의 의미
+
+Tekton을 이해할 때 가장 중요한 키워드는 Kubernetes-native다.
+
+여기서 Kubernetes-native는 단순히 Kubernetes에 배포된다는 뜻만은 아니다. 다음을 의미한다.
+
+```text
+1. Kubernetes API를 사용한다.
+2. Custom Resource로 pipeline을 표현한다.
+3. Controller가 desired state를 reconcile한다.
+4. Pod와 container로 task를 실행한다.
+5. Secret, ServiceAccount, RBAC, PVC를 사용한다.
+6. Namespace 기반 isolation을 활용한다.
+```
+
+Tekton은 Kubernetes의 기본 primitive를 재사용한다.
+
+| Kubernetes primitive | Tekton에서의 활용 |
+|---|---|
+| Pod | `TaskRun` step 실행 |
+| Container | `Task` step |
+| Namespace | team/project isolation |
+| Secret | registry credential, Git credential |
+| ServiceAccount | pipeline 실행 권한 |
+| RBAC | resource 접근 제어 |
+| PVC | Workspace storage |
+| Event | 실행 상태와 debugging |
+| Controller | `PipelineRun`/`TaskRun` reconcile |
+
+이 구조는 Kubernetes를 이미 운영하는 조직에 자연스럽다.
+
+```text
+Application runtime:
+  Kubernetes
+
+CI/CD runtime:
+  Tekton on Kubernetes
+
+Deployment target:
+  Kubernetes 또는 외부 환경
+```
+
+즉, CI/CD를 위한 별도 VM agent pool을 유지하는 대신, Kubernetes cluster가 pipeline 실행 platform이 된다.
+
+---
+
+## Tekton과 Multi-cloud / Hybrid Cloud
+
+Tekton은 특정 vendor의 CI/CD 서비스에 묶이지 않는 Kubernetes-native framework로 볼 수 있다.
+
+```text
+Tekton 실행 위치:
+  Kubernetes cluster
+
+배포 대상:
+  Kubernetes cluster A
+  Kubernetes cluster B
+  OpenShift
+  on-premise system
+  VM
+  serverless platform
+  cloud provider resource
+```
+
+Tekton은 각 step을 container로 실행하기 때문에, 필요한 CLI나 SDK를 담은 image를 사용하면 다양한 target에 배포할 수 있다.
+
+예를 들어 다음과 같이 구성할 수 있다.
+
+```text
+AWS deploy task:
+  aws-cli image 사용
+
+Kubernetes deploy task:
+  kubectl image 사용
+
+Helm deploy task:
+  helm image 사용
+
+Terraform task:
+  terraform image 사용
+
+Ansible task:
+  ansible image 사용
+```
+
+이 방식은 multi-cloud 환경에서 유연하지만, 동시에 credential 관리가 중요해진다.
+
+```text
+주의할 점:
+  cloud credential을 Secret으로 안전하게 관리
+  service account 권한 최소화
+  namespace별 권한 분리
+  target cluster kubeconfig 보호
+  production deploy 권한 제한
+```
+
+Multi-cloud pipeline은 편리하지만 credential이 넓게 열리면 큰 사고로 이어질 수 있다.
+
+---
+
+## Tekton과 Jenkins의 차이
+
+Tekton 자체를 이해할 때 Jenkins와의 차이를 짚어두면 좋다.
+
+| 구분 | Jenkins | Tekton |
+|---|---|---|
+| 기본 성격 | automation server | Kubernetes-native CI/CD framework |
+| 중심 구조 | controller와 agent | Kubernetes resource와 controller |
+| pipeline 정의 | `Jenkinsfile`, job config | `Task`, `Pipeline`, `PipelineRun` YAML |
+| 실행 환경 | agent machine 또는 container agent | pod/container |
+| 확장 방식 | plugin | Task, Catalog, custom image |
+| 상태 관리 | Jenkins home, build history | Kubernetes objects, pod logs, PVC, Results |
+| Kubernetes 통합 | plugin 또는 agent로 통합 | Kubernetes API와 native하게 통합 |
+| UI | Jenkins UI가 강함 | Dashboard 등 별도 component 필요 |
+| 운영 부담 | plugin, controller, Jenkins home | cluster resource, RBAC, PVC, YAML complexity |
+
+Jenkins는 완성형 CI/CD server에 가깝다. UI, plugin, job history, credential 관리가 강하다.
+
+Tekton은 framework에 가깝다. CI/CD primitive를 제공하고, 이를 이용해 조직에 맞는 pipeline platform을 구성한다.
+
+```text
+Jenkins:
+  설치하면 바로 job을 만들고 UI에서 운영하기 쉬움
+
+Tekton:
+  Kubernetes-native building block을 제공
+  platform team이 표준 Task/Pipeline/Trigger/UX를 구성해야 함
+```
+
+따라서 Tekton을 Jenkins의 완전한 drop-in replacement로 보면 안 된다. Tekton은 더 Kubernetes-native하고 유연하지만, platform 설계가 필요하다.
+
+---
+
+## Tekton Catalog와 재사용성
+
+Tekton의 장점 중 하나는 Task를 재사용 가능한 단위로 만들 수 있다는 점이다.
+
+예를 들어 조직에서 다음 Task를 표준화할 수 있다.
+
+```text
+git-clone
+node-test
+maven-build
+kaniko-build
+image-scan
+helm-deploy
+kubectl-apply
+slack-notify
+```
+
+이 Task들을 조합해 여러 pipeline을 만들 수 있다.
+
+```text
+Node.js app pipeline:
+  git-clone -> node-test -> kaniko-build -> helm-deploy
+
+Java app pipeline:
+  git-clone -> maven-build -> image-scan -> helm-deploy
+
+Infra pipeline:
+  git-clone -> terraform-plan -> approval -> terraform-apply
+```
+
+재사용성은 좋지만, 운영상 다음을 관리해야 한다.
+
+| 항목 | 설명 |
+|---|---|
+| Task versioning | 공통 Task 변경이 여러 pipeline에 영향 |
+| Backward compatibility | parameter 변경 시 기존 pipeline 깨질 수 있음 |
+| Security review | 공통 Task가 secret이나 deploy 권한을 다룰 수 있음 |
+| Image maintenance | Task step image의 취약점과 version 관리 |
+| Documentation | 개발자가 Task 사용법을 알아야 함 |
+| Ownership | 공통 Task의 owner 필요 |
+
+공통 Task는 조직의 CI/CD 표준이 되기 때문에 변경 관리가 중요하다.
+
+---
+
+## Tekton Results와 실행 기록
+
+CI/CD 운영에서 중요한 것은 실행 기록이다.
+
+```text
+어떤 commit이 build되었는가?
+어떤 test가 통과했는가?
+어떤 image digest가 생성되었는가?
+어떤 pipeline run이 production deploy를 수행했는가?
+누가 trigger했는가?
+얼마나 걸렸는가?
+실패 원인은 무엇인가?
+```
+
+Tekton은 Kubernetes resource 상태와 pod logs로 기본 정보를 제공한다. 하지만 장기적인 실행 기록 보관은 별도의 전략이 필요할 수 있다.
+
+| 데이터 | 보관 위치 후보 |
+|---|---|
+| `PipelineRun`/`TaskRun` 상태 | Kubernetes API, Results 저장소 |
+| Step logs | pod logs, logging backend |
+| Artifact metadata | registry, provenance store |
+| Test result | CI report store |
+| SBOM/attestation | artifact registry, security platform |
+| Deployment event | GitOps tool, Kubernetes event, audit log |
+
+Kubernetes object는 영구 보관에 적합하지 않을 수 있다. 오래된 `PipelineRun`, `TaskRun`, pod가 계속 쌓이면 cluster resource에도 부담이 된다. 따라서 pruning과 log retention 정책이 필요하다.
+
+---
+
+## Tekton과 Supply Chain Security
+
+Tekton은 CI/CD pipeline 실행 framework이므로 supply chain security와도 연결된다.
+
+CI/CD pipeline은 source code를 artifact로 바꾸고, artifact를 registry에 push하며, production에 배포할 권한을 가질 수 있다. 따라서 pipeline 자체가 공격 대상이 된다.
+
+Tekton을 사용할 때 고려해야 할 보안 항목은 다음과 같다.
+
+| 보안 영역 | 검토 항목 |
+|---|---|
+| Source integrity | 어떤 repository와 commit을 build하는가 |
+| Task image trust | step image가 신뢰 가능한 image인가 |
+| Secret access | pipeline이 어떤 secret에 접근하는가 |
+| ServiceAccount | deploy 권한이 과도하지 않은가 |
+| Namespace isolation | 팀별 pipeline 실행이 격리되는가 |
+| Image provenance | 누가 어떤 image를 만들었는가 |
+| Signing | artifact 서명과 검증이 있는가 |
+| SBOM | build 결과물의 component 목록이 있는가 |
+| Attestation | build/test/scan 결과 증명이 있는가 |
+| EventListener security | webhook signature를 검증하는가 |
+
+Tekton에서 특히 조심해야 할 부분은 `ServiceAccount`와 `Secret`이다.
+
+```text
+나쁜 예:
+  모든 pipeline이 cluster-admin service account 사용
+  모든 namespace의 secret에 접근 가능
+  production deploy credential이 dev pipeline에서도 사용 가능
+
+좋은 방향:
+  namespace별 service account 분리
+  task별 최소 권한
+  production deploy pipeline 별도 권한
+  registry credential scope 제한
+  secret mount 범위 최소화
+```
+
+Pipeline은 자동화된 권한 실행자이므로, 사람이 직접 실행하는 것보다 더 엄격한 권한 설계가 필요하다.
+
+---
+
+## Tekton과 Kubernetes RBAC
+
+Tekton은 Kubernetes 위에서 동작하므로 RBAC 설계가 중요하다.
+
+Pipeline이 어떤 resource를 만들고 수정할 수 있는지는 `ServiceAccount`와 `Role`, `RoleBinding`에 의해 결정된다.
+
+예를 들어 build-only pipeline은 image build와 push credential만 필요할 수 있다. Kubernetes deploy 권한은 필요하지 않을 수 있다.
+
+```text
+build pipeline:
+  Git clone
+  test
+  image build
+  registry push
+
+필요 권한:
+  registry push secret
+  workspace PVC 사용
+
+필요 없는 권한:
+  production namespace deployment 수정
+  cluster-wide resource 수정
+```
+
+반면 deploy pipeline은 특정 namespace의 `Deployment`, `Service`, `ConfigMap` 변경 권한이 필요할 수 있다.
+
+```text
+deploy pipeline:
+  helm upgrade
+  kubectl apply
+
+필요 권한:
+  target namespace의 workload 수정
+
+필요 없는 권한:
+  cluster-admin
+  다른 namespace secret 읽기
+```
+
+권한 설계 원칙은 다음과 같다.
+
+| 원칙 | 설명 |
+|---|---|
+| least privilege | 필요한 resource와 verb만 허용 |
+| namespace isolation | 팀/환경별 namespace 분리 |
+| separate service account | build, deploy, production 권한 분리 |
+| secret scope 제한 | 필요한 pipeline만 secret 접근 |
+| audit | 어떤 `PipelineRun`이 어떤 권한으로 실행됐는지 추적 |
+| approval | production deploy 권한에는 추가 gate 적용 |
+
+Tekton은 Kubernetes-native이기 때문에 RBAC와 자연스럽게 통합된다. 하지만 잘못 설정하면 pipeline이 과도한 권한을 갖게 된다.
+
+---
+
+## Tekton과 Image Build
+
+Tekton pipeline에서 자주 하는 작업이 container image build다.
+
+Kubernetes 안에서 image를 build할 때는 Docker daemon을 직접 사용하기 어렵거나 위험할 수 있다. 특히 `/var/run/docker.sock`을 mount하면 host daemon에 접근하게 되므로 보안 위험이 커진다.
+
+Tekton에서는 보통 다음 방식이 고려된다.
+
+| 방식 | 설명 |
+|---|---|
+| Kaniko | Docker daemon 없이 image build |
+| Buildah | OCI image build, rootless 구성 가능 |
+| BuildKit | 고급 build와 cache 기능 |
+| Cloud build service | 외부 managed build service 사용 |
+| Docker socket mount | 단순하지만 보안상 주의 필요 |
+
+예를 들어 build task는 다음처럼 구성될 수 있다.
+
+```yaml
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: build-image
+spec:
+  params:
+    - name: image-url
+      type: string
+  workspaces:
+    - name: source
+  steps:
+    - name: build
+      image: gcr.io/kaniko-project/executor:latest
+      args:
+        - --dockerfile=$(workspaces.source.path)/Dockerfile
+        - --context=$(workspaces.source.path)
+        - --destination=$(params.image-url)
+```
+
+주의할 점은 다음이다.
+
+```text
+- build image version pinning 필요
+- registry credential scope 제한
+- cache 사용 시 재현성 확인
+- Dockerfile에 secret이 들어가지 않도록 주의
+- image digest와 commit SHA를 기록
+- image scan과 signing을 pipeline에 연결
+```
+
+Image build는 단순 build 작업이 아니라 supply chain security의 핵심 지점이다.
+
+---
+
+## Tekton과 GitOps
+
+Tekton은 GitOps와 함께 사용할 때 자연스럽다.
+
+일반적으로 Tekton은 CI 쪽, Argo CD 또는 Flux는 CD/GitOps 쪽을 맡는 구조가 많다.
+
+```text
+Tekton:
+  source checkout
+  test
+  image build
+  image push
+  manifest repository update
+
+Argo CD / Flux:
+  Git repository 감시
+  desired state와 live state 비교
+  Kubernetes cluster에 sync
+```
+
+흐름은 다음과 같다.
+
+```text
+application repo push
+  -> Tekton PipelineRun
+  -> test
+  -> image build
+  -> registry push
+  -> GitOps repo image tag update
+  -> Argo CD sync
+  -> production deploy
+```
+
+이 구조의 장점은 책임 분리가 명확하다는 것이다.
+
+| 도구 | 역할 |
+|---|---|
+| Tekton | CI, build, test, artifact 생성 |
+| Registry | image artifact 저장 |
+| GitOps repository | desired deployment state 저장 |
+| Argo CD/Flux | cluster 상태를 Git 상태와 동기화 |
+
+Tekton이 직접 `kubectl apply`로 배포할 수도 있다. 하지만 GitOps를 쓰면 production desired state가 Git에 남고, rollback과 audit이 더 명확해진다.
+
+---
+
+## Tekton 운영 시 주의할 점
+
+Tekton은 강력하지만, 도입하면 자동으로 편해지는 도구는 아니다. Kubernetes-native인 만큼 Kubernetes 운영 복잡도를 그대로 가져온다.
+
+### YAML 복잡도
+
+Tekton resource는 YAML로 정의된다. Pipeline이 커지면 YAML이 길고 복잡해질 수 있다.
+
+```text
+Task
+TaskRun
+Pipeline
+PipelineRun
+TriggerTemplate
+TriggerBinding
+EventListener
+ServiceAccount
+Role
+RoleBinding
+PVC
+Secret
+```
+
+따라서 template, convention, documentation이 필요하다.
+
+### Debugging
+
+Tekton debugging은 Kubernetes debugging과 연결된다.
+
+```text
+PipelineRun 실패
+  -> TaskRun 확인
+  -> Pod 확인
+  -> Step log 확인
+  -> Workspace mount 확인
+  -> Secret mount 확인
+  -> ServiceAccount 권한 확인
+```
+
+Kubernetes에 익숙하지 않은 개발자에게는 처음에 진입 장벽이 있을 수 있다.
+
+### Resource 관리
+
+Pipeline도 cluster resource를 사용한다.
+
+| Resource | 영향 |
+|---|---|
+| CPU/memory | build/test pod가 사용 |
+| Storage | workspace PVC, cache |
+| Network | image pull/push, Git clone |
+| Registry | image push/pull traffic |
+| API server | `PipelineRun`/`TaskRun` resource 생성 |
+
+`PipelineRun`이 많아지면 cluster resource planning이 필요하다.
+
+### Cleanup
+
+오래된 resource를 정리하지 않으면 cluster가 지저분해진다.
+
+```text
+정리 대상:
+  PipelineRun
+  TaskRun
+  Pod
+  PVC
+  temporary workspace
+  logs
+  cache
+```
+
+Pipeline 실행 기록과 log는 필요하지만, cluster 내부 resource를 무한정 보관해서는 안 된다. pruning과 log retention 정책을 분리해서 설계하는 것이 좋다.
+
+### UI와 Developer Experience
+
+Tekton은 building block 중심이다. 개발자가 편하게 쓰려면 다음이 필요할 수 있다.
+
+```text
+- Tekton Dashboard
+- tkn CLI
+- 표준 Pipeline template
+- 공통 Task Catalog
+- 실패 원인 문서
+- notification 연동
+- self-service trigger
+```
+
+Tekton 자체만으로 Jenkins UI와 같은 사용자 경험이 바로 제공된다고 기대하면 안 된다.
+
+---
+
+## Tekton을 도입하기 좋은 경우
+
+Tekton은 다음 상황에서 특히 잘 맞는다.
+
+```text
+- Kubernetes가 조직의 표준 platform이다.
+- CI/CD 실행도 Kubernetes 위에서 관리하고 싶다.
+- pipeline step을 container image로 고정하고 싶다.
+- 여러 팀에 reusable Task/Pipeline을 제공하고 싶다.
+- namespace/RBAC 기반 multi-tenant CI/CD가 필요하다.
+- GitOps, Argo CD, Flux와 결합하고 싶다.
+- cloud provider에 종속되지 않는 CI/CD building block이 필요하다.
+- build/test/deploy workload를 cluster resource로 scheduling하고 싶다.
+```
+
+특히 platform team이 있는 조직에서는 Tekton을 기반으로 내부 CI/CD platform을 만들기 좋다.
+
+```text
+Platform team:
+  공통 Task 제공
+  표준 Pipeline template 제공
+  ServiceAccount/RBAC 설계
+  Secret management 연동
+  Dashboard와 notification 제공
+  policy와 security guardrail 제공
+
+Application team:
+  표준 Pipeline을 사용해 build/test/deploy
+```
+
+---
+
+## Tekton이 맞지 않을 수 있는 경우
+
+Tekton이 항상 최선은 아니다.
+
+다음 상황에서는 Jenkins, GitHub Actions, GitLab CI, CircleCI 같은 도구가 더 현실적일 수 있다.
+
+```text
+- Kubernetes 운영 경험이 부족하다.
+- 단순한 pipeline만 필요하다.
+- UI 중심의 job 관리가 중요하다.
+- 기존 Jenkins shared library와 plugin 자산이 많다.
+- build 대상이 대부분 VM/legacy system이다.
+- cluster resource를 CI workload와 runtime workload가 공유하는 것이 부담이다.
+- platform team 없이 각 팀이 직접 복잡한 Tekton YAML을 관리해야 한다.
+```
+
+Tekton은 CI/CD primitive를 제공하는 framework에 가깝다. 따라서 내부 platform 설계 없이 Jenkins 대체품처럼 도입하면 개발자 경험이 낮아질 수 있다.
+
+---
+
+## Kubernetes Homelab에서 Tekton 적용하기
+
+개인 k3s나 homelab 환경에서도 Tekton을 사용할 수 있다. 특히 Kubernetes-native CI/CD를 직접 이해하고 싶다면 좋은 실험 대상이다.
+
+예를 들어 다음 구조를 만들 수 있다.
+
+```text
+Git repository
+  -> webhook
+  -> Tekton EventListener
+  -> PipelineRun 생성
+  -> test Task
+  -> image build Task
+  -> registry push
+  -> Helm chart update 또는 kubectl apply
+```
+
+Homelab에서 Tekton을 적용할 때의 장점은 다음이다.
+
+| 장점 | 설명 |
+|---|---|
+| Kubernetes-native 학습 | CRD, controller, pod 기반 CI/CD 이해 |
+| 내부 registry 연동 | Nexus, Harbor, Docker Registry와 연결 가능 |
+| GitOps 연습 | Argo CD와 역할 분리 가능 |
+| resource 제어 | build pod의 CPU/memory 제한 가능 |
+| pipeline 재현성 | Task/Pipeline YAML을 Git에 저장 |
+
+주의할 점도 있다.
+
+```text
+- build pod가 cluster resource를 많이 사용할 수 있음
+- image build cache와 PVC가 storage를 차지함
+- EventListener 외부 노출 시 인증 필요
+- registry credential과 kubeconfig secret 관리 필요
+- PipelineRun/TaskRun cleanup 필요
+- 단순 목적이면 GitHub Actions가 더 간단할 수 있음
+```
+
+작은 환경에서는 처음부터 모든 서비스를 Tekton으로 옮기기보다, 하나의 toy service로 다음 정도를 실험하는 것이 좋다.
+
+```text
+1. git-clone Task
+2. unit-test Task
+3. image-build Task
+4. registry-push Task
+5. deploy 또는 GitOps repo update Task
+```
+
+---
+
+## 자칫 실수하기 쉬운 부분
+
+### Tekton을 Jenkins의 완전 대체품으로 보는 경우
+
+Tekton은 Jenkins처럼 완성형 CI/CD server라기보다 Kubernetes-native framework에 가깝다. UI, approval, notification, retention, self-service UX는 별도 설계가 필요할 수 있다.
+
+### PipelineResources 기반 예제를 그대로 쓰는 경우
+
+오래된 Tekton 자료에는 `PipelineResource`가 등장할 수 있다. 현재는 제거된 개념으로 보는 것이 안전하므로 `params`, `Workspaces`, `results`, `Tasks` 조합으로 설계해야 한다.
+
+### 모든 pipeline에 과도한 권한을 주는 경우
+
+모든 `PipelineRun`이 `cluster-admin` 권한을 가지면 위험하다. Build, test, deploy, production deploy 권한을 분리해야 한다.
+
+### Workspace cleanup을 놓치는 경우
+
+PVC 기반 workspace를 사용하면 오래된 `PipelineRun`이 storage를 계속 점유할 수 있다. cleanup 정책이 필요하다.
+
+### EventListener 보안을 가볍게 보는 경우
+
+Webhook endpoint는 pipeline 실행 entrypoint다. signature verification, event filtering, authentication을 고려해야 한다.
+
+### Step image version을 고정하지 않는 경우
+
+`latest` tag를 사용하면 pipeline 재현성이 떨어질 수 있다. Task step image는 version 또는 digest 기반으로 고정하는 것이 좋다.
+
+### Docker socket을 무심코 mount하는 경우
+
+Kubernetes 안에서 image build를 위해 Docker socket을 mount하면 host daemon 접근 위험이 생긴다. Kaniko, Buildah, BuildKit 같은 대안을 검토해야 한다.
+
+---
+
+## 실무 검증 포인트
+
+Tekton을 운영할 때는 다음 질문을 확인해야 한다.
+
+| 검증 포인트 | 확인 질문 |
+|---|---|
+| Resource model | `Task`, `Pipeline`, `PipelineRun`의 책임이 명확한가? |
+| Versioning | Pipeline YAML과 Task가 Git으로 관리되는가? |
+| Reuse | 공통 Task를 재사용하되 version 관리가 되는가? |
+| Workspace | source와 artifact 공유 방식이 명확한가? |
+| Cleanup | `PipelineRun`, `TaskRun`, Pod, PVC pruning이 있는가? |
+| Security | `ServiceAccount`와 RBAC가 최소 권한인가? |
+| Secret | registry/Git/cloud credential이 안전하게 mount되는가? |
+| Trigger | `EventListener`가 인증과 signature 검증을 수행하는가? |
+| Build | image build 방식이 안전하고 재현 가능한가? |
+| Observability | 실패한 run의 log와 상태를 쉽게 볼 수 있는가? |
+| Supply chain | image digest, SBOM, signing, attestation을 고려하는가? |
+| GitOps | 직접 deploy와 GitOps repo update 중 어떤 방식인지 명확한가? |
+| Developer UX | 개발자가 실패 원인을 찾고 재실행할 수 있는가? |
+
+---
+
+## Mental Model
+
+Tekton은 다음 mental model로 이해할 수 있다.
+
+```text
+Git:
+  application code와 pipeline YAML의 source of truth
+
+Tekton Task:
+  재사용 가능한 작업 단위
+
+Tekton Pipeline:
+  Task를 연결한 CI/CD workflow
+
+PipelineRun:
+  특정 commit과 parameter로 실행되는 pipeline instance
+
+Kubernetes:
+  pod scheduling, Secret, RBAC, PVC, namespace isolation 제공
+
+Registry:
+  build 결과물인 container image 저장
+
+GitOps tool:
+  production desired state를 cluster에 반영
+```
+
+더 짧게 정리하면 다음과 같다.
+
+```text
+Tekton은 CI/CD 서버를 따로 운영하는 대신,
+Kubernetes cluster 자체를 pipeline 실행 platform으로 사용한다.
+```
+
+---
+
+## 정리
+
+Tekton은 CI/CD pipeline을 Kubernetes Custom Resource로 정의하고, 각 build/test/deploy step을 container와 pod로 실행하여 cloud-native 환경에서 재사용 가능하고 vendor-neutral한 pipeline을 만들 수 있게 하는 Kubernetes-native CI/CD framework다.
+
+핵심은 다음과 같다.
+
+- Tekton은 CI/CD를 Kubernetes resource로 다룬다.
+- `Task`는 재사용 가능한 작업 단위다.
+- `TaskRun`은 특정 `Task`의 실행 인스턴스다.
+- `Pipeline`은 여러 `Task`를 연결한 workflow다.
+- `PipelineRun`은 특정 `Pipeline`의 실행 인스턴스다.
+- `Workspace`는 task 간 파일 공유와 credential/config mount에 사용된다.
+- `params`는 외부 입력값, `results`는 task 간 출력값 전달에 사용된다.
+- `EventListener`, `TriggerBinding`, `TriggerTemplate`은 webhook event를 pipeline 실행으로 연결한다.
+- Tekton은 Jenkins의 완전한 drop-in replacement라기보다 Kubernetes-native CI/CD platform을 만들기 위한 framework에 가깝다.
+- Tekton 운영에서는 RBAC, Secret, ServiceAccount, Workspace cleanup, Trigger 보안, supply chain security가 중요하다.
+- GitOps와 함께 사용하면 Tekton은 build/test/artifact 생성에 집중하고, Argo CD나 Flux가 cluster sync를 담당하는 구조를 만들 수 있다.
+
+결국 Tekton을 도입한다는 것은 단순히 CI/CD 도구 하나를 바꾸는 일이 아니다. CI/CD 실행 상태를 Kubernetes resource model 안으로 가져오고, pipeline 실행을 pod, container, Secret, RBAC, PVC, controller reconciliation으로 관리하겠다는 architecture decision에 가깝다.

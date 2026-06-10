@@ -1,0 +1,1527 @@
+---
+area: "Cloud Infrastructure"
+type: "concept"
+series: "Kubernetes Essentials"
+title: "K8s 13. Knative Serverless"
+slug: "k8s-13-knative-serverless"
+date: "2026-06-03"
+updated: "2026-06-03"
+draft: false
+reviewed: true
+category: "Notes"
+tags: ["Kubernetes", "Knative", "Serverless", "Scale to Zero", "Knative Serving", "Knative Eventing", "Knative Functions", "Revision", "Traffic Split", "CloudEvents"]
+description: "Knative를 Kubernetes 위에서 serverless workload를 실행하기 위한 platform layer로 보고, Serving, Eventing, Functions, scale-to-zero, Revision, traffic split, cold start, 운영 포인트를 정리한다."
+---
+Knative는 Kubernetes 위에서 serverless workload를 실행하기 위한 Kubernetes-native platform이다. Kubernetes를 대체하는 도구가 아니라, Kubernetes 위에 serverless application abstraction을 추가하는 layer로 이해하는 것이 정확하다.
+
+```text
+Kubernetes
+  → containerized workload를 배포하고 관리하는 orchestration platform
+
+Knative
+  → Kubernetes 위에서 serverless-style application을 더 쉽게 배포, autoscale, route, event-trigger 할 수 있게 해주는 extension
+```
+
+Kubernetes만으로도 `Deployment`, `Service`, `Ingress`, `HPA`를 조합하면 HTTP application을 배포하고 확장할 수 있다. 하지만 serverless 경험을 만들려면 scale-to-zero, request 기반 autoscaling, Revision 관리, traffic split, event source 연결 같은 기능을 직접 조합해야 한다.
+
+Knative는 이 영역을 더 높은 수준의 API로 묶어준다.
+
+```text
+Knative Service 하나 정의
+  ↓
+Route 생성
+Configuration 생성
+Revision 생성
+Pod autoscaling
+traffic routing
+scale-to-zero
+```
+
+---
+
+## 핵심 요약
+
+Knative를 한 문장으로 정리하면 다음과 같다.
+
+```text
+Knative = Kubernetes-native serverless platform layer
+```
+
+다시 풀면 다음과 같다.
+
+```text
+Kubernetes 위에서 실행된다.
+Kubernetes CRD와 controller 방식으로 동작한다.
+Container image를 serverless workload처럼 배포할 수 있게 한다.
+HTTP 요청이나 event에 따라 자동으로 scale up/down한다.
+요청이 없으면 scale-to-zero까지 가능하다.
+Revision과 traffic split을 통해 배포 버전을 관리할 수 있다.
+Eventing을 통해 event source, broker, trigger, sink를 연결할 수 있다.
+```
+
+Knative의 핵심 가치는 다음이다.
+
+```text
+개발자:
+  container image 또는 function code를 제공한다.
+
+Knative:
+  배포, routing, autoscaling, scale-to-zero, event wiring을 처리한다.
+
+Kubernetes:
+  실제 Pod scheduling, Service networking, controller reconciliation을 수행한다.
+```
+
+즉 Knative는 Kubernetes를 숨기는 것이 아니라, Kubernetes 위에 더 개발자 친화적인 serverless layer를 올리는 방식이다.
+
+---
+
+## Kubernetes만으로는 왜 부족한가?
+
+Kubernetes는 강력하지만, 개발자가 application을 빠르게 배포하기에는 추상화 수준이 낮을 수 있다.
+
+예를 들어 단순 HTTP API 하나를 Kubernetes에 배포한다고 하자. 일반 Kubernetes에서는 보통 `Deployment`가 필요하다.
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hello-api
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: hello-api
+  template:
+    metadata:
+      labels:
+        app: hello-api
+    spec:
+      containers:
+        - name: hello-api
+          image: registry.example.com/hello-api:1.0.0
+          ports:
+            - containerPort: 8080
+```
+
+그리고 stable endpoint를 위해 `Service`도 필요하다.
+
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: hello-api
+spec:
+  selector:
+    app: hello-api
+  ports:
+    - port: 80
+      targetPort: 8080
+```
+
+외부 노출을 위해 `Ingress`나 Gateway도 필요하다.
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: hello-api
+spec:
+  rules:
+    - host: hello.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: hello-api
+                port:
+                  number: 80
+```
+
+Autoscaling을 위해 `HorizontalPodAutoscaler`도 추가할 수 있다.
+
+```yaml
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: hello-api
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: hello-api
+  minReplicas: 1
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+```
+
+Kubernetes 운영자에게는 익숙한 구성이지만, application 개발자 입장에서는 infrastructure detail이 많다.
+
+Knative는 이 경험을 다음처럼 단순화한다.
+
+```yaml
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: hello-api
+spec:
+  template:
+    spec:
+      containers:
+        - image: registry.example.com/hello-api:1.0.0
+          ports:
+            - containerPort: 8080
+```
+
+이 `Knative Service` 하나가 내부적으로 route, configuration, revision, autoscaling을 관리한다.
+
+---
+
+## Knative가 해결하려는 문제
+
+Knative는 다음 문제를 해결하려는 도구로 이해하면 된다.
+
+```text
+Kubernetes는 강력하지만 YAML이 많고 세부 설정이 복잡하다.
+Serverless처럼 요청이 없을 때 scale-to-zero 하고 싶다.
+Container image를 함수처럼 간단히 배포하고 싶다.
+Traffic split으로 canary/blue-green 배포를 쉽게 하고 싶다.
+Event source와 consumer를 느슨하게 연결하고 싶다.
+Cloud provider에 종속되지 않는 serverless 경험이 필요하다.
+```
+
+Public cloud의 serverless function 서비스는 편리하지만, provider 종속성이 생기기 쉽다.
+
+```text
+AWS Lambda
+Google Cloud Functions
+Azure Functions
+```
+
+이들은 편하지만 runtime, event source, IAM, deployment 방식이 cloud provider별로 다르다. Knative는 Kubernetes 위에서 동작하므로 다음 장점을 가진다.
+
+```text
+Kubernetes cluster 위에서 serverless 경험 제공
+container image 기반 workload 실행
+open source 기반
+cloud/on-prem/hybrid 환경에서 실행 가능
+Kubernetes ecosystem과 통합 가능
+```
+
+즉 Knative는 다음 질문에 대한 답이다.
+
+```text
+“Serverless의 편의성을 Kubernetes 위에서, 더 portable한 방식으로 가져올 수 없을까?”
+```
+
+---
+
+## Knative의 핵심 구성
+
+Knative는 크게 다음 영역으로 이해할 수 있다.
+
+| 영역 | 역할 |
+|---|---|
+| Knative Serving | HTTP/gRPC 기반 serverless container 배포, routing, revision, autoscaling, scale-to-zero |
+| Knative Eventing | event source, broker, trigger, sink를 연결해 event-driven architecture 구성 |
+| Knative Functions | function 개발 모델 제공, function code를 OCI image로 만들고 Knative Service로 배포 |
+
+핵심은 다음이다.
+
+```text
+Knative는 Kubernetes 위에서 serverless platform을 만들기 위한 building block을 제공한다.
+```
+
+---
+
+## Knative Serving
+
+Knative Serving은 HTTP 기반 workload를 serverless 방식으로 실행하는 핵심 기능이다.
+
+Serving의 주요 리소스는 다음이다.
+
+```text
+Service
+Route
+Configuration
+Revision
+```
+
+### Service
+
+`Knative Service`는 개발자가 주로 직접 다루는 최상위 리소스다.
+
+```yaml
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: hello
+spec:
+  template:
+    spec:
+      containers:
+        - image: gcr.io/knative-samples/helloworld-go
+```
+
+이 Service를 만들면 Knative controller가 내부적으로 필요한 리소스를 생성한다.
+
+```text
+Knative Service
+  ↓
+Configuration
+  ↓
+Revision
+  ↓
+Route
+  ↓
+Kubernetes Deployment / Pod / Service 등 하위 리소스
+```
+
+### Configuration
+
+`Configuration`은 workload의 desired state를 나타낸다.
+
+```text
+어떤 container image를 쓸 것인가?
+어떤 env를 넣을 것인가?
+어떤 resource를 요청할 것인가?
+어떤 autoscaling annotation을 쓸 것인가?
+```
+
+Configuration이 바뀌면 새 Revision이 만들어진다.
+
+```text
+Configuration update
+  ↓
+new Revision
+```
+
+즉 Knative에서는 배포 버전이 자동으로 Revision 단위로 기록된다.
+
+### Revision
+
+`Revision`은 특정 시점의 code와 configuration snapshot이다.
+
+예를 들어 image가 바뀐다.
+
+```text
+hello:v1
+  ↓
+hello:v2
+```
+
+그러면 새 Revision이 생긴다.
+
+```text
+hello-00001
+hello-00002
+```
+
+Revision은 immutable이다.
+
+```text
+hello-00001:
+  image = hello:v1
+
+hello-00002:
+  image = hello:v2
+```
+
+이 구조 덕분에 traffic split과 rollback이 쉬워진다.
+
+```text
+90% traffic → hello-00001
+10% traffic → hello-00002
+```
+
+### Route
+
+`Route`는 외부 또는 내부 endpoint를 Revision에 연결한다.
+
+```text
+Route
+  ↓
+Revision A
+Revision B
+```
+
+Route는 traffic을 여러 Revision으로 나눌 수 있다.
+
+```yaml
+traffic:
+  - revisionName: hello-00001
+    percent: 90
+  - revisionName: hello-00002
+    percent: 10
+```
+
+이것이 canary deployment의 기본이 된다.
+
+---
+
+## Knative Service 하나가 만드는 mental model
+
+일반 Kubernetes에서는 다음을 각각 설계한다.
+
+```text
+Deployment
+Service
+Ingress
+HPA
+Rollout
+Canary routing
+```
+
+Knative에서는 개발자가 `Knative Service`를 정의한다.
+
+```text
+Knative Service
+  ↓
+image + config + autoscaling policy + routing policy
+```
+
+Knative controller가 나머지를 맞춘다.
+
+```text
+Service reconciler
+  ↓
+Configuration 생성/갱신
+  ↓
+Revision 생성
+  ↓
+Route 생성/갱신
+  ↓
+networking layer 연결
+  ↓
+autoscaler 연결
+```
+
+즉 Knative는 Kubernetes의 controller pattern을 그대로 따른다.
+
+```text
+사용자:
+  desired state 선언
+
+Knative controller:
+  actual state를 desired state에 맞춤
+
+Kubernetes:
+  Pod scheduling, Service routing, controller reconciliation 수행
+```
+
+이 점에서 Knative는 Kubernetes-native하다.
+
+---
+
+## Serverless의 핵심: scale-to-zero
+
+Knative에서 가장 자주 언급되는 기능이 **scale-to-zero**다.
+
+일반 Kubernetes Deployment는 보통 replica가 최소 1개 이상 떠 있다.
+
+```text
+minReplicas: 1
+```
+
+하지만 serverless workload는 요청이 없을 때 Pod를 0개로 줄일 수 있다.
+
+```text
+Traffic 없음
+  ↓
+Pod replicas = 0
+```
+
+요청이 들어오면 다시 Pod를 띄운다.
+
+```text
+Request arrives
+  ↓
+Activator / networking layer가 요청 처리 대기
+  ↓
+Pod scale from zero
+  ↓
+Pod Ready
+  ↓
+request 전달
+```
+
+이 기능은 비용과 resource 효율에 유리하다.
+
+```text
+요청이 거의 없는 dev/test service
+간헐적으로 실행되는 API
+event-driven worker
+내부 tool
+low-traffic endpoint
+```
+
+하지만 trade-off도 있다.
+
+```text
+cold start 발생 가능
+첫 요청 latency 증가
+container image pull이 느리면 지연 증가
+application startup이 느리면 사용자 경험 악화
+```
+
+즉 scale-to-zero는 강력하지만, 모든 workload에 무조건 좋은 것은 아니다.
+
+---
+
+## Cold start
+
+Scale-to-zero의 반대편에는 **cold start**가 있다.
+
+Pod가 0개인 상태에서 요청이 들어오면 새 Pod를 만들어야 한다.
+
+```text
+Incoming request
+  ↓
+no active Pod
+  ↓
+Revision scale from zero
+  ↓
+Pod scheduling
+  ↓
+image pull 또는 image cache 확인
+  ↓
+container start
+  ↓
+application startup
+  ↓
+readinessProbe 통과
+  ↓
+request 처리
+```
+
+이 전체 시간이 cold start latency가 된다.
+
+Cold start에 영향을 주는 요소:
+
+```text
+container image size
+image pull 속도
+node에 image가 cache되어 있는지
+application startup time
+runtime language
+dependency initialization
+DB connection 초기화
+JIT warm-up
+readinessProbe 설정
+node capacity
+```
+
+예를 들어 작은 Go HTTP server는 startup이 짧을 수 있지만, Spring Boot 기반 application은 dependency initialization과 JVM warm-up으로 cold start가 길어질 수 있다.
+
+Knative를 production에 쓰려면 cold start를 관리해야 한다.
+
+```text
+minScale 설정
+image size 최적화
+startup path 최적화
+lazy initialization
+dependency connection pool 조정
+pre-warming 전략
+scale down delay 조정
+```
+
+즉 serverless는 “무조건 latency가 낮다”가 아니라, workload 특성에 맞게 tuning해야 한다.
+
+---
+
+## Concurrency 기반 autoscaling
+
+Knative autoscaling의 중요한 개념 중 하나는 **concurrency**다.
+
+일반 HPA는 CPU/memory를 기준으로 많이 scale한다. 하지만 HTTP workload에서는 “Pod 하나가 동시에 몇 개의 요청을 처리하는가”도 중요하다.
+
+예를 들어 container concurrency를 10으로 본다면 다음과 같다.
+
+```text
+Pod 1개가 동시에 10 request 처리 가능
+```
+
+현재 동시 요청이 100개라면 다음 정도의 Pod가 필요하다.
+
+```text
+100 concurrent requests / 10 target concurrency
+  → 약 10 Pods 필요
+```
+
+Knative의 autoscaling은 이런 request concurrency 기반 scale-out에 잘 맞는다.
+
+```text
+incoming request 증가
+  ↓
+concurrency 증가
+  ↓
+autoscaler가 Revision replica 증가
+```
+
+이 방식은 CPU보다 사용자 traffic에 더 직접적으로 반응할 수 있다.
+
+하지만 concurrency 설정을 잘못하면 문제가 생긴다.
+
+```text
+concurrency 너무 높음:
+  Pod 하나가 너무 많은 요청 처리
+  latency 증가
+  timeout 증가
+
+concurrency 너무 낮음:
+  Pod가 너무 많이 증가
+  비용 증가
+  cold start 증가
+```
+
+따라서 workload별로 적절한 concurrency target을 잡아야 한다.
+
+```text
+CPU-bound workload:
+  낮은 concurrency
+
+I/O-bound workload:
+  상대적으로 높은 concurrency 가능
+
+ML inference:
+  model latency와 batching 여부에 따라 조정
+
+slow external dependency:
+  concurrency 과다 시 connection pool 병목
+```
+
+---
+
+## Knative Serving과 일반 Kubernetes Deployment 비교
+
+Knative Serving과 Kubernetes Deployment는 경쟁 관계라기보다 추상화 수준이 다르다.
+
+| 항목 | Kubernetes Deployment | Knative Service |
+|---|---|---|
+| 기본 목적 | Pod replica 유지 | Serverless-style HTTP workload 운영 |
+| Routing | Service/Ingress 별도 구성 | Route가 Revision으로 traffic 관리 |
+| Version | ReplicaSet 중심 | Revision 중심 |
+| Scale-to-zero | 기본 HPA만으로는 제한적 | 핵심 기능 |
+| Autoscaling signal | CPU/memory/custom metric 중심 | request concurrency/traffic 중심 |
+| Canary | 별도 Ingress/service mesh 필요 | Revision traffic split 가능 |
+| 개발자 경험 | Kubernetes 리소스를 직접 관리 | 더 단순한 Service abstraction |
+| 적합한 workload | 항상 떠 있어야 하는 service, stateful workload 등 | stateless HTTP/event workload |
+
+Knative를 쓰면 좋은 경우:
+
+```text
+stateless HTTP API
+간헐적 traffic
+event-driven consumer
+function-like workload
+scale-to-zero가 유용한 service
+canary traffic split이 필요한 API
+developer self-service platform
+```
+
+일반 Deployment가 더 나은 경우:
+
+```text
+항상 떠 있어야 하는 core service
+stateful workload
+매우 긴 connection 유지
+custom scheduling/control이 많은 workload
+cold start를 절대 허용하기 어려운 low-latency system
+```
+
+---
+
+## Knative Eventing
+
+Knative의 또 다른 핵심 축은 Eventing이다.
+
+Eventing은 event source와 event consumer를 느슨하게 연결하는 기능이다.
+
+기본 구성은 다음과 같다.
+
+```text
+Event Source
+  ↓
+Broker
+  ↓
+Trigger
+  ↓
+Sink
+```
+
+### Event Source
+
+Event Source는 event를 만들어내는 쪽이다.
+
+```text
+GitHub event
+Kafka event
+Cloud storage event
+Timer event
+HTTP event
+Kubernetes event
+Custom application event
+```
+
+### Broker
+
+Broker는 event를 받는 중간 계층이다.
+
+```text
+Producer
+  ↓
+Broker
+```
+
+Broker는 event producer와 consumer를 직접 연결하지 않게 해준다.
+
+```text
+producer는 consumer를 몰라도 된다.
+consumer는 producer를 직접 호출하지 않아도 된다.
+```
+
+### Trigger
+
+Trigger는 Broker에 들어온 event 중 어떤 event를 어떤 Sink로 보낼지 결정한다.
+
+```text
+event type = OrderCreated
+  ↓
+payment-service sink로 전달
+```
+
+### Sink
+
+Sink는 event를 받는 대상이다.
+
+```text
+Knative Service
+Kubernetes Service
+Function
+External endpoint
+```
+
+전체 구조:
+
+```text
+OrderCreated event source
+  ↓
+Broker
+  ↓ Trigger: type=OrderCreated
+  ↓
+order-handler Knative Service
+```
+
+---
+
+## Knative Eventing과 EDA의 관계
+
+Event Driven Architecture의 일반 구조는 다음이다.
+
+```text
+Event Producer
+  ↓
+Event Broker / Router
+  ↓
+Event Consumer
+```
+
+Knative Eventing은 이를 Kubernetes-native resource로 표현한다.
+
+```text
+Event Source
+  ↓
+Broker
+  ↓
+Trigger
+  ↓
+Sink
+```
+
+예를 들어 주문 생성 event를 처리한다고 하자.
+
+```text
+POST /orders
+  ↓
+order-service emits OrderCreated
+  ↓
+Knative Broker
+  ↓
+Trigger
+  ↓
+payment-handler
+  ↓
+inventory-handler
+  ↓
+notification-handler
+```
+
+이 구조의 장점은 다음이다.
+
+```text
+event producer와 consumer 분리
+event routing을 Kubernetes resource로 관리
+CloudEvents 기반 event format 활용 가능
+event-driven workload를 Knative Service로 실행 가능
+scale-to-zero와 결합 가능
+```
+
+즉 Knative는 serverless HTTP serving과 event-driven architecture를 하나의 Kubernetes-native 방식으로 묶어준다.
+
+---
+
+## CloudEvents
+
+Knative Eventing에서 자주 등장하는 표준이 **CloudEvents**다.
+
+CloudEvents는 event metadata 형식을 표준화하려는 spec이다.
+
+예를 들어 event에는 다음 정보가 필요하다.
+
+```text
+이 event의 id는 무엇인가?
+어떤 type의 event인가?
+어디서 발생했는가?
+언제 발생했는가?
+payload는 무엇인가?
+content type은 무엇인가?
+```
+
+개념적 예시:
+
+```json
+{
+  "specversion": "1.0",
+  "type": "com.example.order.created",
+  "source": "/orders",
+  "id": "evt-123",
+  "time": "2026-06-03T12:00:00Z",
+  "datacontenttype": "application/json",
+  "data": {
+    "orderId": "ord-123",
+    "amount": 50000
+  }
+}
+```
+
+CloudEvents를 쓰면 event producer와 consumer가 서로 다른 도구를 쓰더라도 공통 metadata를 기준으로 event를 이해할 수 있다.
+
+```text
+event format 표준화
+event routing 조건 정의 쉬움
+observability 개선
+vendor lock-in 완화
+```
+
+Knative Eventing은 CloudEvents와 잘 맞는 event-driven runtime으로 볼 수 있다.
+
+---
+
+## Knative Functions
+
+Knative Functions는 function 개발 모델을 제공한다.
+
+개발자 관점에서는 다음 흐름이다.
+
+```text
+function code 작성
+  ↓
+func build / deploy
+  ↓
+OCI container image 생성
+  ↓
+container registry push
+  ↓
+Knative Service로 배포
+```
+
+즉 function도 결국 container image가 된다.
+
+```text
+Function code
+  ↓
+OCI image
+  ↓
+Knative Service
+  ↓
+Kubernetes Pod
+```
+
+이 구조가 중요한 이유는 다음이다.
+
+```text
+function은 serverless처럼 개발한다.
+실행은 container/Kubernetes 위에서 한다.
+runtime은 Kubernetes ecosystem에 남는다.
+```
+
+즉 Knative Functions는 function 개발 경험과 Kubernetes-native 실행 모델을 연결한다.
+
+---
+
+## Knative와 FaaS의 관계
+
+Knative는 흔히 FaaS(Function as a Service)와 연결된다. 하지만 Knative를 단순히 “Kubernetes용 Lambda”라고만 이해하면 조금 좁다.
+
+Knative는 function만 실행하는 도구가 아니라 다음을 제공한다.
+
+```text
+serverless container serving
+HTTP/gRPC request routing
+revision-based deployment
+traffic splitting
+scale-to-zero
+event routing
+function development model
+```
+
+즉 Knative는 FaaS platform을 만들 수 있는 building block에 가깝다.
+
+```text
+FaaS platform
+  → function code 작성
+  → 자동 build
+  → deploy
+  → trigger
+  → logs/metrics
+  → billing/metering
+  → developer portal
+
+Knative
+  → serving
+  → eventing
+  → function model
+  → autoscaling
+  → routing
+```
+
+Knative 자체가 모든 제품형 FaaS 기능을 다 제공하는 것은 아니다.
+
+예를 들어 다음은 별도로 설계해야 할 수 있다.
+
+```text
+billing
+tenant isolation
+developer portal
+policy
+quota
+platform-level auth
+cost metering
+custom runtime governance
+```
+
+따라서 Knative는 “serverless platform의 foundation”으로 보는 것이 정확하다.
+
+---
+
+## Knative와 Istio의 관계
+
+초기 Knative 설명에서 Istio가 자주 함께 등장한다. 이유는 Knative Serving이 traffic routing, ingress, traffic split, request path 제어 같은 기능을 필요로 하기 때문이다.
+
+초기에는 Istio가 Knative networking layer로 자주 사용되었다.
+
+```text
+Knative Serving
+  ↓
+networking layer
+  ↓
+Istio / Kourier / Contour 등
+```
+
+현재 관점에서는 반드시 Istio만 써야 한다고 볼 필요는 없다. Knative는 여러 networking layer와 결합될 수 있다.
+
+관계는 다음처럼 이해하면 된다.
+
+```text
+Knative
+  → serverless serving/eventing API 제공
+
+Istio
+  → service mesh / traffic routing / mTLS / observability layer
+
+Knative + Istio
+  → advanced routing, traffic split, ingress integration 가능
+```
+
+하지만 Istio는 강력한 만큼 복잡하다.
+
+```text
+장점:
+  traffic control
+  mTLS
+  telemetry
+  service mesh 기능
+
+주의점:
+  운영 복잡도
+  resource overhead
+  troubleshooting 난이도
+```
+
+작은 cluster나 단순한 Knative Serving만 필요하면 더 가벼운 networking option을 고려할 수 있다.
+
+---
+
+## Knative와 KEDA의 차이
+
+Knative를 이야기할 때 KEDA도 함께 비교하면 좋다.
+
+둘 다 event-driven autoscaling과 scale-to-zero와 관련이 있다.
+
+| 구분 | Knative | KEDA |
+|---|---|---|
+| 주 관심사 | Serverless serving + eventing platform | Event-driven autoscaling |
+| 기본 단위 | Knative Service, Revision, Route, Broker, Trigger | ScaledObject, ScaledJob |
+| HTTP serving | 핵심 기능 | 기본 핵심은 아님 |
+| scale-to-zero | Serving 핵심 기능 | event source 기반 scale-to-zero 가능 |
+| event routing | Eventing 제공 | routing보다는 scaling trigger 중심 |
+| traffic split | Revision 기반 지원 | 직접 제공보다는 다른 도구와 조합 |
+| 적합한 경우 | serverless container platform 구축 | 기존 Deployment/Job을 event metric으로 scale |
+
+예를 들어 Kafka consumer를 scale하고 싶다면 KEDA가 단순할 수 있다.
+
+```text
+Kafka lag 증가
+  ↓
+KEDA
+  ↓
+Deployment scale out
+```
+
+반면 HTTP API를 scale-to-zero, revision traffic split, eventing과 함께 운영하고 싶다면 Knative가 더 직접적이다.
+
+```text
+HTTP request
+  ↓
+Knative Route
+  ↓
+Revision
+  ↓
+autoscale from zero
+```
+
+둘은 경쟁 관계라기보다 사용 목적이 다르다.
+
+---
+
+## Knative의 배포 모델: Revision과 traffic split
+
+Knative의 실무적 장점 중 하나는 Revision 기반 traffic management다.
+
+일반 Kubernetes Deployment에서도 rollout은 가능하다.
+
+```bash
+kubectl rollout status deployment/api
+kubectl rollout undo deployment/api
+```
+
+하지만 traffic을 세밀하게 나누려면 Ingress, Service Mesh, Argo Rollouts 같은 추가 구성이 필요하다.
+
+Knative는 Revision과 Route를 통해 traffic split을 제공한다.
+
+예시:
+
+```yaml
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: api
+spec:
+  template:
+    metadata:
+      name: api-v2
+    spec:
+      containers:
+        - image: registry.example.com/api:v2
+  traffic:
+    - revisionName: api-v1
+      percent: 90
+    - revisionName: api-v2
+      percent: 10
+```
+
+의미:
+
+```text
+90% traffic → api-v1
+10% traffic → api-v2
+```
+
+이 구조는 canary deployment에 유용하다.
+
+```text
+새 Revision 생성
+  ↓
+일부 traffic만 전달
+  ↓
+latency/error rate 확인
+  ↓
+문제 없으면 traffic 증가
+  ↓
+최종 100% 전환
+```
+
+주의할 점은 application compatibility다.
+
+```text
+v1과 v2가 동시에 traffic을 받아도 되는가?
+DB schema가 양쪽 version과 호환되는가?
+event payload가 backward-compatible한가?
+cache key format이 깨지지 않는가?
+```
+
+Knative가 traffic split을 쉽게 해주지만, version compatibility는 application 설계 문제다.
+
+---
+
+## Knative의 autoscaling 흐름
+
+Knative Serving의 autoscaling 흐름을 단순화하면 다음과 같다.
+
+```text
+Request arrives
+  ↓
+Networking layer
+  ↓
+Knative queue-proxy / activator path
+  ↓
+Autoscaler observes concurrency/request metrics
+  ↓
+Revision scale decision
+  ↓
+Pod replica 증가/감소
+```
+
+Knative는 각 Pod 앞에 queue-proxy sidecar를 두고 요청 관련 metric을 수집한다.
+
+개념적으로는 다음이다.
+
+```text
+Client request
+  ↓
+Ingress / Gateway
+  ↓
+Knative routing
+  ↓
+queue-proxy
+  ↓
+user container
+```
+
+queue-proxy는 request concurrency와 같은 정보를 autoscaler가 사용할 수 있게 해준다.
+
+이 구조 덕분에 Knative는 HTTP traffic 기준 autoscaling을 할 수 있다.
+
+```text
+traffic 증가
+  ↓
+concurrency 증가
+  ↓
+Revision scale out
+
+traffic 감소
+  ↓
+concurrency 감소
+  ↓
+Revision scale in
+
+traffic 없음
+  ↓
+scale to zero
+```
+
+---
+
+## Activator의 역할
+
+Scale-to-zero에서 중요한 component가 **Activator**다.
+
+Pod가 0개일 때 요청이 들어오면 당장 request를 받을 user container가 없다. 이때 Activator가 중간에서 요청을 받아 scale-up을 유도한다.
+
+```text
+Request arrives
+  ↓
+No ready Pod
+  ↓
+Activator receives request
+  ↓
+Autoscaler scales Revision from zero
+  ↓
+Pod becomes Ready
+  ↓
+Request forwarded
+```
+
+Activator는 모든 요청을 항상 처리하는 component라기보다, scale-from-zero나 overload 상황에서 중요한 역할을 한다고 이해하면 된다.
+
+일반 HPA와 비교하면 차이가 명확하다.
+
+```text
+일반 HPA:
+  replica 0에서 HTTP request를 받아 scale-up하는 경로가 기본적으로 약함
+
+Knative:
+  request path에 Activator가 있어 scale-from-zero를 지원
+```
+
+이 덕분에 Knative는 HTTP serverless workload에 적합하다.
+
+---
+
+## Knative를 사용할 때의 장점
+
+Knative의 장점은 다음과 같다.
+
+| 장점 | 설명 |
+|---|---|
+| Kubernetes-native | CRD와 controller 기반으로 Kubernetes 위에서 동작 |
+| Serverless 경험 | 요청 기반 autoscaling과 scale-to-zero |
+| Container 기반 | 특정 function runtime만이 아니라 container image 실행 |
+| Revision 관리 | 변경마다 immutable Revision 생성 |
+| Traffic split | Revision별 percentage routing 가능 |
+| Eventing | Broker/Trigger/Sink로 event-driven workflow 구성 |
+| Portability | Kubernetes가 있는 환경에서 비교적 일관된 모델 제공 |
+| 개발자 경험 개선 | infrastructure detail을 줄이고 app 중심 배포 가능 |
+
+특히 developer platform 관점에서는 다음 흐름이 가능하다.
+
+```text
+Developer:
+  container image 또는 function code 제공
+
+Platform:
+  Knative Service 생성
+  Route 제공
+  autoscaling 적용
+  HTTPS/domain 연결
+  event trigger 연결
+```
+
+즉 Knative는 internal developer platform의 serverless layer로 쓰기 좋다.
+
+---
+
+## Knative의 한계와 주의점
+
+Knative가 모든 Kubernetes workload에 적합한 것은 아니다.
+
+주의할 점:
+
+```text
+cold start가 발생할 수 있다.
+stateful workload에는 적합하지 않을 수 있다.
+long-running connection이나 websocket은 별도 검토가 필요하다.
+networking layer 운영 복잡도가 있다.
+Istio와 함께 쓰면 service mesh 운영 부담이 추가될 수 있다.
+observability를 잘 구성해야 한다.
+scale-to-zero가 모든 서비스에 적합하지 않다.
+developer experience와 platform governance를 함께 설계해야 한다.
+```
+
+Knative를 쓰면 안 되거나 신중해야 하는 경우:
+
+```text
+항상 low-latency가 필요한 core API
+cold start를 절대 허용할 수 없는 workload
+stateful database workload
+node-local state에 의존하는 service
+복잡한 custom network path가 필요한 workload
+운영팀이 Knative/networking layer를 관리할 준비가 안 된 경우
+```
+
+Knative는 복잡성을 없애는 것이 아니라, 개발자가 보는 복잡성을 platform layer로 옮긴다.
+
+```text
+개발자 입장:
+  배포가 단순해짐
+
+플랫폼 운영자 입장:
+  Knative control plane, networking, autoscaling, observability 운영 필요
+```
+
+---
+
+## Knative 운영에서 확인해야 할 것
+
+Knative를 production에서 쓰려면 다음을 확인해야 한다.
+
+```text
+Knative Serving controller 상태
+Knative Eventing controller 상태
+networking layer 상태
+Activator 상태
+Autoscaler 상태
+Revision Ready 상태
+Route Ready 상태
+Service URL
+scale-to-zero 설정
+concurrency 설정
+minScale/maxScale 설정
+cold start latency
+traffic split 상태
+Broker/Trigger/Sink 연결
+CloudEvents delivery
+DLQ/retry policy
+observability metric
+```
+
+기본 확인 명령 예시는 다음과 같다.
+
+```bash
+kubectl get ksvc
+kubectl get revisions
+kubectl get routes
+kubectl get configurations
+kubectl get pods -n knative-serving
+kubectl get pods -n knative-eventing
+```
+
+Knative CLI를 쓰는 경우:
+
+```bash
+kn service list
+kn service describe hello
+kn revisions list
+```
+
+Knative Service 상태를 볼 때는 다음을 확인한다.
+
+```text
+READY
+URL
+LATESTCREATED
+LATESTREADY
+traffic target
+```
+
+---
+
+## Knative troubleshooting 관점
+
+Knative Service가 정상 동작하지 않을 때는 일반 Kubernetes와 Knative layer를 함께 봐야 한다.
+
+| 증상 | 가능 원인 | 확인 포인트 |
+|---|---|---|
+| `ksvc`가 Ready 아님 | Revision 실패, image pull 실패, networking 문제 | `kubectl describe ksvc`, `kubectl get revision` |
+| URL 접속 불가 | Route/Ingress/networking layer 문제 | `kubectl get route`, ingress controller |
+| scale from zero 느림 | image pull, app startup, cold start | image size, startup log, minScale |
+| traffic split이 예상과 다름 | Route traffic 설정 오류 | `kn service describe`, Route YAML |
+| Event가 sink로 안 감 | Broker/Trigger filter 오류 | `kubectl get broker`, `kubectl get trigger` |
+| Pod가 계속 0 | traffic이 안 들어오거나 route 문제 | ingress/request path 확인 |
+| Pod가 과도하게 증가 | concurrency target 낮음, burst traffic | autoscaler config, request metric |
+| 첫 요청 timeout | cold start가 request timeout보다 김 | minScale, startup optimization |
+
+중요한 점은 Knative는 Kubernetes 위에서 동작하므로, 문제를 두 층으로 나눠 봐야 한다.
+
+```text
+Kubernetes layer:
+  Pod, Deployment, Service, image pull, node capacity, DNS, CNI
+
+Knative layer:
+  Service, Route, Configuration, Revision, Activator, Autoscaler, Broker, Trigger
+```
+
+---
+
+## Knative와 Cloud Native API Solution의 관계
+
+Cloud Native API Solution은 API Gateway, microservices, Kubernetes/OpenShift runtime, CI/CD, IaC, observability를 함께 설계하는 개념이다.
+
+Knative는 이 중에서 다음 영역을 단순화한다.
+
+```text
+HTTP API deployment
+autoscaling
+scale-to-zero
+revision-based rollout
+event-driven function
+event source routing
+```
+
+예를 들어 Cloud Native API Solution에서 다음 구조가 있었다.
+
+```text
+Client
+  ↓
+API Gateway
+  ↓
+Kubernetes Service
+  ↓
+Deployment Pods
+```
+
+Knative를 쓰면 다음처럼 바뀔 수 있다.
+
+```text
+Client
+  ↓
+API Gateway / Knative Route
+  ↓
+Knative Service
+  ↓
+Revision
+  ↓
+Pods
+```
+
+Event-driven flow는 다음처럼 구성할 수 있다.
+
+```text
+Event Source
+  ↓
+Knative Broker
+  ↓
+Trigger
+  ↓
+Knative Service
+  ↓
+Function / Container
+```
+
+즉 Knative는 cloud native API와 EDA 사이를 연결하는 serverless runtime layer로 볼 수 있다.
+
+---
+
+## Knative와 OpenShift Serverless
+
+OpenShift 환경에서는 Knative 기반 기능이 OpenShift Serverless 형태로 제공될 수 있다.
+
+개념적으로는 다음과 같다.
+
+```text
+Kubernetes
+  +
+Knative
+  =
+serverless on Kubernetes
+
+OpenShift
+  +
+Knative-based serverless capabilities
+  =
+OpenShift Serverless
+```
+
+OpenShift는 enterprise Kubernetes platform이므로, 여기에 Knative를 통합하면 다음을 함께 얻을 수 있다.
+
+```text
+developer console
+route integration
+security defaults
+operator lifecycle management
+enterprise support
+CI/CD integration
+registry integration
+observability integration
+```
+
+즉 Knative 자체는 open source project이고, OpenShift Serverless는 이를 enterprise platform 경험으로 묶은 형태로 볼 수 있다.
+
+---
+
+## 언제 Knative를 도입할까?
+
+Knative가 잘 맞는 경우:
+
+```text
+Kubernetes 위에서 serverless platform을 만들고 싶다.
+HTTP API를 request 기반으로 autoscale하고 싶다.
+요청이 없을 때 Pod를 0으로 줄이고 싶다.
+Revision 기반 canary deployment가 필요하다.
+Event source와 function/service를 느슨하게 연결하고 싶다.
+Cloud provider serverless에 강하게 종속되고 싶지 않다.
+Internal developer platform을 만들고 싶다.
+```
+
+Knative가 과할 수 있는 경우:
+
+```text
+항상 떠 있어야 하는 core service만 운영한다.
+scale-to-zero가 필요 없다.
+Deployment/HPA/Ingress 조합으로 충분하다.
+Cold start를 허용할 수 없다.
+Platform team이 Knative 운영 복잡도를 감당하기 어렵다.
+Eventing 요구사항이 단순하다.
+```
+
+도입 판단 기준은 다음이다.
+
+```text
+serverless developer experience가 필요한가?
+scale-to-zero가 실제 비용/운영 이점을 주는가?
+HTTP/event-driven workload가 많은가?
+Revision traffic split이 중요한가?
+Knative control plane을 운영할 역량이 있는가?
+기존 Kubernetes 운영 모델과 잘 통합되는가?
+```
+
+---
+
+## 전체 mental model
+
+Knative를 이해하는 흐름은 다음과 같다.
+
+```text
+1. Kubernetes는 containerized application을 배포, 확장, 관리하는 강력한 platform이다.
+
+2. 하지만 serverless application을 운영하려면 routing, autoscaling,
+   scale-to-zero, revision, event trigger 같은 기능을 직접 조합해야 한다.
+
+3. Knative는 Kubernetes 위에 serverless abstraction을 제공하는 open source platform이다.
+
+4. Knative Serving은 HTTP/gRPC 기반 container workload를 Knative Service로 배포하고,
+   Route, Configuration, Revision을 통해 traffic과 version을 관리한다.
+
+5. Knative Service는 update마다 immutable Revision을 만들고,
+   Route를 통해 Revision별 traffic split을 제공한다.
+
+6. Knative autoscaling은 request/concurrency 기반으로 동작할 수 있으며,
+   요청이 없으면 scale-to-zero까지 가능하다.
+
+7. Scale-to-zero는 resource 효율을 높이지만 cold start라는 trade-off가 있다.
+
+8. Knative Eventing은 Event Source, Broker, Trigger, Sink를 통해
+   event-driven architecture를 Kubernetes-native하게 구성한다.
+
+9. Knative Functions는 function code를 OCI image로 만들고
+   Knative Service로 배포하는 단순한 개발 모델을 제공한다.
+
+10. Knative는 Kubernetes를 대체하지 않고,
+    Kubernetes 위에서 serverless workload를 쉽게 운영하게 해주는 layer다.
+```
+
+---
+
+## 요약
+
+Knative는 Kubernetes 위에서 serverless workload를 실행하기 위한 Kubernetes-native platform이다. Container image 또는 function code를 받아 HTTP 요청이나 event에 반응하는 workload로 실행하고, traffic에 따라 자동으로 scale up/down하며, 요청이 없을 때는 scale-to-zero까지 가능하게 한다.
+
+핵심 구성은 다음이다.
+
+```text
+Knative Serving
+  → HTTP/gRPC 기반 serverless container serving
+  → Service, Route, Configuration, Revision
+  → autoscaling, scale-to-zero, traffic split
+
+Knative Eventing
+  → event source와 consumer 연결
+  → Broker, Trigger, Sink
+  → event-driven architecture 구성
+
+Knative Functions
+  → function 개발 모델
+  → code를 OCI image로 만들고 Knative Service로 배포
+```
+
+한 문장으로 정리하면 다음과 같다.
+
+**Knative는 Kubernetes 위에서 containerized application과 function을 serverless 방식으로 배포·라우팅·자동확장·이벤트 연결할 수 있게 해주는 Kubernetes-native serverless platform이다.**

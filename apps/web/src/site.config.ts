@@ -1,13 +1,14 @@
 export const siteConfig = {
   title: "Jihwan Park",
   description:
-    "A Git-based engineering notebook for systems work, DevOps notes, software study, paper reviews, and long-term implementation records.",
+    "A Git-based engineering notebook for reliable cloud-native systems, constrained infrastructure, AI workload operations, and resource-aware systems work.",
   author: "Jihwan Park",
   ogImage: "/og-default.svg",
   githubUrl: "https://github.com/Petooooo/Petooooo.github.io",
-  resumeUrl: "/about",
+  resumeUrl: "/cv",
   nav: [
     { label: "About", href: "/about" },
+    { label: "CV", href: "/cv" },
     { label: "Projects", href: "/projects" },
     { label: "Research", href: "/research" },
     { label: "DevOps", href: "/devops" },

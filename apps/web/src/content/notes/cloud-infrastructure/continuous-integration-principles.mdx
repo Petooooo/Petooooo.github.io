@@ -1,0 +1,996 @@
+---
+area: "Cloud Infrastructure"
+type: "concept"
+series: "DevOps Explained"
+title: "Continuous Integration 운영 원칙"
+slug: "continuous-integration-principles"
+date: "2026-06-03"
+updated: "2026-06-03"
+draft: false
+reviewed: true
+category: "Notes"
+tags: ["Continuous Integration", "CI/CD", "DevOps", "Pipeline", "Automated Testing", "Build", "Git", "Artifact"]
+description: "Continuous Integration을 여러 개발자의 code change를 자주 shared repository에 통합하고 자동 build/test로 검증하는 DevOps practice로 정리한다."
+---
+## 개요
+
+**Continuous Integration**은 여러 개발자의 code change를 shared repository에 자주 통합하고, 그때마다 자동 build와 test를 실행해 integration 문제를 빠르게 발견하는 DevOps practice다.
+
+짧게 정리하면 다음과 같다.
+
+```text
+Continuous Integration:
+  개발자가 code change를 자주 shared repository에 merge하고,
+  merge 또는 pull request 시점마다
+  자동 build와 test를 실행해
+  문제를 빠르게 발견하는 방식
+```
+
+CI의 본질은 단순히 “자동 테스트를 돌린다”가 아니다. 더 정확히는 다음 세 가지가 결합된 방식이다.
+
+```text
+1. 자주 통합한다.
+2. 통합할 때마다 자동으로 build/test한다.
+3. 문제가 생기면 빠르게 feedback을 준다.
+```
+
+즉, CI는 작은 변경을 자주 통합하고, 통합 시점마다 자동 검증을 수행해 main branch의 신뢰성을 유지하는 방식이다.
+
+---
+
+## CI가 해결하려는 문제: Integration Hell
+
+CI가 등장한 가장 큰 이유는 **integration hell** 또는 **merge hell** 문제 때문이다.
+
+전통적인 개발 방식에서는 개발자가 각자 긴 시간 동안 branch나 local copy에서 작업한 뒤, release 직전에 한꺼번에 merge하는 경우가 많았다.
+
+```text
+전통적 방식:
+  개발자 A가 feature A를 2주 동안 작업
+  개발자 B가 feature B를 2주 동안 작업
+  개발자 C가 feature C를 2주 동안 작업
+
+release 직전:
+  모두 main branch에 merge
+  conflict 발생
+  test failure 발생
+  build failure 발생
+  원인 파악 어려움
+```
+
+이 방식의 문제는 변경사항이 너무 오래 분리되어 있다는 점이다.
+
+```text
+문제:
+  변경 단위가 큼
+  merge 시점이 늦음
+  conflict가 복잡함
+  bug가 언제 들어왔는지 추적하기 어려움
+  release 직전에 품질 문제가 폭발함
+```
+
+CI는 이 문제를 정반대로 해결한다.
+
+```text
+CI 방식:
+  작은 변경을 자주 merge
+  merge할 때마다 자동 build/test
+  문제가 생기면 즉시 feedback
+  원인 commit을 빠르게 찾음
+```
+
+핵심은 **문제를 늦게 크게 발견하는 대신, 일찍 작게 발견하는 것**이다.
+
+---
+
+## CI의 기본 흐름
+
+CI의 기본 흐름은 다음과 같다.
+
+```text
+1. 개발자가 code 변경
+2. local에서 commit
+3. shared repository에 push 또는 pull request 생성
+4. CI system이 변경 감지
+5. source code checkout
+6. dependency install
+7. build 또는 compile
+8. unit test 실행
+9. static analysis / lint 실행
+10. integration test 일부 실행
+11. 결과를 개발자에게 feedback
+12. 성공하면 merge 가능 또는 artifact 생성
+```
+
+이를 그림처럼 표현하면 다음과 같다.
+
+```text
+Developer Commit
+  -> Git Repository
+  -> CI Trigger
+  -> Build
+  -> Test
+  -> Quality Check
+  -> Feedback
+  -> Merge / Artifact
+```
+
+CI에서 중요한 것은 이 흐름이 **사람의 수동 판단 전에 자동으로 반복 실행된다**는 점이다.
+
+```text
+좋은 CI:
+  code가 들어올 때마다 자동으로 검증
+  실패 원인을 빠르게 보여줌
+  main branch가 깨지는 것을 막음
+
+나쁜 CI:
+  pipeline은 있지만 실패를 무시
+  main branch가 자주 broken 상태
+  test 결과를 신뢰하지 않음
+```
+
+---
+
+## CI는 CI/CD Pipeline의 첫 번째 단계다
+
+CI/CD에서 CI는 **Continuous Integration**, CD는 보통 **Continuous Delivery** 또는 **Continuous Deployment**를 의미한다.
+
+CI는 주로 다음을 다룬다.
+
+```text
+CI:
+  code를 통합한다.
+  build한다.
+  test한다.
+  artifact로 만들 준비를 한다.
+```
+
+CD는 그 다음 단계다.
+
+```text
+Continuous Delivery:
+  검증된 artifact를 언제든 배포 가능한 상태로 준비한다.
+  production 배포에는 수동 승인 단계가 있을 수 있다.
+
+Continuous Deployment:
+  검증된 변경사항을 production까지 자동 배포한다.
+```
+
+정리하면 다음과 같다.
+
+| 구분 | 핵심 질문 | 주요 작업 |
+|---|---|---|
+| CI | 변경사항이 기존 code와 잘 통합되는가? | build, test, lint, static analysis |
+| Continuous Delivery | 이 변경사항을 배포 가능한 상태로 만들었는가? | packaging, staging deploy, approval 준비 |
+| Continuous Deployment | 검증된 변경을 production까지 자동 배포할 것인가? | automated production deployment |
+
+CI가 제대로 되어 있지 않으면 CD는 위험해진다.
+
+```text
+CI 없이 CD만 있음:
+  검증되지 않은 변경을 빠르게 배포할 수 있음
+
+좋은 CI + CD:
+  작은 변경을 자주 검증하고,
+  검증된 변경만 delivery/deployment로 넘김
+```
+
+CI는 CD, GitOps, DevSecOps의 기반이다. CI가 약하면 이후 delivery와 deployment automation도 신뢰하기 어렵다.
+
+---
+
+## CI의 핵심 원칙
+
+CI는 도구가 아니라 practice다. Jenkins, GitHub Actions, GitLab CI, Tekton, CircleCI 같은 도구는 CI를 구현하는 수단이다.
+
+CI의 핵심 원칙은 다음과 같다.
+
+```text
+1. 모든 code는 shared repository에서 관리한다.
+2. 개발자는 변경사항을 자주 integrate한다.
+3. 통합 시점마다 자동 build가 실행된다.
+4. 자동 test가 빠르게 feedback을 준다.
+5. main branch는 항상 deployable 또는 최소한 buildable 상태여야 한다.
+6. 실패한 build는 즉시 수정한다.
+7. 변경 단위는 작게 유지한다.
+```
+
+이 중 가장 중요한 것은 **main branch의 신뢰성**이다.
+
+```text
+좋은 CI:
+  main branch가 항상 green에 가깝다.
+  실패하면 빠르게 고친다.
+  실패 원인이 작고 명확하다.
+
+나쁜 CI:
+  main branch가 자주 broken 상태로 방치된다.
+  test failure를 무시한다.
+  pipeline은 있지만 신뢰하지 않는다.
+```
+
+CI pipeline이 있어도 팀이 실패를 무시하면 CI는 의미가 약해진다.
+
+---
+
+## CI에서 Build가 의미하는 것
+
+CI에서 build는 단순히 compile만 의미하지 않는다.
+
+언어와 stack에 따라 build는 다음을 포함할 수 있다.
+
+```text
+Java:
+  compile
+  unit test
+  JAR/WAR 생성
+
+Node.js:
+  dependency install
+  TypeScript compile
+  bundle
+  test
+
+Python:
+  dependency install
+  lint
+  test
+  wheel/package 생성
+
+Go:
+  go test
+  go build
+  binary 생성
+
+Container-based app:
+  Dockerfile build
+  image 생성
+```
+
+CI build의 목적은 다음이다.
+
+```text
+이 codebase가 깨지지 않고
+현재 dependency와 함께
+실행 가능한 artifact로 만들어질 수 있는가?
+```
+
+Cloud-native 환경에서는 build 결과가 container image가 되는 경우가 많다.
+
+```text
+source code
+  -> CI build
+  -> container image
+  -> registry push
+```
+
+하지만 순수 CI 단계에서는 반드시 production 배포까지 가지 않아도 된다. CI의 핵심은 **통합된 code가 build/test를 통과하는지 확인하는 것**이다.
+
+---
+
+## CI에서 Test가 중요한 이유
+
+CI에서 test는 가장 중요한 feedback 장치다.
+
+```text
+Code change
+  -> 자동 test
+  -> 실패 시 즉시 feedback
+  -> 개발자가 빠르게 수정
+```
+
+CI에서 자주 사용하는 test 종류는 다음과 같다.
+
+| 테스트 | 목적 | CI에서의 위치 |
+|---|---|---|
+| Unit test | 작은 함수/모듈 검증 | 거의 모든 commit마다 |
+| Integration test | DB, API, 외부 service 연동 검증 | PR 또는 merge 전 |
+| Static analysis | code smell, type error, unsafe pattern 탐지 | 빠른 feedback |
+| Lint/format | coding convention 유지 | 빠른 feedback |
+| Security scan | secret, dependency, SAST 일부 검사 | DevSecOps와 결합 |
+| Container test | image build와 startup 검증 | cloud-native CI |
+| Contract test | service 간 API 계약 검증 | microservices 환경 |
+
+CI에서는 test 속도도 중요하다.
+
+```text
+너무 느린 CI:
+  개발자가 feedback을 늦게 받음
+  pipeline을 우회하려고 함
+  작은 변경도 부담이 됨
+
+좋은 CI:
+  빠른 test는 PR마다 실행
+  느린 test는 stage를 나눔
+  중요한 regression은 반드시 차단
+```
+
+현실적인 구조는 다음과 같다.
+
+```text
+PR마다:
+  lint
+  unit test
+  type check
+  빠른 security scan
+
+merge 후:
+  integration test
+  image build
+  artifact scan
+
+nightly:
+  full regression
+  E2E test
+  deep security scan
+```
+
+CI의 목적은 모든 검사를 한 번에 무겁게 실행하는 것이 아니라, 변경 시점에 적절한 수준의 빠른 feedback을 제공하는 것이다.
+
+---
+
+## CI와 Branching Strategy
+
+CI가 잘 작동하려면 branching strategy가 중요하다.
+
+CI의 기본 철학은 **변경사항을 오래 분리하지 않는 것**이다.
+
+대표적인 방식은 다음과 같다.
+
+```text
+Trunk-based development:
+  main/trunk에 자주 작은 변경을 통합
+  feature branch는 짧게 유지
+  feature flag로 미완성 기능을 숨김
+
+Git flow:
+  develop, release, hotfix branch 등 여러 장기 branch 사용
+  release 관리에는 유용하지만 branch가 길어지면 integration cost 증가
+```
+
+CI 관점에서는 짧은 branch가 유리하다.
+
+```text
+짧은 branch:
+  conflict가 작음
+  test feedback이 빠름
+  main과 차이가 적음
+
+긴 branch:
+  conflict가 커짐
+  통합 시점에 문제 폭발
+  feature 간 상호작용을 늦게 발견
+```
+
+CI의 목표는 “각자 오래 작업한 뒤 마지막에 통합”이 아니라 “계속 통합하면서 계속 검증”이다.
+
+---
+
+## CI와 Pull Request
+
+현대적인 CI는 보통 pull request 또는 merge request와 결합된다.
+
+```text
+Developer:
+  feature branch push
+  pull request 생성
+
+CI:
+  build
+  test
+  lint
+  scan
+  preview build
+
+Reviewer:
+  code review
+  CI result 확인
+  merge 승인
+```
+
+좋은 PR 기반 CI는 다음 조건을 만족해야 한다.
+
+```text
+- PR마다 자동 pipeline 실행
+- 실패한 check가 있으면 merge 차단
+- test 결과가 PR에 직접 표시
+- code coverage 변화 확인 가능
+- security issue가 PR comment로 제공
+- main branch merge 전 conflict 확인
+```
+
+이 구조에서 CI는 reviewer의 부담을 줄여준다.
+
+```text
+Reviewer가 직접 확인할 것:
+  설계
+  가독성
+  business logic
+  maintainability
+
+CI가 자동 확인할 것:
+  build 가능 여부
+  test 통과 여부
+  lint/format
+  basic security
+  dependency issue
+```
+
+CI는 code review를 대체하지 않는다. 대신 사람이 할 필요 없는 반복 검증을 자동화한다.
+
+---
+
+## CI와 Artifact
+
+CI의 결과물은 단순히 “성공/실패”만이 아니다. 많은 경우 artifact가 생성된다.
+
+예시는 다음과 같다.
+
+```text
+Java:
+  .jar
+  .war
+
+Node:
+  bundled static assets
+  npm package
+
+Python:
+  wheel
+  source distribution
+
+Go:
+  binary
+
+Cloud-native:
+  container image
+```
+
+Cloud-native 환경에서는 다음 흐름이 자연스럽다.
+
+```text
+CI:
+  code checkout
+  test
+  image build
+  image scan
+  registry push
+
+CD/GitOps:
+  image tag를 manifest에 반영
+  Argo CD/Flux가 cluster에 sync
+```
+
+여기서 중요한 것은 artifact가 immutable해야 한다는 것이다.
+
+```text
+나쁜 예:
+  my-app:latest
+
+좋은 예:
+  my-app:a1b2c3d
+  my-app@sha256:...
+```
+
+CI에서 생성된 artifact와 source commit이 명확히 연결되어야 한다.
+
+```text
+source commit:
+  a1b2c3d
+
+image:
+  registry.example.com/my-app:a1b2c3d
+
+GitOps repo:
+  image tag: a1b2c3d
+```
+
+이 연결이 명확해야 rollback, audit, incident analysis가 쉬워진다.
+
+---
+
+## CI Pipeline 예시
+
+가장 단순한 CI pipeline은 다음과 같다.
+
+```text
+trigger:
+  push 또는 pull request
+
+steps:
+  checkout
+  install dependencies
+  lint
+  unit test
+  build
+  upload artifact
+```
+
+GitHub Actions 스타일로 보면 개념적으로 다음과 같다.
+
+```yaml
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build
+```
+
+Cloud-native app이라면 image build까지 들어갈 수 있다.
+
+```yaml
+name: ci
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  container-build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Test
+        run: npm test
+
+      - name: Build image
+        run: docker build -t registry.example.com/my-app:${{ github.sha }} .
+
+      - name: Push image
+        run: docker push registry.example.com/my-app:${{ github.sha }}
+```
+
+다만 실제 운영에서는 registry credential, secret masking, image scan, artifact signing, branch protection을 함께 고려해야 한다.
+
+---
+
+## CI와 DevSecOps
+
+CI는 DevSecOps와도 강하게 연결된다.
+
+DevSecOps 관점에서 CI는 security feedback을 빠르게 제공하는 위치다.
+
+```text
+CI에서 수행할 수 있는 security check:
+  secret scanning
+  SAST
+  dependency scan / SCA
+  license scan
+  container image scan
+  Dockerfile lint
+  IaC scan
+  Kubernetes manifest policy check
+```
+
+중요한 것은 모든 security scan을 무조건 모든 commit마다 full로 돌리는 것이 아니다.
+
+```text
+좋은 구조:
+  PR마다 빠른 scan
+  merge 후 image/dependency scan
+  nightly deep scan
+  release 전 full scan
+```
+
+CI에 security check를 넣을 때는 false positive와 pipeline 속도를 고려해야 한다.
+
+```text
+나쁜 CI security:
+  결과가 너무 많음
+  무엇을 고쳐야 할지 모름
+  pipeline이 너무 느림
+  개발자가 우회함
+
+좋은 CI security:
+  PR에서 바로 feedback
+  severity와 fix suggestion 제공
+  critical issue는 blocking
+  low-risk issue는 backlog로 관리
+```
+
+CI는 보안을 release 직전 gate가 아니라 개발 흐름 안의 빠른 feedback으로 바꿔준다.
+
+---
+
+## CI와 GitOps의 관계
+
+CI와 GitOps는 역할이 다르다.
+
+```text
+CI:
+  code를 검증하고 artifact를 만든다.
+
+GitOps:
+  배포 desired state를 Git에 저장하고,
+  controller가 cluster 상태를 맞춘다.
+```
+
+둘을 연결하면 다음 workflow가 된다.
+
+```text
+1. Developer가 code push
+2. CI가 test/build/image scan 수행
+3. CI가 container image를 registry에 push
+4. CI가 GitOps repo의 image tag를 update
+5. Argo CD 또는 Flux가 GitOps repo 변경 감지
+6. cluster 상태를 desired state와 sync
+```
+
+즉, CI가 production cluster에 직접 `kubectl apply`를 하지 않아도 된다.
+
+```text
+CI:
+  artifact 생산
+
+GitOps repo:
+  deployment desired state
+
+Argo CD:
+  cluster reconciliation
+```
+
+이 구조는 DevOps, DevSecOps, GitOps를 자연스럽게 연결한다.
+
+---
+
+## CI에서 자주 발생하는 문제
+
+### Pipeline이 너무 느림
+
+CI가 너무 느리면 개발자는 feedback을 늦게 받고, 결국 CI를 부담으로 느낀다.
+
+```text
+원인:
+  모든 test를 매번 실행
+  dependency cache 없음
+  병렬화 없음
+  slow integration test가 PR마다 실행
+  container image build가 비효율적
+```
+
+개선 방향은 다음과 같다.
+
+```text
+- dependency cache
+- test split
+- parallel job
+- 변경 파일 기반 selective test
+- unit/integration/E2E test stage 분리
+- Docker layer cache
+```
+
+### Flaky Test
+
+Flaky test는 code가 잘못되지 않았는데도 가끔 실패하는 test다.
+
+```text
+문제:
+  CI 신뢰도 하락
+  개발자가 실패를 무시
+  실제 bug와 noise 구분 어려움
+```
+
+원인은 다음과 같다.
+
+```text
+- 시간 의존성
+- network 의존성
+- 외부 API 의존성
+- test 간 shared state
+- race condition
+- resource 부족
+```
+
+해결 방향은 다음과 같다.
+
+```text
+- test isolation
+- mock/stub 사용
+- deterministic test data
+- retry는 제한적으로 사용
+- flaky test owner 지정
+- flaky test quarantine 후 수정
+```
+
+### Main Branch가 자주 깨짐
+
+CI가 있어도 main branch가 자주 깨진다면 branch protection과 merge policy가 필요하다.
+
+```text
+필요한 것:
+  required checks
+  PR review
+  merge queue
+  protected branch
+  실패한 pipeline merge 금지
+```
+
+### Test가 부족함
+
+Pipeline은 green인데 production에서 장애가 발생할 수 있다.
+
+```text
+원인:
+  unit test만 있음
+  integration test 부족
+  contract test 없음
+  migration test 없음
+  configuration test 없음
+```
+
+CI는 test가 있어야 의미가 있다. CI 도구만 도입한다고 품질이 자동으로 좋아지지는 않는다.
+
+---
+
+## CI와 Kubernetes/Homelab 관점
+
+k3s, Nexus, Argo CD, Tekton 같은 환경에서는 CI를 다음 흐름으로 적용할 수 있다.
+
+```text
+app repo:
+  source code
+  Dockerfile
+  tests
+
+CI:
+  test
+  build image
+  image scan
+  push to Nexus registry
+
+GitOps repo:
+  Helm values 또는 Kustomize overlay
+  image tag update
+
+Argo CD:
+  k3s cluster에 sync
+
+Runtime:
+  Traefik, Longhorn, MetalLB, observability stack
+```
+
+예시 흐름은 다음과 같다.
+
+```text
+1. app repo에 commit push
+2. CI pipeline 실행
+3. unit test와 lint 실행
+4. Docker image build
+5. image를 Nexus registry에 push
+6. GitOps repo의 image tag update
+7. Argo CD가 sync
+8. k3s에서 rollout
+9. Grafana/Loki로 runtime 확인
+```
+
+Homelab에서 CI를 붙일 때 주의할 점은 다음이다.
+
+```text
+- CI runner가 homelab resource를 과도하게 사용하지 않는가?
+- Nexus registry credential을 안전하게 관리하는가?
+- image tag를 latest로 쓰지 않는가?
+- Longhorn PVC를 쓰는 service와 CI build workload가 resource 경쟁하지 않는가?
+- internal IP, password, token이 pipeline log에 노출되지 않는가?
+```
+
+작게 시작한다면 다음 정도가 현실적이다.
+
+```text
+1. app repo에 GitHub Actions 또는 Tekton pipeline 추가
+2. unit test/lint 실행
+3. Docker image build
+4. Nexus registry push
+5. image tag를 commit SHA로 관리
+6. GitOps repo update는 수동 또는 PR로 시작
+7. 이후 Argo CD auto-sync 검토
+```
+
+---
+
+## CI가 잘 되어 있는지 확인하는 기준
+
+CI가 잘 작동하는지는 단순히 pipeline이 존재하는지로 판단하면 안 된다.
+
+검증 기준은 다음과 같다.
+
+| 검증 포인트 | 확인 질문 |
+|---|---|
+| Integration frequency | 개발자가 자주 merge하는가? |
+| Pipeline speed | feedback이 충분히 빠른가? |
+| Build reliability | main branch가 자주 깨지지 않는가? |
+| Test quality | 실제 regression을 잡는 test가 있는가? |
+| Flaky test | 실패가 noise로 무시되지 않는가? |
+| Branch protection | 실패한 pipeline의 merge가 차단되는가? |
+| Artifact traceability | artifact와 source commit이 연결되는가? |
+| Security check | secret/dependency/image scan이 포함되는가? |
+| Developer feedback | 실패 원인을 개발자가 빠르게 이해할 수 있는가? |
+| Reproducibility | local과 CI 결과가 크게 다르지 않은가? |
+| Scalability | 팀과 repo가 커져도 pipeline이 유지 가능한가? |
+
+좋은 CI는 “초록불이 많이 보이는 dashboard”가 아니라, **작은 변경을 빠르게 통합하고 신뢰할 수 있는 feedback을 주는 system**이다.
+
+---
+
+## 자칫 실수하기 쉬운 부분
+
+### CI를 단순 자동 빌드로만 이해하는 경우
+
+CI는 자동 build만 의미하지 않는다.
+
+```text
+자동 build:
+  code를 compile한다.
+
+CI:
+  자주 통합하고,
+  자동 build/test로 통합 문제를 빠르게 발견한다.
+```
+
+핵심은 “continuous integration”이다. 통합이 자주 일어나지 않으면 build tool이 있어도 CI 효과는 제한된다.
+
+### Pipeline은 있는데 실패를 무시하는 경우
+
+CI는 실패를 신뢰하고 즉시 고칠 때 의미가 있다.
+
+```text
+나쁜 상태:
+  pipeline failed지만 merge
+  flaky test라며 무시
+  main branch가 broken 상태로 방치
+
+좋은 상태:
+  실패한 check는 merge 차단
+  main branch green 유지
+  flaky test는 따로 관리하고 수정
+```
+
+### 너무 많은 일을 PR마다 실행하는 경우
+
+모든 test와 scan을 PR마다 실행하면 feedback이 느려질 수 있다.
+
+```text
+권장:
+  빠른 test는 PR마다
+  느린 test는 merge 후 또는 nightly
+  release 전 full validation
+```
+
+### Integration test 없이 Unit test만 믿는 경우
+
+Unit test가 통과해도 service 간 연동, DB migration, configuration 문제는 남을 수 있다.
+
+```text
+필요한 추가 검증:
+  integration test
+  contract test
+  migration test
+  container startup test
+  manifest validation
+```
+
+### `latest` tag로 artifact를 관리하는 경우
+
+CI가 image를 build하더라도 `latest`만 쓰면 추적성이 약해진다.
+
+```text
+비추천:
+  my-app:latest
+
+권장:
+  my-app:a1b2c3d
+  my-app@sha256:...
+```
+
+### CI credential을 과도하게 주는 경우
+
+CI는 source code, registry, GitOps repo, secret에 접근할 수 있다. 따라서 최소 권한이 중요하다.
+
+```text
+주의:
+  registry push token
+  GitOps repo write token
+  cloud credential
+  kubeconfig
+  deployment token
+```
+
+Credential은 필요한 범위로 제한하고, pipeline log에 secret이 노출되지 않도록 해야 한다.
+
+---
+
+## Mental Model
+
+Continuous Integration은 다음 mental model로 이해할 수 있다.
+
+```text
+작은 변경:
+  feature branch 또는 local commit
+
+자주 통합:
+  shared repository 또는 main branch에 빠르게 merge
+
+자동 검증:
+  build
+  test
+  lint
+  static analysis
+  security scan
+
+빠른 feedback:
+  PR status
+  pipeline log
+  failure report
+
+신뢰 가능한 main branch:
+  merge 가능한 code만 통과
+  broken state를 빠르게 복구
+```
+
+더 짧게 정리하면 다음과 같다.
+
+```text
+CI는 code를 자주 합치고,
+합칠 때마다 자동으로 검증하는 방식이다.
+```
+
+---
+
+## 정리
+
+Continuous Integration은 여러 개발자의 code change를 shared repository에 자주 통합하고, 그때마다 자동 build와 test를 실행해 integration 문제를 빠르게 발견함으로써 main branch를 안정적으로 유지하는 DevOps practice다.
+
+핵심은 다음과 같다.
+
+- CI는 자동 build만 의미하지 않는다.
+- CI의 핵심은 작은 변경을 자주 통합하고 자동으로 검증하는 것이다.
+- CI는 integration hell을 줄이기 위한 practice다.
+- CI는 CI/CD pipeline의 첫 번째 단계다.
+- CI가 약하면 Continuous Delivery와 Continuous Deployment도 위험해진다.
+- Build는 언어별 compile/package뿐 아니라 container image build까지 포함할 수 있다.
+- Test는 unit test, integration test, static analysis, lint, security scan 등으로 나뉜다.
+- CI에서는 빠른 feedback이 중요하므로 test stage를 적절히 나눠야 한다.
+- Branch는 짧게 유지할수록 CI 효과가 커진다.
+- Pull request와 CI를 결합하면 merge 전 자동 검증이 가능하다.
+- CI artifact는 source commit과 명확히 연결되어야 한다.
+- `latest` tag보다 commit SHA나 digest 기반 image tag가 더 안전하다.
+- CI는 DevSecOps, GitOps와 자연스럽게 연결된다.
+- CI pipeline이 느리거나 flaky test가 많으면 개발자가 pipeline을 신뢰하지 않게 된다.
+- Homelab/k3s 환경에서도 CI는 image build, Nexus push, GitOps repo update, Argo CD sync 흐름의 출발점이 된다.
+
+운영 관점에서는 이렇게 볼 수 있다.
+
+```text
+CI:
+  작은 변경
+  잦은 통합
+  자동 build
+  자동 test
+  빠른 feedback
+  안정적인 main branch
+```

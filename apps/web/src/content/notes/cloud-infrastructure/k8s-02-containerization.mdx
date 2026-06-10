@@ -1,0 +1,982 @@
+---
+area: "Cloud Infrastructure"
+type: "concept"
+series: "Kubernetes Essentials"
+title: "K8s 02. Containerization"
+slug: "k8s-02-containerization"
+date: "2026-06-01"
+updated: "2026-06-01"
+draft: false
+reviewed: true
+category: "Notes"
+tags: ["containerization", "container", "docker", "vm", "image", "runtime", "cgroups", "namespaces", "ci-cd", "cloud-native"]
+description: "Containerization을 VM 기반 배포와 비교하며, image, container, runtime, resource isolation, CI/CD 관점에서 정리한다."
+---
+# Containerization과 실행 환경 패키징
+
+**Containerization**은 애플리케이션을 실행하는 데 필요한 코드, runtime, libraries, binaries, dependencies를 하나의 실행 단위로 패키징하는 방식이다. 핵심은 애플리케이션마다 별도의 guest OS를 중복해서 들고 가지 않고, host OS kernel을 공유하면서 격리된 process로 실행한다는 점이다.
+
+이 글에서는 containerization을 다음 관점에서 정리한다.
+
+- VM 기반 배포와 container 기반 배포의 구조 차이
+- `Dockerfile`, image, container, registry의 역할
+- `cgroups`, namespaces, container runtime의 의미
+- cloud-native application에서 container가 유리한 이유
+- CI/CD와 운영 환경에서 주의할 점
+
+> Container는 "작은 VM"이라기보다 **격리된 Linux process**에 가깝다. VM은 hardware virtualization에 가깝고, container는 OS-level virtualization에 가깝다.
+
+---
+
+## 1. Containerization의 기본 정의
+
+Containerization의 목적은 애플리케이션 실행 환경을 더 명시적이고 재현 가능하게 만드는 것이다.
+
+전통적인 서버 배포에서는 다음 요소가 서버에 직접 설치되거나 구성된다.
+
+```text
+Application code
+Runtime
+Libraries
+Package dependencies
+Environment variables
+OS-level dependencies
+Startup command
+```
+
+container 방식에서는 이 중 상당 부분을 image로 패키징한다.
+
+```text
+Source Code
+  ↓
+Dockerfile or manifest
+  ↓
+Container Image
+  ↓
+Container
+```
+
+이때 image는 실행 환경의 template이고, container는 그 image를 기반으로 실행되는 runtime instance다.
+
+| 개념 | 역할 |
+|---|---|
+| `Dockerfile` | image를 만들기 위한 recipe |
+| Image | 실행 환경과 파일시스템을 담은 read-only template |
+| Container | image를 기반으로 실제 실행 중인 isolated process |
+| Registry | image를 저장하고 배포하는 저장소 |
+| Runtime | image를 기반으로 container process를 실행하는 계층 |
+
+---
+
+## 2. Container 기술의 기반
+
+Container는 Docker나 Kubernetes만의 개념이 아니다. 현대적인 container는 Linux kernel의 여러 기능을 조합해 구현된다.
+
+| 구성 요소 | 역할 |
+|---|---|
+| `cgroups` | CPU, memory, I/O 같은 resource 사용량 제한 및 계측 |
+| namespaces | process, network, mount, user 등 system view 격리 |
+| filesystem layer | image layer 기반 root filesystem 제공 |
+| capabilities | root 권한을 세분화해서 제한 |
+| seccomp / AppArmor / SELinux | syscall 또는 mandatory access control 기반 보안 제약 |
+| container runtime | image를 unpack하고 isolated process를 실행 |
+
+핵심 축은 크게 두 가지다.
+
+```text
+cgroups    → resource control
+namespaces → system view isolation
+```
+
+`cgroups`가 "얼마나 쓸 수 있는가"를 제어한다면, namespaces는 "무엇을 볼 수 있는가"를 제어한다.
+
+예를 들어 container 안의 process는 자기만의 process list, network interface, mount view를 가진 것처럼 보일 수 있다. 그러나 실제로는 host kernel 위에서 실행되는 process다.
+
+---
+
+## 3. VM 기반 배포의 구조
+
+VM 기반 배포에서는 physical hardware 또는 cloud instance 위에 host OS가 있고, 그 위에 hypervisor가 VM을 실행한다. 각 VM 안에는 별도의 guest OS, runtime, libraries, application이 들어간다.
+
+```text
+Hardware
+  ↓
+Host Operating System
+  ↓
+Hypervisor
+  ↓
+Virtual Machine
+  ├─ Guest OS
+  ├─ Binaries / Libraries
+  └─ Application
+```
+
+VM 방식은 강력한 장점이 있다.
+
+- 서로 다른 OS를 같은 hardware 위에서 실행할 수 있다.
+- guest OS별 kernel이 분리된다.
+- hypervisor 기반의 강한 isolation boundary를 제공한다.
+- legacy workload를 그대로 이전하기 쉽다.
+- cloud 환경에서 Kubernetes node 자체도 VM 위에 구성되는 경우가 많다.
+
+그러나 cloud-native application을 빠르게 scale out하는 상황에서는 guest OS 중복이 비용이 될 수 있다.
+
+---
+
+## 4. 작은 애플리케이션도 VM으로 감싸면 커진다
+
+예를 들어 Node.js application을 production에 배포한다고 하자. 애플리케이션 자체는 작을 수 있지만, VM으로 배포하면 다음 구성 전체가 하나의 배포 단위가 된다.
+
+```text
+VM #1
+├─ Guest OS
+├─ Node.js runtime
+├─ OS libraries
+├─ npm dependencies
+└─ app.js
+```
+
+이 VM을 3개로 scale out하면 guest OS와 runtime 계층도 함께 반복된다.
+
+```text
+VM #1
+├─ Guest OS
+├─ Node.js runtime
+├─ OS libraries
+└─ app.js
+
+VM #2
+├─ Guest OS
+├─ Node.js runtime
+├─ OS libraries
+└─ app.js
+
+VM #3
+├─ Guest OS
+├─ Node.js runtime
+├─ OS libraries
+└─ app.js
+```
+
+이 구조에서는 실제 business logic보다 실행 환경의 중복이 커질 수 있다.
+
+| 항목 | VM 방식에서의 영향 |
+|---|---|
+| Disk usage | VM마다 guest OS와 libraries 중복 |
+| Memory overhead | VM별 OS memory 사용 |
+| Startup time | guest OS boot 과정 필요 |
+| Patching | VM 수만큼 OS patch 대상 증가 |
+| Scale-out speed | instance 준비 시간이 상대적으로 길 수 있음 |
+| Resource density | 같은 hardware에서 올릴 수 있는 workload 수가 줄어들 수 있음 |
+
+VM이 부적절하다는 뜻은 아니다. 다만 작은 service를 많이 복제하고 빠르게 교체해야 하는 cloud-native workload에서는 container가 더 효율적인 선택이 될 수 있다.
+
+---
+
+## 5. 환경 불일치 문제
+
+개발 환경과 production 환경이 다르면 다음과 같은 문제가 발생할 수 있다.
+
+```text
+개발 환경: macOS
+운영 환경: Linux
+
+개발자 Node.js: 20.x
+운영 Node.js: 18.x
+
+개발자 npm dependency: local install 상태
+운영 npm dependency: 다른 lockfile 또는 다른 transitive dependency
+
+개발 환경 native module: macOS용 binary
+운영 환경 native module: Linux ABI 필요
+```
+
+대표적인 증상은 다음과 같다.
+
+| 증상 | 원인 후보 |
+|---|---|
+| local에서는 정상, production에서는 실행 실패 | runtime version 차이 |
+| 특정 package import 실패 | dependency 설치 차이 |
+| native module 오류 | OS/architecture/ABI 차이 |
+| 파일 경로 오류 | 대소문자 처리 또는 working directory 차이 |
+| 인증/연결 실패 | environment variable 또는 secret 주입 차이 |
+
+Containerization은 애플리케이션과 실행 의존성을 image에 함께 넣어 이런 차이를 줄인다.
+
+다만 container도 완전한 동일성을 보장하지는 않는다. host kernel, CPU architecture, GPU driver, volume mount, DNS, network policy, secret 주입 방식은 여전히 환경 의존성을 만들 수 있다.
+
+---
+
+## 6. Container 기반 배포의 기본 흐름
+
+Container 기반 배포는 보통 다음 순서로 진행된다.
+
+1. Manifest 작성  
+   예: `Dockerfile`, `manifest.yml`
+
+2. Image 생성  
+   예: Docker image, OCI image
+
+3. Registry에 push  
+   예: private registry, cloud registry, internal registry
+
+4. Runtime에서 container 실행  
+   예: Docker Engine, containerd, CRI-O
+
+Docker 기준으로는 다음과 같은 `Dockerfile`을 작성할 수 있다.
+
+```dockerfile
+FROM node:20-alpine
+
+WORKDIR /app
+
+COPY package*.json ./
+RUN npm ci --only=production
+
+COPY . .
+
+EXPOSE 3000
+
+CMD ["node", "server.js"]
+```
+
+image를 build한다.
+
+```bash
+docker build -t my-node-app:1.0.0 .
+```
+
+registry에 push한다.
+
+```bash
+docker tag my-node-app:1.0.0 registry.example.com/my-node-app:1.0.0
+docker push registry.example.com/my-node-app:1.0.0
+```
+
+container를 실행한다.
+
+```bash
+docker run -d \
+  --name my-node-app \
+  -p 3000:3000 \
+  registry.example.com/my-node-app:1.0.0
+```
+
+`Dockerfile`은 단순한 설치 스크립트가 아니라 실행 환경을 문서화하고 재현 가능하게 만드는 artifact다.
+
+---
+
+## 7. Image와 container의 구분
+
+Image와 container는 같은 개념이 아니다.
+
+```text
+Dockerfile = 설계도
+Image      = 완성된 실행 패키지
+Container  = 실행 중인 인스턴스
+Registry   = image 저장소
+```
+
+같은 image에서 여러 container를 만들 수 있다.
+
+```bash
+docker run -d --name app-1 my-node-app:1.0.0
+docker run -d --name app-2 my-node-app:1.0.0
+docker run -d --name app-3 my-node-app:1.0.0
+```
+
+Kubernetes에서는 `docker run`을 직접 반복하기보다 Pod spec에 image를 선언한다.
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: my-node-app
+spec:
+  containers:
+    - name: app
+      image: registry.example.com/my-node-app:1.0.0
+      ports:
+        - containerPort: 3000
+```
+
+즉 Kubernetes에서도 배포의 기본 입력은 container image다. Kubernetes는 해당 image를 가져와 container runtime을 통해 container를 실행한다.
+
+---
+
+## 8. Container stack의 구조
+
+Container 방식의 stack은 VM 방식과 다르다.
+
+```text
+Hardware
+  ↓
+Host Operating System
+  ↓
+Container Runtime Engine
+  ↓
+Containers
+  ├─ Container #1: Node.js app + required libs
+  ├─ Container #2: Node.js app + required libs
+  └─ Container #3: Python app + required libs
+```
+
+VM과 비교하면 다음과 같다.
+
+| 계층 | VM 방식 | Container 방식 |
+|---|---|---|
+| Hardware | 공유 | 공유 |
+| Host OS | 존재 | 존재 |
+| 가상화 계층 | Hypervisor | Container runtime |
+| 실행 단위 | VM | Container |
+| OS kernel | guest OS별 kernel | host kernel 공유 |
+| Application dependency | VM 내부에 포함 | image 내부에 포함 |
+| Startup | OS boot 필요 | process 시작 중심 |
+
+Container가 가벼운 이유는 각 workload마다 guest OS를 새로 포함하지 않기 때문이다.
+
+---
+
+## 9. Container가 더 가벼운 이유
+
+### 9.1 Guest OS 중복이 없다
+
+VM은 instance마다 guest OS를 포함한다.
+
+```text
+VM #1: Guest OS + app
+VM #2: Guest OS + app
+VM #3: Guest OS + app
+```
+
+Container는 host OS kernel을 공유하고, 각 container에는 필요한 user-space files와 dependencies를 포함한다.
+
+```text
+Container #1: app + libs
+Container #2: app + libs
+Container #3: app + libs
+```
+
+### 9.2 Image layer를 공유할 수 있다
+
+Container image는 layer 구조를 가진다. 같은 base image를 사용하는 image들은 공통 layer를 공유할 수 있다.
+
+```text
+Layer A: alpine base
+Layer B: node runtime
+Layer C: npm dependencies for app-1
+Layer D: app-1 source
+
+Layer A: alpine base
+Layer B: node runtime
+Layer E: npm dependencies for app-2
+Layer F: app-2 source
+```
+
+`Layer A`, `Layer B`는 중복 저장하지 않고 공유될 수 있다. 이는 image pull, disk usage, build cache 측면에서 유리하다.
+
+### 9.3 Process 시작 비용이 낮다
+
+VM scale-out은 guest OS boot 과정을 포함한다.
+
+```text
+VM 생성 → OS boot → package 준비 → app 실행
+```
+
+Container scale-out은 이미 실행 중인 host kernel 위에서 isolated process를 시작하는 방식에 가깝다.
+
+```text
+image pull → container process 시작
+```
+
+이 차이는 autoscaling, CI job, ephemeral workload 실행에서 중요하다.
+
+---
+
+## 10. Resource sharing과 제한
+
+Container는 host의 CPU와 memory를 공유한다. 하지만 `cgroups`를 통해 resource 제한을 설정할 수 있다.
+
+Docker에서는 다음과 같이 제한할 수 있다.
+
+```bash
+docker run -d \
+  --name app \
+  --cpus="1.5" \
+  --memory="512m" \
+  my-node-app:1.0.0
+```
+
+Kubernetes에서는 `resources.requests`와 `resources.limits`를 사용한다.
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: my-node-app
+spec:
+  containers:
+    - name: app
+      image: registry.example.com/my-node-app:1.0.0
+      resources:
+        requests:
+          cpu: "500m"
+          memory: "256Mi"
+        limits:
+          cpu: "1"
+          memory: "512Mi"
+```
+
+| 항목 | 의미 |
+|---|---|
+| `requests.cpu` | scheduler가 배치할 때 최소 필요량으로 간주 |
+| `requests.memory` | scheduler가 배치할 때 최소 필요량으로 간주 |
+| `limits.cpu` | container가 사용할 수 있는 CPU 상한 |
+| `limits.memory` | container가 넘으면 OOM kill될 수 있는 memory 상한 |
+
+CPU는 compressible resource에 가깝다. 한 container가 CPU를 덜 쓰면 다른 container가 더 사용할 수 있다.
+
+Memory는 incompressible resource에 가깝다. memory limit을 넘으면 container가 OOM kill될 수 있다. 따라서 production에서는 memory limit을 신중하게 잡아야 한다.
+
+---
+
+## 11. Cloud-native application에서 container가 유리한 이유
+
+예를 들어 Node.js API와 Python worker가 함께 동작하는 application을 생각해보자.
+
+```text
+Node.js application
+  ↓
+Python application
+  ↓
+Third-party cognitive API
+```
+
+두 component를 하나의 VM에 묶으면 scale 단위가 꼬일 수 있다.
+
+```text
+VM #1
+├─ Node.js app
+└─ Python app
+```
+
+필요한 scale이 다음과 같다면 문제가 된다.
+
+```text
+Node.js app = 10 replicas
+Python app  = 2 replicas
+```
+
+둘을 같은 VM에 묶어두면 Node.js app을 10개로 늘리는 과정에서 Python app도 불필요하게 늘어날 수 있다.
+
+Container로 분리하면 각각 필요한 만큼만 scale할 수 있다.
+
+```text
+Node.js app container × 10
+Python app container  × 2
+```
+
+Kubernetes에서는 이를 Deployment 단위로 표현할 수 있다.
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: node-api
+spec:
+  replicas: 10
+  selector:
+    matchLabels:
+      app: node-api
+  template:
+    metadata:
+      labels:
+        app: node-api
+    spec:
+      containers:
+        - name: node-api
+          image: registry.example.com/node-api:1.0.0
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: python-worker
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: python-worker
+  template:
+    metadata:
+      labels:
+        app: python-worker
+    spec:
+      containers:
+        - name: python-worker
+          image: registry.example.com/python-worker:1.0.0
+```
+
+이 구조의 핵심은 다음이다.
+
+> 각 component를 독립적으로 package하고, 독립적으로 배포하고, 독립적으로 scale할 수 있어야 cloud-native architecture에 가까워진다.
+
+---
+
+## 12. Containerization과 microservices
+
+Container를 쓴다고 자동으로 microservices가 되는 것은 아니다. Monolith도 container로 패키징할 수 있다.
+
+```text
+Monolith in container
+  └─ 하나의 container image에 전체 application 포함
+
+Microservices in containers
+  ├─ frontend container
+  ├─ auth service container
+  ├─ payment service container
+  ├─ search service container
+  └─ worker container
+```
+
+Containerization이 microservices와 잘 맞는 이유는 다음과 같다.
+
+| 항목 | 설명 |
+|---|---|
+| 독립 배포 | service별 image tag를 따로 배포 가능 |
+| 독립 scaling | 병목 service만 replica 증가 가능 |
+| runtime 다양성 | Node.js, Python, Java, Go 등을 service별로 선택 가능 |
+| 장애 격리 | 한 service 장애가 전체 process를 직접 죽이지 않도록 분리 가능 |
+| CI/CD 단순화 | service 단위 build/test/deploy pipeline 구성 가능 |
+| rollback 단순화 | 특정 service image만 이전 version으로 되돌릴 수 있음 |
+
+하지만 microservices는 운영 복잡도도 증가시킨다.
+
+- service discovery 필요
+- network latency 증가
+- distributed tracing 필요
+- transaction boundary 설계 필요
+- schema/version compatibility 관리 필요
+- deployment ordering 문제 발생 가능
+- observability 없으면 장애 분석이 어려움
+
+따라서 containerization은 microservices를 가능하게 하는 강력한 기반이지만, microservices 자체를 쉽게 만들어주는 마법은 아니다.
+
+---
+
+## 13. Containerization과 CI/CD
+
+Container image는 CI/CD에서 배포 artifact로 쓰기 좋다.
+
+전통적인 배포에서는 운영 서버에서 직접 많은 작업이 수행될 수 있다.
+
+```text
+1. 서버에 접속
+2. runtime 설치
+3. dependency 설치
+4. 환경 변수 설정
+5. source code 복사
+6. process manager 설정
+7. 실행
+```
+
+Container 기반 CI/CD에서는 흐름이 바뀐다.
+
+```text
+1. Source code commit
+2. CI에서 test 실행
+3. Docker/OCI image build
+4. Image tag 부여
+5. Registry push
+6. CD에서 image tag를 기준으로 배포
+```
+
+예시 pipeline은 다음과 같다.
+
+```text
+Git push
+  ↓
+Unit test
+  ↓
+Image build
+  ↓
+Image vulnerability scan
+  ↓
+Registry push
+  ↓
+Kubernetes Deployment image update
+  ↓
+Readiness check
+  ↓
+Traffic 전환
+```
+
+핵심은 source code를 production 서버에서 직접 build하는 것이 아니라, CI에서 만들어진 immutable artifact를 배포한다는 점이다.
+
+---
+
+## 14. Image tag와 배포 재현성
+
+좋은 방식은 image tag를 명확히 고정하는 것이다.
+
+```bash
+docker build -t registry.example.com/my-node-app:1.0.0 .
+docker push registry.example.com/my-node-app:1.0.0
+```
+
+또는 commit SHA 기반 tag를 사용할 수 있다.
+
+```bash
+docker build -t registry.example.com/my-node-app:git-a1b2c3d .
+docker push registry.example.com/my-node-app:git-a1b2c3d
+```
+
+운영에서 `latest`만 사용하는 방식은 추적성을 떨어뜨릴 수 있다.
+
+```yaml
+image: registry.example.com/my-node-app:latest
+```
+
+문제 상황은 다음과 같다.
+
+```text
+월요일 latest = A image
+화요일 latest = B image
+
+문제 발생 후 rollback하려고 할 때
+어떤 latest가 배포되어 있었는지 명확하지 않음
+```
+
+운영에서는 다음처럼 명시적인 tag를 사용하는 편이 낫다.
+
+```yaml
+image: registry.example.com/my-node-app:1.0.0
+```
+
+더 강하게는 digest pinning도 가능하다.
+
+```yaml
+image: registry.example.com/my-node-app@sha256:...
+```
+
+Digest는 image content를 기준으로 식별하기 때문에 tag보다 더 재현성이 높다.
+
+---
+
+## 15. Container 보안에서 주의할 점
+
+Container는 VM보다 가볍지만, 보안상 VM을 완전히 대체한다고 단정하면 안 된다. VM은 hypervisor를 경계로 guest OS가 분리되지만, container는 host kernel을 공유한다.
+
+```text
+VM:
+  guest OS별 kernel 분리
+
+Container:
+  host kernel 공유
+```
+
+따라서 container에는 최소 권한 원칙을 적용해야 한다.
+
+Kubernetes에서는 다음과 같은 `securityContext`를 고려할 수 있다.
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: secure-app
+spec:
+  containers:
+    - name: app
+      image: registry.example.com/secure-app:1.0.0
+      securityContext:
+        runAsNonRoot: true
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop:
+            - ALL
+```
+
+다음 설정은 격리를 크게 약화시킬 수 있으므로 주의해야 한다.
+
+```yaml
+securityContext:
+  privileged: true
+```
+
+Docker에서도 다음 옵션은 신중하게 사용해야 한다.
+
+```bash
+docker run --privileged ...
+```
+
+---
+
+## 16. 운영 적용 시 검증 포인트
+
+### 16.1 Image 크기
+
+Container가 VM보다 가볍다고 해도 image를 잘못 만들면 매우 커질 수 있다.
+
+비효율적인 예시는 다음과 같다.
+
+```dockerfile
+FROM ubuntu:latest
+
+RUN apt-get update
+RUN apt-get install -y nodejs npm curl vim git build-essential
+
+COPY . /app
+WORKDIR /app
+
+RUN npm install
+
+CMD ["node", "server.js"]
+```
+
+더 간결한 예시는 다음과 같다.
+
+```dockerfile
+FROM node:20-alpine
+
+WORKDIR /app
+
+COPY package*.json ./
+RUN npm ci --only=production
+
+COPY . .
+
+CMD ["node", "server.js"]
+```
+
+Multi-stage build를 적용할 수도 있다.
+
+```dockerfile
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci
+COPY . .
+RUN npm run build
+
+FROM node:20-alpine
+
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci --only=production
+COPY --from=builder /app/dist ./dist
+
+CMD ["node", "dist/server.js"]
+```
+
+### 16.2 Dependency 고정
+
+`npm install`은 build 시점마다 dependency 결과가 달라질 수 있다.
+
+```dockerfile
+RUN npm install
+```
+
+운영용 image에서는 lockfile 기반 설치가 더 적합하다.
+
+```dockerfile
+RUN npm ci --only=production
+```
+
+### 16.3 Secret 관리
+
+Secret을 image에 bake하면 안 된다.
+
+피해야 할 예시는 다음과 같다.
+
+```dockerfile
+ENV DB_PASSWORD=my-secret-password
+```
+
+Kubernetes에서는 Secret 또는 external secret manager를 통해 주입하는 방식이 적합하다.
+
+```yaml
+env:
+  - name: DB_PASSWORD
+    valueFrom:
+      secretKeyRef:
+        name: db-secret
+        key: password
+```
+
+### 16.4 Health check
+
+Container process가 실행 중이라는 사실만으로 application이 정상이라고 볼 수는 없다.
+
+Kubernetes에서는 `readinessProbe`, `livenessProbe`를 고려해야 한다.
+
+```yaml
+readinessProbe:
+  httpGet:
+    path: /healthz
+    port: 3000
+  initialDelaySeconds: 5
+  periodSeconds: 10
+
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: 3000
+  initialDelaySeconds: 30
+  periodSeconds: 20
+```
+
+### 16.5 Stateless 설계
+
+Container는 언제든지 재시작·교체될 수 있다는 전제로 설계하는 것이 좋다.
+
+주의할 점은 다음과 같다.
+
+```text
+container 내부 filesystem에 중요한 상태 저장 금지
+session을 local memory에만 저장하지 않기
+log는 stdout/stderr로 보내기
+설정은 environment/config로 주입
+stateful data는 DB, object storage, persistent volume 사용
+```
+
+---
+
+## 17. 자칫 실수하기 쉬운 부분
+
+### 17.1 Container는 VM의 완전한 대체재가 아니다
+
+Container와 VM은 서로 다른 abstraction이다. Kubernetes cluster의 worker node도 실제로는 cloud VM 위에서 실행되는 경우가 많다.
+
+```text
+Cloud VM
+  ↓
+Linux OS
+  ↓
+Container runtime
+  ↓
+Kubernetes Pod
+```
+
+Container가 VM을 완전히 없앤다기보다, 많은 경우 VM 위에서 container를 실행한다.
+
+### 17.2 Container는 항상 작지 않다
+
+Image를 잘못 만들면 몇 GB까지 커질 수 있다.
+
+Image 크기를 키우는 요소는 다음과 같다.
+
+```text
+build tools
+test files
+source maps
+cache
+package manager cache
+unused dependencies
+debug tools
+large base image
+```
+
+### 17.3 Container로 만들면 어디서나 무조건 동일하게 동작하는 것은 아니다
+
+Container는 실행 환경 재현성을 높이지만 완전한 동일성을 보장하지는 않는다.
+
+차이가 날 수 있는 요소는 다음과 같다.
+
+```text
+CPU architecture: amd64 vs arm64
+host kernel version
+GPU driver / CUDA version
+volume mount path
+network policy
+DNS
+timezone
+locale
+secret/config 주입 방식
+filesystem permission
+```
+
+### 17.4 Container 하나에 모든 process를 넣는 방식은 신중해야 한다
+
+하나의 container에 여러 process를 넣는 것은 가능하지만, 운영 단위가 복잡해질 수 있다.
+
+```text
+container
+├─ nginx
+├─ node api
+├─ background worker
+└─ cron
+```
+
+일반적으로는 component별로 분리하는 편이 관리하기 쉽다.
+
+```text
+nginx container
+api container
+worker container
+cronjob container
+```
+
+Kubernetes에서는 이 분리가 Deployment, Job, CronJob, sidecar pattern 등으로 자연스럽게 표현된다.
+
+---
+
+## 18. VM과 container 비교 요약
+
+| 항목 | VM | Container |
+|---|---|---|
+| 격리 방식 | hardware virtualization | OS-level isolation |
+| 실행 단위 | guest OS 포함 VM | isolated process |
+| OS kernel | VM마다 guest kernel | host kernel 공유 |
+| 크기 | 상대적으로 큼 | 상대적으로 작음 |
+| 시작 시간 | OS boot 필요 | process 시작 중심 |
+| resource overhead | 높음 | 낮음 |
+| scale-out 속도 | 상대적으로 느림 | 상대적으로 빠름 |
+| runtime packaging | VM image 중심 | container image 중심 |
+| cloud-native 적합성 | 가능하지만 무거울 수 있음 | microservices와 잘 맞음 |
+| 보안 경계 | hypervisor 기반 강한 격리 | kernel 공유로 별도 hardening 필요 |
+| 대표 사용처 | legacy, multi-OS, strong isolation | microservices, CI/CD, stateless app |
+
+---
+
+## 19. Mental model
+
+Containerization의 흐름은 다음 mental model로 정리할 수 있다.
+
+```text
+1. VM은 application을 guest OS 단위로 감싼다.
+
+2. Container는 application 실행에 필요한 runtime과 libraries를 image로 패키징한다.
+
+3. Container는 host OS kernel을 공유하고 isolated process로 실행된다.
+
+4. 같은 image에서 여러 container를 빠르게 만들 수 있다.
+
+5. 각 service를 container로 분리하면 독립 배포와 독립 scaling이 쉬워진다.
+
+6. CI/CD에서는 image가 배포 artifact가 된다.
+
+7. 운영에서는 image tag, resource limit, health check, secret 관리, securityContext를 함께 고려해야 한다.
+```
+
+---
+
+## 20. 정리
+
+Containerization의 본질은 단순한 경량화가 아니다. 실행 환경을 image로 명시하고, container라는 isolated process 단위로 실행함으로써 배포 재현성과 운영 유연성을 높이는 방식이다.
+
+VM은 application을 OS 단위로 감싸는 방식에 가깝고, container는 application 실행에 필요한 최소 환경을 image로 패키징해 process 단위로 실행하는 방식에 가깝다.
+
+Cloud-native 관점에서 containerization의 가치는 다음에 있다.
+
+```text
+portability
+scalability
+modularity
+resource efficiency
+independent deployment
+CI/CD-friendly artifact
+cloud-native architecture support
+```
+
+Kubernetes는 이 containerized workload를 여러 node에 걸쳐 scheduling, scaling, self-healing, rollout하는 orchestration layer로 이해하면 된다.

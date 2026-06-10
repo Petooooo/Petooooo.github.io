@@ -1,0 +1,1586 @@
+---
+area: "Cloud Infrastructure"
+type: "concept"
+series: "Kubernetes Essentials"
+title: "K8s 08. Operator"
+slug: "k8s-08-operator"
+date: "2026-06-02"
+updated: "2026-06-02"
+draft: false
+reviewed: true
+category: "Notes"
+tags: ["Kubernetes", "Operator", "CRD", "Custom Resource", "Controller", "Reconciliation", "StatefulSet", "GitOps", "RBAC", "Automation"]
+description: "Kubernetes Operator를 CRD, Custom Resource, Controller, reconciliation loop 관점에서 이해하고, 복잡한 stateful application 운영 지식을 Kubernetes API로 자동화하는 방식을 정리한다."
+---
+Kubernetes는 `Pod`, `Deployment`, `Service`, `ConfigMap`, `Secret`, `StatefulSet`, `PersistentVolumeClaim` 같은 resource를 통해 containerized application을 선언형으로 배포하고 운영할 수 있게 해준다. 하지만 모든 애플리케이션이 단순히 `replicas: 3`만 맞추면 되는 것은 아니다.
+
+특히 database, message queue, distributed cache, monitoring system, storage system 같은 stateful 또는 complex application은 운영 중 다음과 같은 작업이 필요하다.
+
+```text
+초기 cluster bootstrap
+leader election
+replica 추가/제거
+backup
+restore
+version upgrade
+schema migration
+failover
+configuration 변경
+TLS certificate rotation
+storage 재연결
+data rebalancing
+health check
+disaster recovery
+```
+
+Kubernetes 기본 controller는 이런 애플리케이션별 세부 운영 지식까지 모두 알 수 없다. 예를 들어 Kubernetes는 `StatefulSet` Pod를 다시 띄울 수는 있지만, 특정 database cluster에서 primary가 죽었을 때 어떤 replica를 승격해야 하는지, backup을 어떤 순서로 복구해야 하는지, version upgrade 중 어떤 node부터 drain해야 하는지는 기본적으로 알지 못한다.
+
+**Kubernetes Operator**는 이 gap을 메우기 위한 패턴이다. 사람이 애플리케이션을 운영할 때 수행하던 domain-specific 운영 지식을 Kubernetes controller로 코드화한다.
+
+---
+
+## 핵심 요약
+
+Operator는 Kubernetes의 기본 철학을 애플리케이션 운영 영역으로 확장한다.
+
+```text
+Declarative API
+  +
+Control loop
+  +
+Domain-specific operational knowledge
+  =
+Operator
+```
+
+한 문장으로 정리하면 다음과 같다.
+
+**Kubernetes Operator는 custom resource와 custom controller를 이용해, 사람이 하던 애플리케이션 운영 지식을 Kubernetes의 declarative API와 control loop 안으로 가져오는 확장 패턴이다.**
+
+Operator를 이해하려면 다음 네 가지 개념이 중요하다.
+
+```text
+Custom Resource Definition, CRD
+Custom Resource, CR
+Controller
+Reconciliation loop
+```
+
+| 개념 | 역할 |
+|---|---|
+| `CRD` | Kubernetes API에 새로운 resource type을 추가 |
+| `CR` | CRD로 정의한 type의 실제 instance |
+| `Controller` | CR을 watch하고 실제 resource와 application 상태를 조정 |
+| `Reconciliation loop` | desired state와 actual state를 지속적으로 비교하고 맞추는 반복 구조 |
+
+---
+
+## 왜 Operator가 필요한가?
+
+### Kubernetes 기본 기능은 stateless workload에 특히 강하다
+
+Kubernetes는 stateless web application에는 매우 강력하다.
+
+예를 들어 단순 API 서버를 생각해보자.
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: api
+  template:
+    metadata:
+      labels:
+        app: api
+    spec:
+      containers:
+        - name: api
+          image: registry.example.com/api:1.0.0
+```
+
+이 경우 Kubernetes가 할 일은 비교적 명확하다.
+
+```text
+api Pod 3개 유지
+Pod가 죽으면 새로 생성
+새 image로 rolling update
+Service로 traffic 분산
+readinessProbe 실패 Pod는 traffic에서 제외
+```
+
+Stateless application에서는 replica들이 대부분 동일하다.
+
+```text
+api-pod-1 = api-pod-2 = api-pod-3
+```
+
+따라서 어느 Pod가 죽어도 새 Pod를 만들면 된다. 이런 구조는 Kubernetes의 기본 controller model과 잘 맞는다.
+
+### Stateful 또는 complex workload는 단순 replica 관리로 부족하다
+
+Database 같은 workload는 다르다.
+
+예를 들어 PostgreSQL cluster를 생각해보자.
+
+```text
+postgres-0: primary
+postgres-1: replica
+postgres-2: replica
+```
+
+여기서 `postgres-0`이 죽었다고 하자. Kubernetes는 Pod가 죽었다는 사실을 감지하고 다시 만들 수 있다. 하지만 database 운영 관점에서는 더 많은 판단이 필요하다.
+
+```text
+primary가 정말 죽었는가?
+network partition은 아닌가?
+어떤 replica가 가장 최신 WAL을 가지고 있는가?
+replica를 primary로 승격해도 data loss가 없는가?
+old primary가 돌아왔을 때 split-brain을 어떻게 막을 것인가?
+client connection string은 어디를 가리켜야 하는가?
+backup은 언제 수행되었는가?
+restore 순서는 어떻게 되는가?
+```
+
+이것은 단순 `Deployment`나 `StatefulSet`만으로 해결되는 문제가 아니다. Kubernetes는 “Pod를 유지하는 방법”은 알지만, 특정 database의 “운영 절차”를 기본적으로 알지는 못한다.
+
+이 지점에서 Operator가 필요해진다.
+
+---
+
+## Human operator의 지식을 software operator로 옮기기
+
+Operator라는 이름은 사람이 시스템을 운영하는 **human operator**에서 온 개념으로 이해하면 쉽다.
+
+사람 운영자는 특정 application에 대해 깊은 지식을 갖고 있다.
+
+```text
+이 database는 bootstrap 순서가 중요하다.
+primary가 죽으면 replica 중 하나를 승격해야 한다.
+backup은 매일 새벽에 수행해야 한다.
+restore는 먼저 volume을 준비하고, 그다음 WAL을 replay해야 한다.
+version upgrade는 minor version부터 순차적으로 해야 한다.
+cluster size를 줄일 때는 먼저 replica를 drain해야 한다.
+```
+
+Operator는 이런 운영 절차를 코드로 옮긴다.
+
+```text
+Human Operator
+  ↓
+운영 지식 코드화
+  ↓
+Kubernetes Controller
+  ↓
+Custom Resource를 watch
+  ↓
+실제 Kubernetes resource와 외부 시스템을 조정
+```
+
+즉 Operator는 단순 배포 도구가 아니라 **application-specific controller**다.
+
+---
+
+## Operator의 핵심 구성요소
+
+Operator를 이해하려면 `CRD`, `CR`, `Controller`, `Reconciliation loop`의 관계를 잡아야 한다.
+
+```text
+CRD
+  → Kubernetes API에 새로운 kind 추가
+
+CR
+  → 사용자가 원하는 application-specific desired state 선언
+
+Controller
+  → CR을 watch하고 실제 상태를 조정
+
+Reconciliation loop
+  → desired state와 actual state를 계속 맞춤
+```
+
+---
+
+## Custom Resource Definition, CRD
+
+**CRD**는 Kubernetes API에 새로운 resource type을 추가하는 정의다.
+
+Kubernetes는 기본적으로 `Pod`, `Service`, `Deployment` 같은 resource를 알고 있다.
+
+```bash
+kubectl get pods
+kubectl get services
+kubectl get deployments
+```
+
+CRD를 설치하면 Kubernetes API가 새로운 kind를 알게 된다.
+
+예를 들어 `PostgresCluster`라는 custom resource type을 추가할 수 있다.
+
+```yaml
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: postgresclusters.database.example.com
+spec:
+  group: database.example.com
+  names:
+    kind: PostgresCluster
+    plural: postgresclusters
+    singular: postgrescluster
+  scope: Namespaced
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+```
+
+이 CRD가 설치되면 사용자는 다음처럼 custom resource를 만들 수 있다.
+
+```yaml
+apiVersion: database.example.com/v1
+kind: PostgresCluster
+metadata:
+  name: orders-db
+spec:
+  version: "15"
+  replicas: 3
+  storage:
+    size: 100Gi
+  backup:
+    schedule: "0 2 * * *"
+```
+
+이제 Kubernetes API는 `PostgresCluster`라는 새로운 resource type을 다룰 수 있다.
+
+---
+
+## Custom Resource, CR
+
+**CR**은 CRD로 정의한 type의 실제 instance다.
+
+위 예시에서 CRD는 `PostgresCluster`라는 kind를 정의한다. CR은 실제 `orders-db`라는 database cluster 요청이다.
+
+```text
+CRD
+  → PostgresCluster라는 resource type을 Kubernetes API에 추가
+
+CR
+  → orders-db라는 실제 PostgresCluster instance
+```
+
+비유하면 다음과 같다.
+
+```text
+CRD = class definition
+CR  = object instance
+```
+
+또는 Kubernetes 관점에서는 다음과 같다.
+
+```text
+Deployment kind
+  ↓
+api Deployment object
+
+PostgresCluster kind
+  ↓
+orders-db PostgresCluster object
+```
+
+CR의 핵심은 `.spec`과 `.status`다.
+
+```yaml
+spec:
+  replicas: 3
+  version: "15"
+
+status:
+  phase: Ready
+  primary: orders-db-0
+  readyReplicas: 3
+```
+
+일반적으로 `.spec`은 사용자가 원하는 상태, `.status`는 controller가 관찰한 현재 상태를 표현한다.
+
+```text
+spec
+  → desired state
+
+status
+  → observed state
+```
+
+---
+
+## Controller
+
+CRD와 CR만 있으면 아직 자동화가 되지 않는다. CRD는 Kubernetes API에 새로운 type을 추가하고, CR은 desired state를 저장할 뿐이다.
+
+실제로 그 desired state를 읽고 행동하는 것은 **Controller**다.
+
+Controller는 다음을 수행한다.
+
+```text
+Custom Resource watch
+  ↓
+현재 상태 관찰
+  ↓
+desired state와 actual state 비교
+  ↓
+필요한 Kubernetes resource 생성/수정/삭제
+  ↓
+상태 업데이트
+  ↓
+반복
+```
+
+예를 들어 `PostgresCluster` controller는 다음 resource를 만들 수 있다.
+
+```text
+StatefulSet
+Service
+Secret
+ConfigMap
+PersistentVolumeClaim
+PodDisruptionBudget
+CronJob for backup
+NetworkPolicy
+```
+
+즉 사용자는 `PostgresCluster` 하나만 선언하지만, Operator는 그 뒤에서 여러 Kubernetes resource를 생성하고 관리한다.
+
+---
+
+## Reconciliation loop
+
+Operator의 동작 방식은 Kubernetes controller와 동일하게 reconciliation loop다.
+
+```text
+Observe current state
+  ↓
+Compare with desired state
+  ↓
+Take action
+  ↓
+Update status
+  ↓
+Repeat
+```
+
+예시:
+
+```text
+desired state:
+  PostgresCluster replicas = 3
+
+actual state:
+  StatefulSet replicas = 2
+
+action:
+  StatefulSet replicas를 3으로 수정
+```
+
+또 다른 예시:
+
+```text
+desired state:
+  backup schedule = 매일 02:00
+
+actual state:
+  backup CronJob 없음
+
+action:
+  backup CronJob 생성
+```
+
+Reconciliation은 반복 실행되므로 idempotent해야 한다.
+
+```text
+같은 reconcile을 여러 번 실행해도 결과가 안정적이어야 한다.
+중간에 실패해도 다음 reconcile에서 이어서 복구할 수 있어야 한다.
+이미 존재하는 resource를 다시 만들려고 해서 실패하면 안 된다.
+```
+
+---
+
+## Operator 없이 복잡한 애플리케이션 배포하기
+
+Operator 없이 복잡한 애플리케이션을 배포한다면 보통 여러 YAML을 직접 작성해야 한다.
+
+예를 들어 database cluster를 수동으로 구성한다고 하자.
+
+```text
+Namespace
+ServiceAccount
+Role
+RoleBinding
+Secret
+ConfigMap
+StatefulSet
+Headless Service
+Client Service
+PersistentVolumeClaim
+Backup CronJob
+PodDisruptionBudget
+NetworkPolicy
+```
+
+각각을 직접 만들 수 있다.
+
+```bash
+kubectl apply -f namespace.yaml
+kubectl apply -f secret.yaml
+kubectl apply -f configmap.yaml
+kubectl apply -f statefulset.yaml
+kubectl apply -f service.yaml
+kubectl apply -f backup-cronjob.yaml
+```
+
+처음 설치는 가능하다. 하지만 운영 lifecycle이 문제다.
+
+```text
+version upgrade는 어떤 순서로 하는가?
+replica 추가 시 data sync는 어떻게 확인하는가?
+backup 실패 시 재시도는 어떻게 하는가?
+restore는 어떤 순서로 수행하는가?
+primary failover는 누가 판단하는가?
+TLS certificate가 만료되면 어떻게 교체하는가?
+storage size 변경은 안전한가?
+```
+
+YAML만으로는 이런 운영 절차가 자동화되지 않는다. Helm chart를 사용하면 여러 manifest를 template으로 묶을 수 있지만, Helm도 기본적으로는 install/upgrade 시점에 manifest를 rendering하고 적용하는 도구에 가깝다.
+
+애플리케이션이 runtime 중 지속적으로 상태를 관찰하고 판단해야 한다면 Operator가 더 적합하다.
+
+---
+
+## Operator를 사용해 복잡한 애플리케이션 배포하기
+
+Operator를 사용하면 사용자는 application-specific custom resource를 선언한다.
+
+예시:
+
+```yaml
+apiVersion: database.example.com/v1
+kind: PostgresCluster
+metadata:
+  name: orders-db
+spec:
+  version: "15"
+  replicas: 3
+  storage:
+    size: 100Gi
+  backup:
+    schedule: "0 2 * * *"
+```
+
+이 선언은 Kubernetes built-in object보다 더 application-oriented하다.
+
+사용자는 이렇게 말하는 것이다.
+
+```text
+orders-db라는 PostgreSQL cluster를 만들고 싶다.
+version은 15이고,
+replica는 3개이며,
+storage는 100Gi이고,
+backup은 매일 02:00에 돌리고 싶다.
+```
+
+Operator는 이 CR을 보고 필요한 resource를 만든다.
+
+```text
+PostgresCluster/orders-db
+  ↓
+Operator
+  ├─ StatefulSet/orders-db
+  ├─ Service/orders-db
+  ├─ Service/orders-db-headless
+  ├─ Secret/orders-db-credentials
+  ├─ ConfigMap/orders-db-config
+  ├─ PVC/orders-db-data-0
+  ├─ PVC/orders-db-data-1
+  ├─ PVC/orders-db-data-2
+  └─ CronJob/orders-db-backup
+```
+
+그리고 생성 이후에도 지속적으로 감시한다.
+
+```text
+primary가 죽었는가?
+replica가 lagging 중인가?
+backup job이 성공했는가?
+storage가 부족한가?
+version upgrade가 요청되었는가?
+```
+
+즉 Operator는 설치 시점뿐 아니라 운영 전체 lifecycle에 관여한다.
+
+---
+
+## Operator는 Helm과 무엇이 다른가?
+
+Helm과 Operator는 자주 비교된다. 둘 다 Kubernetes application 배포에 쓰이기 때문이다.
+
+하지만 역할이 다르다.
+
+| 구분 | Helm | Operator |
+|---|---|---|
+| 기본 역할 | Kubernetes manifest packaging 및 release 관리 | 애플리케이션 운영 지식 자동화 |
+| 동작 시점 | install/upgrade/rollback 중심 | 지속적인 reconciliation |
+| 핵심 단위 | Chart, Values, Release | CRD, CR, Controller |
+| 상태 감시 | 제한적 | 지속적으로 cluster/application 상태 감시 |
+| 복잡한 failover | 직접 구현 어려움 | controller logic으로 구현 가능 |
+| backup/restore | hook/job로 일부 가능 | application-specific logic으로 자동화 가능 |
+| upgrade 순서 제어 | chart hook 등으로 가능하지만 한계 있음 | domain logic으로 세밀하게 제어 가능 |
+| 적합한 대상 | 비교적 정적인 manifest 묶음 | stateful/complex lifecycle application |
+
+간단한 web app이면 Helm chart로 충분한 경우가 많다.
+
+```text
+Deployment
+Service
+Ingress
+ConfigMap
+Secret
+```
+
+하지만 database, messaging system, storage system처럼 운영 중 판단이 필요한 시스템은 Operator가 더 적합할 수 있다.
+
+```text
+PostgreSQL Operator
+Kafka Operator
+Prometheus Operator
+Elasticsearch Operator
+Redis Operator
+cert-manager
+Argo CD ApplicationSet Controller
+```
+
+주의할 점은 Helm과 Operator가 경쟁 관계만은 아니라는 것이다. Operator 자체를 Helm chart로 설치할 수도 있고, Helm 기반 Operator를 만들 수도 있다.
+
+---
+
+## Operator는 Kubernetes를 어떻게 확장하는가?
+
+Kubernetes는 API 중심 system이다. 사용자는 Kubernetes API에 desired state를 선언하고, controller가 actual state를 맞춘다.
+
+기본 Kubernetes에서는 다음이 이미 built-in으로 존재한다.
+
+```text
+Deployment Controller
+StatefulSet Controller
+DaemonSet Controller
+Job Controller
+Node Controller
+EndpointSlice Controller
+```
+
+Operator는 여기에 application-specific controller를 추가하는 것이다.
+
+```text
+Kubernetes API
+  ├─ Built-in Resources
+  │   ├─ Pod
+  │   ├─ Service
+  │   ├─ Deployment
+  │   └─ StatefulSet
+  │
+  └─ Custom Resources
+      ├─ PostgresCluster
+      ├─ KafkaCluster
+      ├─ Backup
+      └─ Certificate
+```
+
+Operator는 Kubernetes core code를 수정하지 않고도 cluster behavior를 확장한다.
+
+Operator의 철학은 다음이다.
+
+```text
+Kubernetes API를 확장한다.
+새로운 resource type을 만든다.
+그 resource type의 lifecycle을 controller로 관리한다.
+```
+
+---
+
+## CRD, CR, Controller의 관계를 예시로 보기
+
+### 사용자가 원하는 것
+
+사용자는 다음처럼 선언한다.
+
+```yaml
+apiVersion: cache.example.com/v1
+kind: RedisCluster
+metadata:
+  name: session-cache
+spec:
+  replicas: 3
+  version: "7.2"
+  memory: "4Gi"
+```
+
+이것이 Custom Resource다.
+
+### Operator가 해석하는 것
+
+Redis Operator는 이 CR을 watch한다.
+
+```text
+RedisCluster/session-cache 생성됨
+  ↓
+spec.replicas = 3
+spec.version = 7.2
+spec.memory = 4Gi
+```
+
+### Operator가 만드는 것
+
+Operator는 필요한 Kubernetes resource를 만든다.
+
+```text
+StatefulSet/session-cache
+Service/session-cache
+ConfigMap/session-cache-config
+Secret/session-cache-auth
+PVC/session-cache-data-0
+PVC/session-cache-data-1
+PVC/session-cache-data-2
+```
+
+### 상태가 바뀌면 다시 조정
+
+사용자가 replica를 5로 바꾼다.
+
+```yaml
+spec:
+  replicas: 5
+```
+
+Operator는 변경을 감지한다.
+
+```text
+desired replicas = 5
+actual replicas = 3
+```
+
+그리고 scaling 절차를 수행한다.
+
+```text
+새 replica Pod 추가
+새 PVC 생성
+cluster membership 변경
+data rebalancing 확인
+status 업데이트
+```
+
+단순히 StatefulSet replica를 5로 바꾸는 것보다 더 깊은 domain logic이 들어갈 수 있다.
+
+---
+
+## Operator가 특히 유용한 작업
+
+Operator가 유용한 작업은 대체로 “운영 중 판단이 필요한 반복 작업”이다.
+
+### 설치와 bootstrap
+
+복잡한 application은 설치 순서가 중요할 수 있다.
+
+```text
+Secret 생성
+ConfigMap 생성
+PVC 준비
+initial Pod bootstrap
+cluster init
+replica join
+Service expose
+status Ready 업데이트
+```
+
+Operator는 이 순서를 코드로 관리할 수 있다.
+
+### Scaling
+
+단순 stateless app은 replica 수만 늘리면 된다. 하지만 stateful cluster는 replica 추가와 제거가 더 복잡하다.
+
+```text
+새 node join
+data sync
+replication lag 확인
+traffic 참여
+old node drain
+data migration
+membership update
+```
+
+Operator는 application-specific scaling logic을 수행할 수 있다.
+
+### Backup
+
+Backup은 단순 CronJob으로도 가능하지만, application별로 안전한 backup 절차가 다르다.
+
+```text
+consistent snapshot 생성
+write freeze 여부 판단
+WAL archive
+object storage 업로드
+backup metadata 기록
+retention policy 적용
+```
+
+Operator는 `Backup`이라는 CR을 제공할 수도 있다.
+
+```yaml
+apiVersion: database.example.com/v1
+kind: Backup
+metadata:
+  name: orders-db-manual-backup
+spec:
+  clusterName: orders-db
+  destination: s3://backup/orders-db
+```
+
+### Restore
+
+Restore는 backup보다 더 복잡하다.
+
+```text
+기존 cluster 정지 여부 판단
+volume 초기화
+backup artifact 다운로드
+WAL replay
+new primary 결정
+replica 재구성
+client Service 전환
+```
+
+Operator는 restore 절차를 선언형 API로 제공할 수 있다.
+
+### Upgrade
+
+Upgrade는 Operator의 대표적인 강점이다.
+
+예를 들어 database cluster를 `14`에서 `15`로 올린다고 하자.
+
+```yaml
+spec:
+  version: "15"
+```
+
+Operator는 다음을 수행할 수 있다.
+
+```text
+현재 version 확인
+upgrade 가능 경로 검증
+backup 선행 여부 확인
+replica부터 순차 upgrade
+health 확인
+primary switchover
+old version cleanup
+status 업데이트
+```
+
+단순히 image tag만 바꾸는 것보다 훨씬 많은 판단이 필요하다.
+
+### Failure recovery
+
+Operator는 failure를 application domain 관점에서 볼 수 있다.
+
+```text
+Pod 죽음
+  → Kubernetes 기본 self-healing 가능
+
+primary database 죽음
+  → Operator가 replica 상태 확인 후 failover 수행
+
+replication lag 증가
+  → Operator가 상태 업데이트 또는 경고
+
+backup 실패
+  → Operator가 retry 또는 status condition 기록
+```
+
+---
+
+## Operator와 StatefulSet의 관계
+
+Operator를 설명할 때 자주 나오는 질문이 있다.
+
+> StatefulSet이 있는데 왜 Operator가 필요한가?
+
+`StatefulSet`은 stateful workload를 Kubernetes에서 실행하기 위한 기본 object다. stable network identity, ordered deployment, stable storage 등을 제공한다.
+
+예를 들어:
+
+```yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+spec:
+  serviceName: postgres-headless
+  replicas: 3
+```
+
+StatefulSet은 다음을 제공한다.
+
+```text
+pod 이름 안정성: postgres-0, postgres-1, postgres-2
+storage 안정성: 각 Pod에 PVC 연결
+ordered rollout
+ordered scaling
+```
+
+하지만 StatefulSet은 PostgreSQL, Kafka, Redis, Elasticsearch 각각의 운영 지식을 알지 못한다.
+
+```text
+StatefulSet이 아는 것:
+  Pod 순서
+  PVC 연결
+  replica 개수
+  rolling update
+
+StatefulSet이 모르는 것:
+  database primary/replica 역할
+  safe failover 절차
+  backup consistency
+  schema migration
+  cluster membership
+  shard rebalancing
+  quorum
+```
+
+Operator는 StatefulSet을 사용할 수 있다. 하지만 Operator의 역할은 StatefulSet을 넘어선다.
+
+```text
+Operator
+  ↓
+StatefulSet 생성/관리
+  ↓
+application-specific operation 수행
+```
+
+즉 StatefulSet은 Operator가 사용할 수 있는 도구 중 하나다.
+
+---
+
+## Operator의 내부 구조
+
+Operator는 일반적으로 Kubernetes cluster 안에서 Pod로 실행된다.
+
+```text
+operator-controller-manager Pod
+  ↓
+Kubernetes API Server watch
+  ↓
+Custom Resource 변경 감지
+  ↓
+reconcile function 실행
+  ↓
+Kubernetes resource 생성/수정/삭제
+```
+
+구조를 단순화하면 다음과 같다.
+
+```text
+User
+  ↓ kubectl apply
+Custom Resource
+  ↓ watch
+Operator Controller
+  ↓ create/update/delete
+Deployment / StatefulSet / Service / Secret / PVC / Job
+```
+
+Operator는 Kubernetes API client다. 특별한 외부 마법이 아니라, Kubernetes API를 watch하고 필요한 resource를 조정하는 controller다.
+
+### Reconcile function
+
+Operator의 핵심은 reconcile function이다.
+
+pseudo code로 보면 다음과 같다.
+
+```text
+reconcile(request):
+  cr = get CustomResource(request.name)
+
+  if cr does not exist:
+    cleanup if needed
+    return
+
+  desired = build desired child resources from cr.spec
+  actual = read current child resources
+
+  for each resource:
+    if missing:
+      create
+    if different:
+      update
+    if extra:
+      delete or ignore
+
+  update cr.status
+  requeue if needed
+```
+
+이 function은 반복 호출되어도 안전해야 한다. 그래서 idempotency가 중요하다.
+
+```text
+같은 reconcile을 여러 번 실행해도 결과가 안정적이어야 한다.
+중간에 실패해도 다음 reconcile에서 이어서 복구할 수 있어야 한다.
+이미 존재하는 resource를 다시 만들려고 해서 실패하면 안 된다.
+```
+
+---
+
+## Operator Framework와 Operator SDK
+
+**Operator Framework**는 Kubernetes native application, 즉 Operator를 효과적이고 자동화된 방식으로 관리하기 위한 toolkit으로 이해할 수 있다.
+
+Operator SDK는 Operator 개발을 쉽게 하기 위한 도구다.
+
+```text
+프로젝트 scaffold 생성
+CRD 정의 보조
+controller 코드 구조 제공
+RBAC manifest 생성
+deployment manifest 생성
+testing과 packaging 지원
+```
+
+Operator SDK는 여러 workflow를 제공한다.
+
+| 방식 | 설명 |
+|---|---|
+| Go Operator | controller-runtime 기반으로 reconciliation logic을 Go로 직접 구현 |
+| Ansible Operator | Ansible playbook/role을 reconciliation logic으로 사용 |
+| Helm Operator | Helm chart를 reconciliation logic에 활용 |
+
+여기서 중요한 점은 SDK가 scaffolding을 제공하더라도 application-specific 운영 로직은 결국 직접 설계해야 한다는 것이다.
+
+---
+
+## Operator Lifecycle Manager, OLM
+
+Operator를 만들고 나면 또 다른 문제가 생긴다.
+
+```text
+Operator 자체를 어떻게 설치할 것인가?
+Operator version upgrade는 어떻게 할 것인가?
+CRD version은 어떻게 관리할 것인가?
+권한은 어떻게 부여할 것인가?
+여러 namespace에 어떻게 배포할 것인가?
+```
+
+이런 operator lifecycle을 관리하기 위해 **Operator Lifecycle Manager**, OLM이 사용될 수 있다.
+
+개념적으로 OLM은 다음을 관리한다.
+
+```text
+Operator package
+Operator install
+Operator upgrade
+CRD dependency
+RBAC
+subscription
+channel
+catalog
+```
+
+다만 모든 Operator가 반드시 OLM으로 설치되어야 하는 것은 아니다. Helm chart, plain YAML, GitOps tool로도 Operator를 설치할 수 있다.
+
+중요한 것은 Operator 자체도 하나의 workload이므로 lifecycle 관리가 필요하다는 점이다.
+
+---
+
+## Operator의 capability level
+
+Operator는 단순한 설치 자동화부터 완전한 lifecycle 자동화까지 수준이 다를 수 있다.
+
+| 수준 | 설명 |
+|---|---|
+| Basic Install | 애플리케이션 설치 자동화 |
+| Seamless Upgrades | version upgrade 자동화 |
+| Full Lifecycle | backup, restore, failover, scaling 등 lifecycle 관리 |
+| Deep Insights | metric, alert, event 기반 운영 상태 이해 |
+| Auto Pilot | 장애 대응, tuning, recovery를 더 자율적으로 수행 |
+
+모든 Operator가 높은 수준의 자동화를 제공하는 것은 아니다.
+
+어떤 Operator는 단순히 여러 manifest를 생성하는 수준일 수 있고, 어떤 Operator는 backup/restore/failover까지 깊게 처리할 수 있다.
+
+따라서 Operator를 도입할 때는 이름만 보고 판단하면 안 된다.
+
+```text
+이 Operator가 정확히 어떤 lifecycle 작업을 자동화하는가?
+backup/restore를 지원하는가?
+version upgrade를 지원하는가?
+failover를 자동으로 수행하는가?
+status condition은 충분히 자세한가?
+운영자가 수동으로 해야 하는 작업은 무엇인가?
+```
+
+---
+
+## Operator를 써야 하는 경우
+
+Operator가 적합한 경우는 다음과 같다.
+
+```text
+애플리케이션이 stateful하다.
+운영 절차가 반복적이지만 복잡하다.
+단순 manifest 적용만으로 lifecycle 관리가 어렵다.
+backup/restore/failover/upgrade가 중요하다.
+domain-specific health 판단이 필요하다.
+사용자에게 더 높은 수준의 declarative API를 제공하고 싶다.
+여러 Kubernetes resource를 하나의 custom resource로 추상화하고 싶다.
+```
+
+예시:
+
+```text
+Database cluster
+Kafka cluster
+Redis cluster
+Elasticsearch cluster
+Prometheus stack
+Certificate management
+Storage system
+Machine learning platform
+External cloud resource bridge
+```
+
+`cert-manager`도 Operator pattern의 좋은 예시로 볼 수 있다. 사용자는 `Certificate` resource를 만들고, controller가 certificate 발급과 Secret 갱신을 관리한다.
+
+```yaml
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: api-cert
+spec:
+  secretName: api-tls
+  dnsNames:
+    - api.example.com
+```
+
+사용자는 “이 인증서가 필요하다”고 선언하고, controller는 ACME issuer나 CA와 통신해 실제 certificate를 발급하고 Secret을 만든다.
+
+---
+
+## Operator가 과한 경우
+
+Operator는 강력하지만 항상 필요한 것은 아니다.
+
+다음 경우에는 Operator보다 단순한 도구가 낫다.
+
+```text
+단순 stateless web application
+Deployment + Service + Ingress만 있으면 충분한 경우
+운영 중 application-specific 판단이 거의 없는 경우
+Helm chart로 lifecycle 관리가 충분한 경우
+CRD와 controller를 유지보수할 팀이 없는 경우
+```
+
+예를 들어 단순 API 서버는 Operator가 없어도 충분하다.
+
+```text
+Deployment
+Service
+Ingress
+ConfigMap
+Secret
+HPA
+```
+
+이 정도는 Helm chart나 Kustomize로 관리해도 된다.
+
+Operator를 만들면 다음 책임이 생긴다.
+
+```text
+CRD versioning
+controller bug 수정
+RBAC 관리
+upgrade path 관리
+status 설계
+observability
+test
+documentation
+backward compatibility
+```
+
+즉 Operator는 “자동화 도구”이지만 동시에 “운영해야 할 software”다.
+
+---
+
+## Operator 설계에서 중요한 원칙
+
+### Spec과 Status를 분리한다
+
+Custom Resource는 보통 `.spec`과 `.status`를 가진다.
+
+```yaml
+spec:
+  replicas: 3
+  version: "15"
+
+status:
+  phase: Ready
+  readyReplicas: 3
+  primary: orders-db-0
+```
+
+구분은 명확해야 한다.
+
+| 필드 | 의미 | 주체 |
+|---|---|---|
+| `spec` | 사용자가 원하는 상태 | 사용자 또는 GitOps |
+| `status` | controller가 관찰한 현재 상태 | Operator |
+
+사용자가 `status`를 직접 수정하는 구조는 피해야 한다.
+
+### Idempotent reconcile
+
+Reconcile은 여러 번 호출되어도 안전해야 한다.
+
+```text
+이미 Secret이 있으면 다시 만들지 않는다.
+StatefulSet이 있으면 필요한 field만 업데이트한다.
+중간 실패 후 재시도해도 상태가 꼬이지 않는다.
+```
+
+나쁜 reconcile은 다음과 같다.
+
+```text
+실행할 때마다 새 Secret 생성
+실행할 때마다 random password 변경
+매 reconcile마다 Pod 재시작 유발
+일시적 API 오류에서 상태를 깨뜨림
+```
+
+### Status condition을 잘 설계한다
+
+운영자가 `kubectl get`이나 `kubectl describe`만 봐도 상태를 이해할 수 있어야 한다.
+
+예시:
+
+```yaml
+status:
+  conditions:
+    - type: Ready
+      status: "True"
+      reason: ClusterReady
+      message: "All replicas are ready"
+    - type: BackupAvailable
+      status: "True"
+      reason: LastBackupSucceeded
+      message: "Last backup completed at 2026-06-02T02:00:00Z"
+```
+
+좋은 Operator는 문제가 생겼을 때 무엇이 잘못되었는지 status와 events로 드러낸다.
+
+### Finalizer를 신중하게 사용한다
+
+Operator는 custom resource 삭제 시 외부 resource cleanup이 필요할 수 있다.
+
+예를 들어 cloud database instance를 생성하는 Operator라면 CR 삭제 시 외부 database도 삭제해야 할 수 있다.
+
+이때 finalizer를 사용할 수 있다.
+
+```text
+CR delete 요청
+  ↓
+finalizer 때문에 즉시 삭제되지 않음
+  ↓
+Operator가 외부 resource cleanup
+  ↓
+finalizer 제거
+  ↓
+CR 삭제 완료
+```
+
+하지만 finalizer logic이 실패하면 resource가 삭제되지 않고 stuck될 수 있다. 따라서 cleanup retry와 manual recovery path가 필요하다.
+
+### OwnerReference와 garbage collection
+
+Operator가 child resource를 만들 때 owner reference를 설정하면, parent CR 삭제 시 child resource가 garbage collection될 수 있다.
+
+```text
+PostgresCluster/orders-db
+  ├─ StatefulSet/orders-db
+  ├─ Service/orders-db
+  └─ Secret/orders-db
+```
+
+다만 cross-namespace resource나 cluster-scoped resource는 owner reference 제약이 있으므로 주의해야 한다.
+
+---
+
+## Operator와 GitOps
+
+Operator는 GitOps와 잘 어울린다.
+
+GitOps에서는 desired state를 Git에 저장한다.
+
+```yaml
+apiVersion: database.example.com/v1
+kind: PostgresCluster
+metadata:
+  name: orders-db
+spec:
+  version: "15"
+  replicas: 3
+  storage:
+    size: 100Gi
+```
+
+Argo CD나 Flux가 이 CR을 cluster에 적용한다.
+
+```text
+Git repository
+  ↓
+GitOps controller
+  ↓
+Custom Resource 적용
+  ↓
+Operator가 실제 resource 생성/관리
+```
+
+즉 GitOps controller는 CR을 적용하고, Operator는 그 CR의 의미를 해석해 lifecycle을 관리한다.
+
+```text
+GitOps
+  → desired resource를 cluster에 sync
+
+Operator
+  → custom resource의 desired state를 실제 application 상태로 reconcile
+```
+
+주의할 점도 있다.
+
+```text
+GitOps controller와 Operator가 같은 resource를 서로 덮어쓰면 안 된다.
+Operator가 관리하는 child resource를 GitOps가 직접 관리하면 drift conflict가 생길 수 있다.
+Git에는 보통 CR을 저장하고, child resource는 Operator가 관리하게 두는 편이 낫다.
+```
+
+---
+
+## Operator와 security
+
+Operator는 cluster 안에서 강한 권한을 가질 수 있다. 따라서 보안 설계가 중요하다.
+
+### RBAC 최소 권한
+
+Operator가 필요한 resource만 조작하도록 RBAC를 제한해야 한다.
+
+```yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: postgres-operator
+rules:
+  - apiGroups: ["apps"]
+    resources: ["statefulsets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+```
+
+Cluster-wide Operator라면 `ClusterRole`이 필요할 수 있지만, 가능한 범위를 좁히는 것이 좋다.
+
+### CRD 설치 권한
+
+CRD는 cluster-scoped resource다. 따라서 CRD를 설치하려면 높은 권한이 필요하다.
+
+```text
+CRD 정의 자체
+  → cluster scope
+
+CRD로 생성되는 Custom Resource
+  → Namespaced 또는 Cluster scope 가능
+```
+
+운영에서는 다음을 구분해야 한다.
+
+```text
+platform admin:
+  CRD와 Operator 설치
+
+application team:
+  namespace 안에서 Custom Resource 생성
+```
+
+### Secret 관리
+
+Operator가 Secret을 생성하거나 rotation할 수 있다면, Secret lifecycle과 접근 권한을 신중히 설계해야 한다.
+
+```text
+password 생성
+certificate 생성
+token rotation
+external secret manager 연동
+Secret owner와 namespace 관리
+```
+
+Operator log에 secret 값이 노출되지 않도록 해야 한다.
+
+### Supply chain
+
+Operator image 자체도 container image다. 따라서 다음을 검증해야 한다.
+
+```text
+Operator image source
+image signature
+vulnerability scan
+RBAC manifest
+CRD schema
+upgrade path
+```
+
+---
+
+## Operator troubleshooting
+
+Operator를 사용하는 application에 문제가 생기면 일반 Kubernetes resource와 custom resource를 함께 봐야 한다.
+
+### Custom Resource 확인
+
+```bash
+kubectl get postgresclusters
+kubectl describe postgrescluster orders-db
+```
+
+확인할 것:
+
+```text
+spec이 의도한 값인가?
+status condition이 무엇을 말하는가?
+events에 error가 있는가?
+Ready condition이 True인가?
+```
+
+### Operator Pod 확인
+
+```bash
+kubectl get pods -n operators
+kubectl logs -n operators <operator-pod>
+```
+
+확인할 것:
+
+```text
+Operator Pod가 Running인가?
+reconcile error가 반복되는가?
+RBAC permission denied가 있는가?
+CRD version mismatch가 있는가?
+external API 호출 실패가 있는가?
+```
+
+### Child resource 확인
+
+```bash
+kubectl get statefulset
+kubectl get pods
+kubectl get svc
+kubectl get pvc
+kubectl get secret
+```
+
+확인할 것:
+
+```text
+Operator가 child resource를 만들었는가?
+StatefulSet replica가 맞는가?
+Pod가 Ready인가?
+PVC가 Bound인가?
+Service endpoint가 있는가?
+```
+
+### RBAC 확인
+
+Operator log에 다음과 같은 오류가 있다면 RBAC 문제일 수 있다.
+
+```text
+forbidden: User "system:serviceaccount:..." cannot create resource ...
+```
+
+확인:
+
+```bash
+kubectl auth can-i create statefulsets \
+  --as system:serviceaccount:operators:postgres-operator
+```
+
+### CRD 확인
+
+```bash
+kubectl get crd
+kubectl describe crd postgresclusters.database.example.com
+```
+
+확인할 것:
+
+```text
+CRD가 설치되어 있는가?
+version이 맞는가?
+served/storage version이 올바른가?
+schema validation error가 있는가?
+```
+
+---
+
+## Operator를 만들 때의 난이도
+
+Operator는 단순한 shell script가 아니다. 잘 만들려면 Kubernetes controller model을 이해해야 한다.
+
+필요한 개념:
+
+```text
+Kubernetes API machinery
+CRD schema
+controller-runtime
+watch / cache / client
+reconcile loop
+RBAC
+owner reference
+finalizer
+status subresource
+webhook
+leader election
+testing
+upgrade compatibility
+```
+
+Operator SDK는 scaffolding과 코드 생성을 도와주지만, application-specific 운영 로직은 결국 개발자가 설계해야 한다.
+
+Operator는 다음 조건이 있을 때 만드는 것이 좋다.
+
+```text
+반복 운영 절차가 충분히 명확하다.
+수동 운영 지식을 코드화할 가치가 있다.
+운영 로직을 유지보수할 팀이 있다.
+CRD API를 장기적으로 관리할 수 있다.
+테스트와 upgrade path를 설계할 수 있다.
+```
+
+---
+
+## Operator를 도입할 때 확인할 질문
+
+기존 Operator를 설치하거나 직접 만들기 전에 다음을 확인해야 한다.
+
+```text
+이 Operator가 관리하는 Custom Resource는 무엇인가?
+CRD version은 무엇인가?
+Operator가 생성하는 child resource는 무엇인가?
+backup/restore를 지원하는가?
+upgrade를 자동화하는가?
+failover를 자동화하는가?
+status condition은 충분한 정보를 제공하는가?
+RBAC 권한은 과도하지 않은가?
+namespace-scoped인가 cluster-scoped인가?
+OLM으로 관리하는가, Helm으로 설치하는가?
+GitOps와 함께 사용할 때 ownership conflict가 없는가?
+삭제 시 data와 PVC는 어떻게 되는가?
+```
+
+특히 stateful application Operator는 삭제 정책을 반드시 확인해야 한다.
+
+```text
+Custom Resource 삭제 시 PVC도 삭제되는가?
+backup은 남는가?
+external resource도 삭제되는가?
+finalizer가 stuck될 수 있는가?
+```
+
+---
+
+## Operator의 장점과 trade-off
+
+### 장점
+
+| 장점 | 설명 |
+|---|---|
+| 운영 지식 자동화 | 사람이 하던 반복적이고 복잡한 작업을 controller logic으로 자동화 |
+| Kubernetes API 확장 | application-specific resource를 선언형으로 제공 |
+| 지속적 reconciliation | 설치 이후에도 상태를 감시하고 desired state로 조정 |
+| lifecycle 관리 | backup, restore, upgrade, failover, scaling을 자동화 가능 |
+| 사용자 경험 개선 | 복잡한 resource 묶음을 단순한 CR 하나로 추상화 |
+| GitOps 친화성 | CR을 Git에 선언하고 Operator가 실제 상태를 맞춤 |
+
+### Trade-off
+
+| Trade-off | 설명 |
+|---|---|
+| 개발 난이도 | controller, CRD, RBAC, status, finalizer 등 학습 필요 |
+| 운영 책임 증가 | Operator 자체의 bug, upgrade, observability를 관리해야 함 |
+| 권한 위험 | Operator가 cluster-wide 권한을 가질 수 있음 |
+| CRD versioning | API schema 변경과 backward compatibility 고려 필요 |
+| vendor lock-in 가능성 | 특정 Operator의 CRD에 강하게 의존할 수 있음 |
+| debugging 복잡도 | CR, Operator log, child resource, external system을 함께 봐야 함 |
+
+---
+
+## 전체 mental model
+
+Operator를 이해하기 위한 흐름은 다음과 같다.
+
+```text
+1. Kubernetes는 stateless application을 배포, 확장, 복구하는 데 강하다.
+
+2. 하지만 database, queue, storage system 같은 complex/stateful application은
+   단순 replica 유지 이상의 운영 지식이 필요하다.
+
+3. 기존에는 사람이 human operator로서 backup, restore, upgrade, failover,
+   scaling, recovery를 수행했다.
+
+4. Kubernetes Operator는 이 human operator의 지식을 software controller로 코드화한다.
+
+5. Operator는 CRD로 Kubernetes API에 새로운 resource type을 추가한다.
+
+6. 사용자는 Custom Resource로 원하는 application 상태를 선언한다.
+
+7. Operator Controller는 Custom Resource를 watch하고,
+   실제 Kubernetes resource와 application 상태를 desired state에 맞춘다.
+
+8. 이 과정은 reconciliation loop로 지속적으로 반복된다.
+
+9. Operator는 Helm과 달리 install/upgrade 시점만이 아니라
+   운영 중에도 계속 상태를 관찰하고 조정한다.
+
+10. Operator는 강력하지만, CRD versioning, RBAC, status 설계,
+    finalizer, upgrade, observability까지 함께 관리해야 하는 software다.
+```
+
+---
+
+## 요약
+
+Kubernetes 기본 controller는 `Deployment` replica를 유지하고, `StatefulSet` Pod identity를 유지하고, `Service` endpoint를 관리할 수 있다. 하지만 특정 database나 distributed system의 backup, restore, failover, upgrade, schema migration, cluster membership 같은 domain-specific 운영 지식은 기본 Kubernetes가 알 수 없다.
+
+Operator는 이 지식을 코드로 만든다.
+
+```text
+Custom Resource Definition
+  → Kubernetes API에 application-specific type 추가
+
+Custom Resource
+  → 사용자가 원하는 application 상태 선언
+
+Controller
+  → desired state와 actual state를 비교하고 조정
+
+Reconciliation loop
+  → 이 과정을 지속적으로 반복
+```
+
+한 문장으로 정리하면 다음과 같다.
+
+**Kubernetes Operator는 custom resource와 custom controller를 이용해, 사람이 하던 애플리케이션 운영 지식을 Kubernetes의 declarative API와 control loop 안으로 가져오는 확장 패턴이다.**

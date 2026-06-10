@@ -1,0 +1,1355 @@
+---
+area: "Computer Networks"
+type: "concept"
+series: "Cloud Networking"
+title: "CDN과 Edge Cache"
+slug: "cdn-edge-cache"
+date: "2026-06-02"
+updated: "2026-06-02"
+draft: false
+reviewed: true
+category: "Notes"
+tags: ["cdn", "content-delivery-network", "edge-cache", "cache-control", "cache-key", "origin-server", "edge-server", "dns", "load-balancer", "waf", "tls", "observability"]
+description: "CDN이 origin server 앞에서 edge cache, DNS routing, Cache-Control, cache key, purge, TLS, WAF, observability를 통해 웹 성능과 안정성을 개선하는 구조를 정리한 DevOps 네트워킹 개념 노트"
+---
+## Origin까지 매번 가지 않도록 만드는 계층
+
+웹사이트나 애플리케이션의 사용자가 전 세계에 분산되어 있다면, 모든 요청을 하나의 **origin server**로 직접 보내는 구조는 성능과 운영 측면에서 한계가 있다.
+
+예를 들어 origin server가 미국에 있고 사용자가 한국, 유럽, 호주에 있다고 하자.
+
+```text
+Origin Server: North America
+User A: North America
+User B: Europe
+User C: Korea
+User D: Australia
+```
+
+origin과 가까운 사용자는 비교적 빠르게 응답을 받을 수 있지만, 멀리 있는 사용자는 긴 network path를 왕복해야 한다. 웹페이지는 보통 HTML 하나로 끝나지 않고, 여러 resource로 구성된다.
+
+```text
+HTML
+CSS
+JavaScript
+Images
+Fonts
+Videos
+API responses
+Tracking scripts
+Third-party libraries
+```
+
+이 resource들을 모두 멀리 있는 origin에서 가져오면 다음 비용이 커진다.
+
+- DNS lookup 지연
+- TCP connection 지연
+- TLS handshake 지연
+- HTTP request/response 왕복 지연
+- packet loss 또는 congestion에 따른 재전송
+- origin server의 bandwidth 부담
+- long-haul network 구간의 latency
+
+**CDN**(Content Delivery Network)은 이 문제를 줄이기 위해 사용자 가까운 **edge server** 또는 **PoP**(Point of Presence)에 콘텐츠를 cache하거나, edge delivery path를 최적화하는 global content delivery layer다.
+
+```text
+Without CDN:
+
+User in Korea
+  ↓
+Origin Server in US
+  ↓
+Long distance network path
+  ↓
+High latency
+```
+
+```text
+With CDN:
+
+User in Korea
+  ↓
+CDN Edge Server near Korea
+  ↓
+Cached content served locally
+  ↓
+Lower latency
+```
+
+CDN은 서버를 단순히 더 크게 만드는 기술이 아니다. 콘텐츠를 사용자 가까이 배치하고, 같은 콘텐츠 요청이 origin까지 매번 왕복하지 않도록 만드는 분산 delivery layer다.
+
+---
+
+## CDN의 기본 mental model
+
+CDN은 origin server 앞에 위치하는 **분산 cache layer**로 이해할 수 있다.
+
+```text
+Client
+  ↓
+CDN Edge Server
+  ↓
+Origin Server
+```
+
+사용자가 콘텐츠를 요청하면 CDN은 먼저 edge server에 해당 콘텐츠가 있는지 확인한다.
+
+```text
+Request: /assets/logo.png
+
+CDN Edge:
+이 파일이 cache에 있는가?
+```
+
+있으면 edge server가 바로 응답한다.
+
+```text
+Cache hit:
+Client ← CDN Edge
+```
+
+없으면 origin server에서 가져온 뒤 사용자에게 응답하고, 이후 재사용할 수 있도록 edge에 저장한다.
+
+```text
+Cache miss:
+Client → CDN Edge → Origin Server
+Client ← CDN Edge ← Origin Server
+
+그리고 CDN Edge가 content를 cache
+```
+
+핵심 동작은 다음 두 가지다.
+
+```text
+1. 콘텐츠를 사용자 가까운 edge에 저장한다.
+2. 같은 콘텐츠 요청이 반복될 때 origin까지 가지 않고 edge에서 응답한다.
+```
+
+---
+
+## Origin Server와 Edge Server
+
+CDN을 이해하려면 **origin server**와 **edge server**를 구분해야 한다.
+
+| 구분 | 의미 |
+|---|---|
+| Origin Server | 콘텐츠의 원본이 있는 서버 |
+| Edge Server | 사용자 가까이에 위치한 CDN cache server |
+| PoP | CDN provider가 edge server를 배치한 지역 거점 |
+| Cache | edge server에 저장된 콘텐츠 복사본 |
+
+### Origin Server
+
+Origin server는 웹사이트나 애플리케이션의 원본 콘텐츠가 있는 곳이다.
+
+```text
+Origin Server
+├── index.html
+├── app.js
+├── styles.css
+├── image.png
+└── video.mp4
+```
+
+CDN이 없으면 모든 사용자가 이 origin server로 직접 요청을 보낸다.
+
+### Edge Server
+
+Edge server는 사용자와 더 가까운 위치에 있는 CDN 서버다.
+
+```text
+Edge Server in Seoul
+Edge Server in Tokyo
+Edge Server in Singapore
+Edge Server in Frankfurt
+Edge Server in Virginia
+```
+
+사용자는 보통 가장 가까운, 또는 network latency가 낮은 edge server로 연결된다.
+
+---
+
+## CDN이 없을 때의 요청 흐름
+
+CDN이 없는 구조에서는 사용자가 origin server로 직접 접근한다.
+
+```text
+User
+  ↓
+DNS resolves origin address
+  ↓
+Connect to origin server
+  ↓
+Download content from origin
+```
+
+origin server가 미국에 있고 사용자가 한국에 있다면, 사용자의 요청과 응답은 장거리 network path를 왕복해야 한다.
+
+```text
+Korea User
+  ↓
+Trans-Pacific network path
+  ↓
+US Origin Server
+  ↓
+Trans-Pacific network path
+  ↓
+Korea User
+```
+
+이 구조의 문제는 다음과 같다.
+
+| 문제 | 설명 |
+|---|---|
+| 높은 latency | 사용자와 origin server가 멀수록 왕복 시간이 증가 |
+| origin 부하 증가 | 모든 사용자가 origin으로 직접 요청 |
+| bandwidth 비용 증가 | 대용량 static asset과 video traffic이 origin에서 직접 나감 |
+| global 사용자 경험 편차 | origin과 가까운 사용자는 빠르고, 먼 사용자는 느림 |
+| 장애 영향 증가 | origin 장애나 과부하가 전체 사용자에게 영향 |
+
+---
+
+## CDN이 있을 때의 요청 흐름
+
+CDN이 있으면 사용자는 origin server가 아니라 CDN edge server에 먼저 연결된다.
+
+```text
+User
+  ↓
+DNS resolves CDN edge endpoint
+  ↓
+Connect to nearby CDN edge
+  ↓
+CDN checks cache
+  ↓
+Serve from edge or fetch from origin
+```
+
+전체 흐름은 다음과 같다.
+
+```text
+1. 사용자가 웹사이트에 접속한다.
+2. DNS가 CDN endpoint로 사용자를 안내한다.
+3. 사용자는 가까운 edge server에 연결한다.
+4. CDN edge가 요청한 content를 cache에 가지고 있는지 확인한다.
+5. cache hit이면 edge가 바로 응답한다.
+6. cache miss이면 edge가 origin server에서 content를 가져온다.
+7. edge는 content를 사용자에게 전달하고 cache한다.
+8. 이후 같은 content 요청은 edge에서 빠르게 응답한다.
+```
+
+첫 요청은 origin까지 갈 수 있다.
+
+```text
+First request:
+
+User
+  ↓
+CDN Edge
+  ↓ cache miss
+Origin Server
+  ↓
+CDN Edge caches content
+  ↓
+User
+```
+
+이후 요청은 edge에서 처리될 수 있다.
+
+```text
+Later request:
+
+User
+  ↓
+CDN Edge
+  ↓ cache hit
+User receives content
+```
+
+이 구조에서 origin server는 매번 모든 사용자 요청을 직접 처리하지 않아도 된다.
+
+---
+
+## Cache Hit와 Cache Miss
+
+CDN에서 가장 중요한 개념 중 하나가 **cache hit**와 **cache miss**다.
+
+### Cache Hit
+
+**Cache hit**은 요청한 콘텐츠가 CDN edge server에 이미 있는 경우다.
+
+```text
+User requests /image.png
+  ↓
+CDN Edge has /image.png
+  ↓
+CDN Edge returns response
+```
+
+이 경우 origin server까지 가지 않으므로 응답이 빠르고, origin 부하도 줄어든다.
+
+```text
+Cache hit:
+fast response
+low origin load
+lower bandwidth from origin
+```
+
+### Cache Miss
+
+**Cache miss**는 요청한 콘텐츠가 edge server에 없는 경우다.
+
+```text
+User requests /image.png
+  ↓
+CDN Edge does not have /image.png
+  ↓
+CDN Edge fetches from origin
+  ↓
+CDN Edge caches it
+  ↓
+CDN Edge returns response
+```
+
+첫 요청은 origin까지 가야 하므로 상대적으로 느리다. 하지만 이후 같은 edge location에서 같은 콘텐츠를 요청하면 cache hit이 될 수 있다.
+
+```text
+Cache miss:
+first request is slower
+origin is contacted
+content may be cached for future requests
+```
+
+### Cache Hit Ratio
+
+운영 관점에서 중요한 지표는 **cache hit ratio**다.
+
+```text
+Cache Hit Ratio = cache hit requests / total requests
+```
+
+cache hit ratio가 높을수록 CDN이 origin 부하를 잘 줄이고 있다는 뜻이다.
+
+```text
+High cache hit ratio:
+edge에서 대부분 응답
+
+Low cache hit ratio:
+origin으로 자주 전달됨
+```
+
+---
+
+## CDN이 빠른 이유
+
+CDN이 빠른 이유는 단순히 server 성능이 좋아서가 아니다. 핵심은 **거리와 왕복 횟수를 줄이는 것**이다.
+
+웹 성능에서 latency는 매우 중요하다.
+
+```text
+Latency = network round-trip time
+```
+
+예를 들어 다음처럼 생각할 수 있다.
+
+```text
+Korea → US origin:
+long RTT
+
+Korea → Seoul/Tokyo edge:
+short RTT
+```
+
+HTTP 요청은 대개 여러 단계를 거친다.
+
+```text
+DNS lookup
+TCP handshake
+TLS handshake
+HTTP request
+HTTP response
+```
+
+CDN edge가 가까우면 이 단계들의 network 왕복 비용이 줄어든다.
+
+또한 CDN은 다음 방식으로 성능을 개선할 수 있다.
+
+- static asset caching
+- connection reuse
+- TLS termination 최적화
+- HTTP/2 또는 HTTP/3 지원
+- compression
+- image optimization
+- range request 지원
+- video segment caching
+- origin shield
+- route optimization
+
+---
+
+## CDN이 주로 캐싱하는 콘텐츠
+
+CDN은 특히 static content에 강하다.
+
+대표적인 static content는 다음과 같다.
+
+```text
+Images
+CSS files
+JavaScript bundles
+Fonts
+Videos
+Audio files
+Downloads
+Static HTML
+Application assets
+```
+
+| 콘텐츠 유형 | CDN 적합도 | 이유 |
+|---|---|---|
+| 이미지 | 높음 | 동일 파일이 반복 요청됨 |
+| CSS | 높음 | 버전 관리된 static asset으로 캐싱 쉬움 |
+| JavaScript bundle | 높음 | hash 기반 filename으로 장기 캐싱 가능 |
+| font | 높음 | 여러 페이지에서 재사용 |
+| video segment | 높음 | 대용량이며 사용자 가까운 delivery가 중요 |
+| static HTML | 중간~높음 | 개인화가 적으면 캐싱 가능 |
+| API response | 조건부 | 사용자별 응답이면 주의 필요 |
+| 로그인 후 개인화 페이지 | 낮음 | cache key와 privacy 이슈 주의 |
+
+---
+
+## Static Content와 Dynamic Content
+
+CDN을 이해할 때 **static content**와 **dynamic content**를 나누는 것이 중요하다.
+
+### Static Content
+
+Static content는 요청하는 사용자와 상관없이 동일한 결과를 반환하는 콘텐츠다.
+
+```text
+/logo.png
+/styles.css
+/app.8f3a1c.js
+/fonts/inter.woff2
+/product-thumbnail.jpg
+```
+
+이런 파일은 CDN caching에 매우 적합하다.
+
+```text
+같은 URL
+  ↓
+같은 response
+  ↓
+cache하기 쉬움
+```
+
+### Dynamic Content
+
+Dynamic content는 사용자, 시간, 세션, 권한, DB 상태 등에 따라 응답이 달라지는 콘텐츠다.
+
+```text
+/my-page
+/api/me
+/cart
+/order-history
+/recommendations
+```
+
+이런 응답을 잘못 캐싱하면 심각한 문제가 생길 수 있다.
+
+```text
+User A의 개인정보가 cache됨
+  ↓
+User B에게 같은 response가 전달됨
+```
+
+따라서 dynamic content는 다음을 신중하게 설계해야 한다.
+
+- `Cache-Control` header
+- `Vary` header
+- cookie 기반 cache bypass
+- authorization header 처리
+- query string 포함 여부
+- user-specific response 캐싱 금지
+- edge compute 사용 여부
+
+---
+
+## Cache-Control과 TTL
+
+CDN caching은 보통 HTTP cache header와 TTL에 의해 제어된다.
+
+대표적인 header는 다음과 같다.
+
+```text
+Cache-Control
+Expires
+ETag
+Last-Modified
+Vary
+```
+
+가장 중요한 것은 `Cache-Control`이다.
+
+예를 들어 다음 header는 1시간 동안 cache할 수 있음을 의미한다.
+
+```text
+Cache-Control: public, max-age=3600
+```
+
+장기 캐싱이 가능한 static asset은 다음처럼 설정할 수 있다.
+
+```text
+Cache-Control: public, max-age=31536000, immutable
+```
+
+이런 설정은 보통 filename에 content hash가 포함될 때 사용한다.
+
+```text
+app.8f3a1c.js
+styles.a93be2.css
+```
+
+파일 내용이 바뀌면 filename도 바뀌므로, 오래 cache해도 문제가 적다.
+
+반대로 개인화 응답은 cache하지 않도록 설정해야 한다.
+
+```text
+Cache-Control: private, no-store
+```
+
+| Header 예시 | 의미 |
+|---|---|
+| `public` | shared cache, CDN 등에 저장 가능 |
+| `private` | browser 같은 private cache만 허용 |
+| `no-store` | 저장 금지 |
+| `no-cache` | 사용 전 재검증 필요 |
+| `max-age=3600` | 3600초 동안 fresh |
+| `immutable` | TTL 동안 변경되지 않는 것으로 간주 가능 |
+
+> CDN을 도입할 때 가장 중요한 운영 포인트 중 하나는 “무엇을 얼마나 오래 cache할 것인가”다.
+
+---
+
+## Cache Key
+
+CDN은 요청을 구분하기 위해 **cache key**를 사용한다.
+
+가장 단순한 cache key는 URL이다.
+
+```text
+https://example.com/assets/logo.png
+```
+
+하지만 실제로는 다음 요소가 cache key에 포함될 수 있다.
+
+```text
+Host
+Path
+Query string
+Headers
+Cookies
+Protocol
+Device type
+Language
+Authorization 여부
+```
+
+예를 들어 다음 두 요청이 있다고 하자.
+
+```text
+/assets/app.js?v=1
+/assets/app.js?v=2
+```
+
+CDN 설정에 따라 query string을 cache key에 포함하면 서로 다른 cache entry가 된다.
+
+```text
+v=1 → cache object A
+v=2 → cache object B
+```
+
+반대로 query string을 무시하면 같은 object로 처리될 수 있다.
+
+| 설정 | 장점 | 위험 |
+|---|---|---|
+| query string 포함 | 버전별 cache 분리 가능 | cache fragmentation 발생 |
+| query string 무시 | cache hit ratio 증가 | 다른 응답을 같은 것으로 처리할 위험 |
+| cookie 포함 | 개인화 가능 | cache hit ratio 급격히 감소 |
+| header 포함 | 언어/디바이스별 최적화 가능 | cache key 복잡도 증가 |
+
+Cache key 설계는 성능과 정확성에 큰 영향을 준다.
+
+---
+
+## Cache Invalidation과 Purge
+
+CDN은 콘텐츠를 cache하기 때문에, origin에서 파일이 바뀌어도 edge cache에는 오래된 버전이 남아 있을 수 있다.
+
+이를 해결하는 방법은 크게 두 가지다.
+
+### TTL 만료 대기
+
+가장 단순한 방법은 TTL이 만료될 때까지 기다리는 것이다.
+
+```text
+Cache-Control: public, max-age=3600
+```
+
+이 경우 최대 1시간 동안 오래된 콘텐츠가 제공될 수 있다.
+
+### Purge 또는 Invalidation
+
+운영자가 CDN에 특정 content를 제거하라고 요청할 수 있다.
+
+```text
+Purge /assets/logo.png
+Purge /index.html
+Purge all cache
+```
+
+이후 다음 요청은 cache miss가 되어 origin에서 새 콘텐츠를 가져온다.
+
+전체 purge를 자주 하면 origin에 큰 부하가 생길 수 있다.
+
+```text
+Purge all
+  ↓
+모든 edge에서 cache miss 증가
+  ↓
+origin traffic 급증
+```
+
+좋은 전략은 다음과 같다.
+
+- static asset은 content hash filename 사용
+- HTML은 짧은 TTL 또는 revalidation 사용
+- image/video는 긴 TTL 사용
+- 긴급 변경 시 selective purge 사용
+- 전체 purge는 신중하게 수행
+
+---
+
+## CDN과 DNS의 관계
+
+CDN은 DNS와 밀접하게 연결된다.
+
+사용자가 `www.example.com`에 접속하면 DNS는 origin server IP를 직접 반환하는 대신 CDN endpoint로 안내할 수 있다.
+
+```text
+www.example.com
+  ↓ DNS
+CDN edge endpoint
+  ↓
+Nearby edge server
+```
+
+일반적인 구성은 다음과 같다.
+
+```text
+www.example.com CNAME example.cdn-provider.net
+```
+
+CDN provider는 사용자의 위치, resolver 위치, network 상태, edge availability 등을 고려해 적절한 edge로 연결되도록 한다.
+
+```text
+Korea user     → Seoul or Tokyo edge
+Europe user    → Frankfurt edge
+US user        → Virginia or California edge
+Australia user → Sydney edge
+```
+
+즉 DNS는 “어디로 접속할지”를 안내하고, CDN은 “가까운 edge에서 무엇을 어떻게 제공할지”를 담당한다.
+
+```text
+Domain name
+  ↓
+DNS resolution
+  ↓
+CDN edge
+  ↓
+Cached content or origin fetch
+```
+
+---
+
+## CDN과 Load Balancer의 차이
+
+CDN과 Load Balancer는 모두 사용자의 요청 앞단에 위치할 수 있지만 역할이 다르다.
+
+| 구분 | CDN | Load Balancer |
+|---|---|---|
+| 주요 목적 | 사용자 가까운 edge에서 콘텐츠 전달 | 여러 backend로 traffic 분산 |
+| 위치 | 전 세계 edge network | 주로 region 또는 data center 앞단 |
+| 핵심 기능 | caching, edge delivery, latency 감소 | backend selection, health check, failover |
+| 대상 | static asset, video, web content, 일부 dynamic content | application server, service pool |
+| origin 부하 감소 | cache hit을 통해 크게 감소 | 분산은 하지만 요청은 backend로 전달됨 |
+| 사용자 거리 최적화 | 강함 | 일반적으로 CDN보다 global edge 범위는 작음 |
+
+CDN과 Load Balancer는 함께 쓰이는 경우가 많다.
+
+```text
+User
+  ↓
+CDN Edge
+  ↓ cache miss or dynamic request
+Load Balancer
+  ↓
+Application Servers
+  ↓
+Database
+```
+
+이 구조에서 CDN은 global edge delivery를 담당하고, Load Balancer는 origin region 내부의 backend 분산을 담당한다.
+
+---
+
+## Origin Server 부하 감소
+
+CDN의 중요한 장점 중 하나는 origin server 부하를 줄이는 것이다.
+
+CDN이 없으면 모든 요청이 origin으로 간다.
+
+```text
+1,000,000 requests
+  ↓
+Origin Server
+```
+
+CDN cache hit ratio가 90%라면 origin으로 가는 요청은 10% 수준으로 줄어든다.
+
+```text
+1,000,000 requests
+  ↓
+900,000 served by CDN edge
+100,000 forwarded to origin
+```
+
+이렇게 되면 다음 효과가 있다.
+
+- origin CPU 사용량 감소
+- origin bandwidth 사용량 감소
+- database 또는 storage 접근 감소
+- traffic spike 흡수
+- global 사용자 응답 시간 개선
+- origin 장애의 영향 완화 가능
+
+다만 CDN은 모든 것을 해결하지 않는다. cache miss, dynamic request, purge 직후 요청은 여전히 origin으로 전달된다.
+
+---
+
+## Bandwidth 비용과 CDN
+
+CDN은 성능뿐 아니라 비용에도 영향을 준다.
+
+Origin server가 모든 static asset을 직접 제공하면 origin의 outbound bandwidth 비용이 커질 수 있다.
+
+```text
+Origin Server
+  ↓
+Images, JS, CSS, Video
+  ↓
+All users worldwide
+```
+
+CDN이 있으면 edge server가 대부분의 반복 요청을 처리한다.
+
+```text
+Origin Server
+  ↓ initial fetch
+CDN Edge
+  ↓ repeated delivery
+Users
+```
+
+이렇게 하면 origin bandwidth 사용량을 줄일 수 있다. 다만 CDN provider의 traffic 비용, request 비용, purge 비용, log 비용, WAF 비용 등이 별도로 발생할 수 있다.
+
+운영 관점에서는 다음을 함께 봐야 한다.
+
+```text
+Origin bandwidth cost
+CDN egress cost
+CDN request cost
+Cache hit ratio
+Purge frequency
+Dynamic traffic 비율
+Video traffic 규모
+```
+
+---
+
+## 보안 계층으로서의 CDN
+
+CDN은 성능 최적화뿐 아니라 보안 계층으로도 활용될 수 있다.
+
+CDN은 public internet과 origin server 사이에 위치하기 때문에 다음 기능과 결합될 수 있다.
+
+- DDoS mitigation
+- WAF
+- TLS termination
+- bot mitigation
+- rate limiting
+- geo blocking
+- IP reputation filtering
+- origin shielding
+- security header injection
+
+일반적인 보안 구조는 다음과 같다.
+
+```text
+Client
+  ↓
+CDN / WAF
+  ↓
+Load Balancer
+  ↓
+Application Server
+```
+
+이 구조에서는 origin server를 CDN에서만 접근 가능하게 제한하는 것이 중요하다.
+
+```text
+좋은 방향:
+Client → CDN → Origin
+
+피해야 할 방향:
+Client → Origin 직접 접근 가능
+```
+
+origin이 CDN을 우회해 직접 노출되면 공격자는 CDN/WAF를 우회할 수 있다. 따라서 origin firewall이나 security group에서 CDN IP range 또는 private connectivity만 허용하는 설계가 필요할 수 있다.
+
+---
+
+## CDN과 TLS
+
+CDN을 사용하면 TLS 연결 구조도 고려해야 한다.
+
+대표적인 방식은 다음과 같다.
+
+```text
+Client --HTTPS--> CDN --HTTPS--> Origin
+```
+
+또는 내부 구간을 HTTP로 둘 수도 있다.
+
+```text
+Client --HTTPS--> CDN --HTTP--> Origin
+```
+
+보안 관점에서는 가능하면 origin까지 HTTPS를 유지하는 구성이 더 안전하다.
+
+TLS 관련 고려사항은 다음과 같다.
+
+- CDN edge certificate 관리
+- custom domain certificate
+- origin certificate 검증
+- HTTP to HTTPS redirect
+- TLS version 정책
+- HSTS 적용
+- SNI 기반 routing
+- certificate renewal 자동화
+
+CDN이 TLS termination을 담당하면 edge에서 사용자와 빠르게 TLS를 맺고, origin과의 connection을 재사용하거나 최적화할 수 있다.
+
+---
+
+## CDN과 HTTP/2, HTTP/3
+
+CDN은 최신 HTTP protocol을 edge에서 지원해 사용자 경험을 개선할 수 있다.
+
+### HTTP/2
+
+HTTP/2는 하나의 connection에서 여러 request/response를 multiplexing할 수 있다.
+
+```text
+HTTP/1.1:
+multiple connections or sequential requests
+
+HTTP/2:
+single connection + multiplexed streams
+```
+
+정적 asset이 많은 웹사이트에서 성능 개선에 도움이 된다.
+
+### HTTP/3
+
+HTTP/3는 QUIC 기반이며 UDP 위에서 동작한다. packet loss가 있는 환경이나 mobile network에서 더 나은 성능을 기대할 수 있다.
+
+CDN edge가 HTTP/3를 지원하면 client와 CDN 사이에서는 HTTP/3를 사용하고, CDN과 origin 사이에서는 HTTP/1.1 또는 HTTP/2를 사용할 수도 있다.
+
+```text
+Client --HTTP/3--> CDN --HTTP/2--> Origin
+```
+
+즉 CDN은 client-facing protocol 최적화 계층 역할도 할 수 있다.
+
+---
+
+## 이미지 최적화
+
+CDN은 단순히 파일을 cache하는 것을 넘어 image optimization을 제공할 수 있다.
+
+예를 들어 사용자의 device와 browser에 따라 다른 image format을 제공할 수 있다.
+
+```text
+Chrome browser → WebP 또는 AVIF
+Old browser    → JPEG 또는 PNG
+Mobile device  → smaller resolution
+Desktop        → larger resolution
+```
+
+이때 CDN은 다음 요소를 고려할 수 있다.
+
+- `Accept` header
+- device type
+- viewport width
+- DPR(Device Pixel Ratio)
+- query parameter
+- origin image
+- format conversion
+- resizing
+- compression quality
+
+예를 들어 다음과 같은 URL 패턴을 사용할 수 있다.
+
+```text
+/images/product.jpg?w=800&format=webp
+```
+
+다만 image transformation을 cache key와 잘 결합하지 않으면 cache fragmentation이 발생할 수 있다.
+
+```text
+w=400
+w=800
+w=1200
+format=webp
+format=avif
+quality=80
+quality=90
+```
+
+조합이 많아질수록 cache object 수가 증가하고 hit ratio가 떨어질 수 있다.
+
+---
+
+## Video Streaming과 CDN
+
+CDN은 video delivery에서도 중요하다.
+
+비디오 파일은 용량이 크고, 많은 사용자가 동시에 시청할 수 있기 때문에 origin server가 직접 감당하기 어렵다.
+
+일반적인 streaming은 전체 파일을 한 번에 내려받기보다 작은 segment로 나누어 전달한다.
+
+```text
+video_001.ts
+video_002.ts
+video_003.ts
+...
+```
+
+Adaptive streaming에서는 네트워크 상태에 따라 다른 bitrate segment를 제공한다.
+
+```text
+240p segment
+480p segment
+720p segment
+1080p segment
+4K segment
+```
+
+CDN edge는 인기 있는 video segment를 cache해 사용자 가까이에서 제공한다.
+
+```text
+User
+  ↓
+Nearby CDN Edge
+  ↓
+Cached video segment
+```
+
+이 구조는 live streaming, video on demand, online lecture, product demo, media service에서 중요하다.
+
+---
+
+## Dynamic Content 최적화
+
+CDN은 static content에 강하지만 dynamic content에서도 일부 최적화를 할 수 있다.
+
+Dynamic content는 캐싱이 어렵지만, CDN은 다음 방식으로 도움을 줄 수 있다.
+
+- global network routing 최적화
+- TCP/TLS connection reuse
+- origin connection pooling
+- edge authentication
+- API response caching
+- stale-while-revalidate
+- stale-if-error
+- edge compute
+- bot filtering
+- WAF
+- rate limiting
+
+예를 들어 자주 바뀌지만 약간의 지연을 허용할 수 있는 API는 짧은 TTL로 cache할 수 있다.
+
+```text
+/api/public-products
+Cache-Control: public, max-age=30
+```
+
+반면 사용자별 개인정보 API는 cache하면 안 된다.
+
+```text
+/api/me
+Cache-Control: private, no-store
+```
+
+---
+
+## stale-while-revalidate와 stale-if-error
+
+CDN caching을 더 고급으로 다루면 **stale content** 전략이 나온다.
+
+### stale-while-revalidate
+
+TTL이 만료된 콘텐츠가 있어도 CDN이 일단 오래된 응답을 빠르게 반환하고, 백그라운드에서 origin에 새 버전을 확인하는 방식이다.
+
+```text
+User request
+  ↓
+CDN returns stale content immediately
+  ↓
+CDN revalidates with origin in background
+```
+
+장점은 사용자가 느린 origin revalidation을 기다리지 않아도 된다는 점이다.
+
+### stale-if-error
+
+Origin server가 장애를 반환할 때 CDN이 오래된 cache라도 사용자에게 제공하는 방식이다.
+
+```text
+Origin error
+  ↓
+CDN serves stale cached content
+```
+
+이 방식은 장애 상황에서 완전한 서비스 중단 대신 일부 오래된 콘텐츠라도 제공할 수 있게 한다.
+
+다만 stale content를 제공해도 되는 서비스인지 판단해야 한다.
+
+| 콘텐츠 | stale 허용 여부 |
+|---|---|
+| 블로그 글 | 대체로 허용 가능 |
+| 상품 이미지 | 대체로 허용 가능 |
+| 재고 수량 | 주의 필요 |
+| 결제 결과 | 허용하면 안 됨 |
+| 사용자 개인정보 | 허용하면 안 됨 |
+
+---
+
+## Origin Shield
+
+**Origin Shield**는 여러 edge server와 origin server 사이에 중간 cache layer를 하나 더 두는 구조다.
+
+일반 CDN 구조는 다음과 같다.
+
+```text
+Multiple Edge Servers
+  ↓
+Origin Server
+```
+
+Origin Shield를 사용하면 다음처럼 된다.
+
+```text
+Multiple Edge Servers
+  ↓
+Origin Shield
+  ↓
+Origin Server
+```
+
+장점은 여러 edge에서 동시에 cache miss가 발생해도 origin으로 가는 요청을 줄일 수 있다는 것이다.
+
+```text
+Edge A miss
+Edge B miss
+Edge C miss
+  ↓
+Origin Shield에서 하나로 collapse
+  ↓
+Origin 요청 감소
+```
+
+특히 global CDN, 대용량 asset, video, sudden traffic spike에서 유용하다.
+
+---
+
+## DDoS 완화와 CDN
+
+CDN은 DDoS 완화에도 도움을 줄 수 있다.
+
+DDoS 공격은 대량의 traffic을 origin server로 보내 서비스를 마비시키는 공격이다. CDN을 사용하면 공격 traffic이 먼저 CDN edge network에 도달한다.
+
+```text
+Attack Traffic
+  ↓
+CDN Edge Network
+  ↓
+Filtering / Absorption
+  ↓
+Origin protected
+```
+
+CDN provider는 대규모 global edge capacity를 활용해 traffic을 흡수하거나, WAF/rate limit/bot detection으로 악성 요청을 줄일 수 있다.
+
+다만 CDN을 사용한다고 자동으로 모든 DDoS가 해결되는 것은 아니다.
+
+주의할 점은 다음과 같다.
+
+- origin IP가 직접 노출되어 있으면 CDN 우회 가능
+- application layer 공격은 WAF rule과 rate limit 필요
+- authenticated endpoint는 별도 보호 필요
+- cache miss 유도 공격은 origin을 압박할 수 있음
+- large file purge 후 traffic spike가 origin overload를 만들 수 있음
+
+---
+
+## Observability
+
+CDN을 운영하면 origin server log만으로는 전체 traffic을 알기 어렵다. 많은 요청이 edge에서 처리되기 때문이다.
+
+따라서 CDN log와 metric을 봐야 한다.
+
+| 지표 | 의미 |
+|---|---|
+| Cache hit ratio | CDN이 얼마나 많은 요청을 edge에서 처리했는지 |
+| Origin fetch count | origin으로 전달된 요청 수 |
+| Edge response time | edge에서 사용자에게 응답하는 시간 |
+| Origin response time | origin에서 CDN으로 응답하는 시간 |
+| 4xx rate | client error 비율 |
+| 5xx rate | origin 또는 edge error 비율 |
+| Bandwidth | edge egress, origin egress |
+| Top URLs | traffic이 많은 object |
+| Top countries/regions | 사용자 분포 |
+| Purge count | cache invalidation 빈도 |
+| WAF events | 차단 또는 탐지된 요청 |
+
+CDN troubleshooting에서는 다음을 구분해야 한다.
+
+```text
+Client ↔ CDN edge 문제인가?
+CDN edge ↔ origin 문제인가?
+Origin 자체 문제인가?
+Cache 설정 문제인가?
+DNS routing 문제인가?
+TLS 인증서 문제인가?
+```
+
+---
+
+## Troubleshooting 관점
+
+CDN 문제는 증상이 다양하게 나타난다.
+
+```text
+일부 지역에서만 느리다.
+이미지를 바꿨는데 예전 이미지가 보인다.
+로그인 사용자에게 다른 사람의 데이터가 보인다.
+특정 파일만 404가 난다.
+origin은 정상인데 CDN에서는 502가 난다.
+한국에서는 빠른데 유럽에서는 느리다.
+TLS 인증서 오류가 난다.
+```
+
+### 오래된 콘텐츠가 보이는 경우
+
+가능한 원인은 다음과 같다.
+
+| 원인 | 설명 |
+|---|---|
+| TTL이 아직 남음 | edge cache가 만료되지 않음 |
+| purge 누락 | 변경 후 CDN purge를 하지 않음 |
+| cache key 차이 | purge한 URL과 실제 요청 URL이 다름 |
+| browser cache | CDN이 아니라 browser가 cache 중 |
+| service worker | 브라우저 service worker가 응답 중 |
+| origin 변경 미반영 | origin 자체가 예전 파일을 제공 |
+
+확인 포인트는 다음과 같다.
+
+```text
+Cache-Control header
+Age header
+ETag / Last-Modified
+CDN cache status header
+Purge 대상 URL
+Browser devtools disable cache
+```
+
+### 특정 사용자에게 잘못된 콘텐츠가 보이는 경우
+
+가장 위험한 CDN 문제 중 하나다.
+
+가능한 원인은 다음과 같다.
+
+```text
+개인화 response를 public cache함
+Cookie를 cache key에 포함하지 않음
+Authorization header를 무시함
+Vary header 설정 누락
+Cache-Control이 잘못 설정됨
+```
+
+예를 들어 다음은 위험할 수 있다.
+
+```text
+/api/me
+Cache-Control: public, max-age=3600
+```
+
+사용자별 response에는 다음과 같은 정책이 필요하다.
+
+```text
+Cache-Control: private, no-store
+```
+
+### CDN에서는 502/503이 발생하는 경우
+
+가능한 원인은 다음과 같다.
+
+| 원인 | 설명 |
+|---|---|
+| origin down | origin server 장애 |
+| origin timeout | CDN이 origin 응답을 기다리다 timeout |
+| firewall 차단 | origin이 CDN edge IP를 허용하지 않음 |
+| TLS mismatch | CDN과 origin 사이 TLS handshake 실패 |
+| DNS 문제 | CDN이 origin hostname을 resolve하지 못함 |
+| port mismatch | CDN origin 설정 port가 잘못됨 |
+| health check 실패 | origin이 unhealthy로 판단됨 |
+
+### 특정 지역에서만 느린 경우
+
+가능한 원인은 다음과 같다.
+
+```text
+해당 지역 CDN PoP congestion
+DNS routing 문제
+ISP peering 문제
+cache miss 비율 증가
+origin까지의 long-haul path 문제
+regional edge에 content가 아직 warm되지 않음
+```
+
+---
+
+## 도입 시 운영 설계 원칙
+
+CDN을 production에 도입할 때는 다음 원칙을 적용하는 것이 좋다.
+
+| 원칙 | 설명 |
+|---|---|
+| Cacheable content 분리 | static asset과 dynamic response를 명확히 구분 |
+| Hash 기반 파일명 사용 | 장기 cache와 안전한 배포 가능 |
+| HTML과 asset TTL 분리 | HTML은 짧게, asset은 길게 |
+| 개인정보 응답 cache 금지 | `private`, `no-store` 사용 |
+| Cache key 설계 | query, header, cookie 포함 여부 신중히 결정 |
+| Selective purge | 전체 purge보다 필요한 object만 제거 |
+| Origin 보호 | CDN을 우회한 origin 직접 접근 제한 |
+| TLS end-to-end | 가능하면 CDN-origin 구간도 HTTPS |
+| Observability 확보 | edge log, cache hit ratio, origin fetch 모니터링 |
+| WAF/rate limit 적용 | CDN을 security edge로 활용 |
+| Multi-region 고려 | origin 장애와 지역별 latency를 함께 설계 |
+
+---
+
+## 앞선 네트워킹 개념들과의 연결
+
+### DNS
+
+DNS는 사용자를 CDN endpoint로 안내한다.
+
+```text
+www.example.com
+  ↓ DNS
+CDN edge endpoint
+  ↓
+Nearby edge
+```
+
+따라서 CDN은 DNS routing과 밀접하게 연결된다.
+
+### Load Balancer
+
+Load Balancer는 backend server pool로 traffic을 분산한다. CDN은 그 앞에서 global edge caching과 delivery를 수행한다.
+
+```text
+User
+  ↓
+CDN
+  ↓
+Load Balancer
+  ↓
+Application Servers
+```
+
+### VPC
+
+Origin server는 VPC 내부의 private subnet에 있을 수 있다. CDN은 public endpoint 역할을 하고, origin은 CDN에서 오는 traffic만 허용하도록 제한할 수 있다.
+
+```text
+Client
+  ↓
+CDN
+  ↓
+VPC Load Balancer
+  ↓
+Private App Subnet
+```
+
+### NAT와 Firewall
+
+Firewall은 CDN에서 origin으로 들어오는 traffic만 허용하도록 구성할 수 있다.
+
+```text
+allow CDN edge IP ranges → origin
+deny direct internet → origin
+```
+
+이렇게 해야 공격자가 CDN을 우회해 origin으로 직접 접근하는 것을 줄일 수 있다.
+
+---
+
+## 자칫 실수하기 쉬운 부분
+
+| 실수 | 문제 |
+|---|---|
+| 모든 응답을 CDN에 cache | 사용자별 개인정보 노출 위험 |
+| Cache key를 단순 URL로만 가정 | query, cookie, header에 따라 다른 응답이 섞일 수 있음 |
+| 전체 purge를 자주 수행 | origin traffic 급증 가능 |
+| origin을 직접 public 노출 | CDN/WAF 우회 가능 |
+| `Cache-Control` 없이 CDN 도입 | stale content 또는 낮은 hit ratio 발생 |
+| browser cache와 CDN cache를 혼동 | purge했는데도 사용자에게 이전 파일이 보일 수 있음 |
+| CDN log를 보지 않음 | edge에서 처리된 요청을 origin log만으로 파악 불가 |
+| TLS를 edge까지만 적용 | CDN-origin 구간 보안 요구사항을 놓칠 수 있음 |
+
+---
+
+## 정리
+
+CDN은 origin server의 콘텐츠를 전 세계 edge server에 cache하거나 edge delivery path를 최적화해 사용자와 콘텐츠 사이의 물리적·네트워크적 거리를 줄이는 global content delivery layer다.
+
+| 항목 | 정리 |
+|---|---|
+| 기본 역할 | 사용자 가까운 edge에서 콘텐츠 제공 |
+| 핵심 효과 | latency 감소, origin 부하 감소, bandwidth 최적화 |
+| 주요 구성 | origin server, edge server, PoP, cache |
+| 핵심 지표 | cache hit ratio, origin fetch count, edge response time |
+| static content | 이미지, CSS, JS, font, video 등 CDN에 적합 |
+| dynamic content | cache key, header, privacy 정책을 신중히 설계 |
+| DNS와 관계 | domain을 CDN endpoint로 안내 |
+| Load Balancer와 관계 | CDN은 global edge, Load Balancer는 backend 분산 |
+| 보안 역할 | DDoS mitigation, WAF, rate limiting, origin protection |
+| 운영 주의점 | Cache-Control, purge, cache key, TLS, observability |
+
+CDN은 단순한 cache가 아니라 DNS, Load Balancer, Firewall, VPC, TLS, WAF, observability와 함께 설계해야 하는 edge delivery 계층이다. 올바르게 구성하면 웹사이트 로딩 속도를 줄이고 origin 부하를 낮출 수 있지만, cache policy를 잘못 설계하면 stale content, 개인정보 노출, origin overload 같은 문제가 발생할 수 있다.
