@@ -3,18 +3,19 @@ import BaseLayout from "@/layouts/BaseLayout.astro";
 import SectionHeader from "@/components/SectionHeader.astro";
 ---
 
-<BaseLayout title="CV" description="A concise CV for Jihwan Park focused on reliable cloud-native systems, air-gapped Kubernetes/K3S platforms, stateful service recovery, and resource-constrained systems work.">
+<BaseLayout title="CV" description="A concise CV for Jihwan Park focused on reliable systems, constrained infrastructure, platform engineering, and resource-constrained AI systems work.">
   <section class="border-b border-white/10 py-12 lg:py-16">
     <p class="font-mono text-xs uppercase tracking-[0.18em] text-slate-500">CV</p>
     <h1 class="mt-4 text-4xl font-semibold text-white md:text-5xl">Jihwan Park</h1>
     <p class="mt-5 max-w-3xl text-base leading-8 text-slate-300 md:text-lg">
-      Systems engineer interested in reliable cloud-native infrastructure for constrained
-      environments. My work spans air-gapped cloud-native platforms, stateful service recovery,
-      private artifact supply chains, degraded AI serving, and resource-constrained AI systems.
+      Systems engineer interested in reliable infrastructure for constrained environments.
+      My work connects cloud-native platform engineering, service recovery, private artifact
+      workflows, operational AI serving, and resource-constrained AI systems.
     </p>
     <p class="mt-4 max-w-3xl text-sm leading-7 text-slate-400">
       I am interested in infrastructure that enables internal services and AI workloads to operate
-      reliably under network, storage, hardware, and deployment constraints.
+      reliably under network, storage, hardware, and deployment constraints. My focus is on systems
+      design and operation rather than AI model architecture itself.
     </p>
     <div class="mt-6 flex flex-wrap gap-3 text-sm text-slate-300">
       <a class="rounded border border-white/15 px-3 py-2 hover:border-signal hover:text-signal" href="https://github.com/Petooooo">GitHub</a>
@@ -22,13 +23,13 @@ import SectionHeader from "@/components/SectionHeader.astro";
   </section>
 
   <section class="py-12 lg:py-16">
-    <SectionHeader eyebrow="Interests" title="Research And Engineering Interests" description="The main direction is reliable infrastructure for internal services and AI workloads under operational constraints." />
+    <SectionHeader eyebrow="Interests" title="Research And Engineering Interests" description="The main direction is reliable systems and infrastructure for services that must run under real operational constraints." />
     <div class="grid gap-4 md:grid-cols-2">
       {[
-        ["Reliable Cloud-Native Systems", "K3S, Kubernetes reliability, internal platforms, service exposure, GitOps-style workflows, and constrained deployment environments."],
-        ["Air-Gapped Infrastructure", "Private registry, Nexus, image mirroring, bootstrap dependency paths, internal CI/CD, and artifact supply chains for restricted networks."],
-        ["Storage / Stateful Recovery", "Longhorn-like PVC behavior, detach/attach delay, RTO/RPO-aware service design, and the practical boundary between hot failover and fault-tolerant recovery."],
-        ["Operational AI Infrastructure", "Full-GPU workload constraints, degraded serving, inference service availability, traffic rerouting, and infrastructure around AI workloads rather than model architecture itself."]
+        ["Reliable Systems / Platform Engineering", "Service reliability, deployment repeatability, recovery planning, and cloud-native operations for constrained internal environments."],
+        ["Infrastructure Supply Chains", "Private artifact workflows, image distribution, repository behavior, bootstrap dependency paths, and deployment automation in restricted networks."],
+        ["Storage / Stateful Recovery", "Stateful workload recovery, storage attach/detach behavior, RTO/RPO-aware service design, and the practical boundary between hot failover and recoverable systems."],
+        ["Resource-Constrained AI Systems", "TinyML memory management, hardware-aware CNN acceleration, full-GPU workload constraints, degraded serving, and infrastructure around AI workloads."]
       ].map(([title, body]) => (
         <div class="border-b border-white/10 py-4">
           <h2 class="text-base font-semibold text-white">{title}</h2>
@@ -42,9 +43,9 @@ import SectionHeader from "@/components/SectionHeader.astro";
     <SectionHeader eyebrow="Education" title="Education" description="A software and hardware background for systems work across the stack." />
     <div class="border-b border-white/10 py-4">
       <h2 class="text-lg font-semibold text-white">Kyung Hee University</h2>
-      <p class="mt-2 text-sm leading-6 text-slate-300"> Bachelor's degree in Computer Science and Engineering, with a double major in Electronic Engineering. </p>
-      <p class="mt-1 text-sm leading-6 text-slate-400"> GPA: 4.01 / 4.3 · Top 5% graduate </p>
-      <p class="mt-1 text-sm leading-6 text-slate-400"> Academic Excellence Award </p>
+      <p class="mt-2 text-sm leading-6 text-slate-300">Bachelor's degree in Computer Science and Engineering, with a double major in Electronic Engineering.</p>
+      <p class="mt-1 text-sm leading-6 text-slate-400">GPA: 4.01 / 4.3 · Top 5% graduate</p>
+      <p class="mt-1 text-sm leading-6 text-slate-400">Academic Excellence Award</p>
       <p class="mt-1 font-mono text-xs uppercase tracking-[0.16em] text-slate-500">2021 - 2025</p>
     </div>
   </section>
@@ -53,42 +54,42 @@ import SectionHeader from "@/components/SectionHeader.astro";
     <SectionHeader eyebrow="Experience" title="Selected Infrastructure Work" description="Publicly described at the level of constraints, architecture choices, and technical direction. Sensitive operational details are intentionally generalized." />
     <div class="grid gap-5">
       <div class="rounded-md border border-white/10 bg-white/[0.03] p-5">
-        <h2 class="text-xl font-semibold text-white">Air-Gapped K3S Internal Platform Migration</h2>
+        <h2 class="text-xl font-semibold text-white">Constrained Infrastructure Modernization</h2>
         <p class="mt-2 font-mono text-xs uppercase tracking-[0.16em] text-slate-500">2025 - Present</p>
         <ul class="mt-4 grid gap-3 text-sm leading-6 text-slate-300">
-          <li>Migrated Docker-only service operation toward a K3S-based internal cloud-native platform under restricted network conditions.</li>
-          <li>Worked through service deployment standardization, internal image distribution, service exposure, persistent storage, and operational recovery concerns.</li>
-          <li>Focused on practical service reliability in an environment where external registries, package repositories, public DNS, and managed cloud services were not freely available.</li>
+          <li>Moved selected Docker-operated services toward a more reproducible internal platform model using lightweight Kubernetes orchestration where appropriate.</li>
+          <li>Worked through deployment standardization, internal image distribution, service exposure, persistent storage, and operational recovery concerns under restricted network conditions.</li>
+          <li>Focused on practical reliability in an environment where external registries, public package repositories, public DNS, and managed cloud services were not freely available.</li>
         </ul>
       </div>
 
       <div class="rounded-md border border-white/10 bg-white/[0.03] p-5">
-        <h2 class="text-xl font-semibold text-white">Stateful Workload Recovery with Longhorn</h2>
+        <h2 class="text-xl font-semibold text-white">Service Recovery and Artifact Supply Chain Design</h2>
         <p class="mt-2 font-mono text-xs uppercase tracking-[0.16em] text-slate-500">2025 - Present</p>
         <ul class="mt-4 grid gap-3 text-sm leading-6 text-slate-300">
-          <li>Analyzed the operational gap between hot failover and fault-tolerant recovery when using Longhorn-backed PVCs for stateful services.</li>
-          <li>Considered detach/attach delay, recovery time, service downtime, and RTO/RPO-aware design instead of overstating the system as fully zero-downtime.</li>
-          <li>Used the experience to reason about which services can be statelessly rescheduled and which require storage-aware recovery planning.</li>
+          <li>Analyzed the gap between zero-downtime hot failover and fault-tolerant recovery for services that depend on persistent storage and internal artifact systems.</li>
+          <li>Considered storage attach/detach delay, recovery time, service downtime, bootstrap dependencies, and RTO/RPO-aware operating models.</li>
+          <li>Investigated private registry and Nexus behavior, including image mirroring, artifact distribution, self-dependency risks, and Maven GAV-driven repository paths.</li>
         </ul>
       </div>
 
       <div class="rounded-md border border-white/10 bg-white/[0.03] p-5">
-        <h2 class="text-xl font-semibold text-white">Private Registry, Nexus, and Bootstrap Supply Chain</h2>
+        <h2 class="text-xl font-semibold text-white">Internal Delivery and Operational Automation</h2>
         <p class="mt-2 font-mono text-xs uppercase tracking-[0.16em] text-slate-500">2025 - Present</p>
         <ul class="mt-4 grid gap-3 text-sm leading-6 text-slate-300">
-          <li>Worked through private container registry, Nexus, image mirroring, and internal artifact distribution for air-gapped Kubernetes operation.</li>
-          <li>Considered bootstrap dependency problems such as registry or Nexus self-dependency, where a failed artifact service must not depend only on itself for recovery.</li>
-          <li>Investigated Maven/Nexus repository behavior, including how uploaded artifact paths can be governed by POM GAV metadata rather than only the chosen upload path.</li>
+          <li>Evaluated internal CI/CD and GitOps-style delivery flows connecting source changes, image builds, registry pushes, manifest updates, synchronization, and rollback.</li>
+          <li>Used Git history and declarative configuration as a way to reason about deployment traceability, reproducibility, and recovery from failed changes.</li>
+          <li>Connected infrastructure components such as service routing, storage, registry, artifact repositories, and deployment automation into a more coherent operating model.</li>
         </ul>
       </div>
 
       <div class="rounded-md border border-white/10 bg-white/[0.03] p-5">
-        <h2 class="text-xl font-semibold text-white">Operationally Constrained AI Serving Strategy</h2>
+        <h2 class="text-xl font-semibold text-white">Operational AI Serving under Hardware Constraints</h2>
         <p class="mt-2 font-mono text-xs uppercase tracking-[0.16em] text-slate-500">2025 - Present</p>
         <ul class="mt-4 grid gap-3 text-sm leading-6 text-slate-300">
-          <li>Evaluated GPU cluster operation for AI serving workloads where fine-grained GPU sharing was not always practical because production workloads required full-GPU allocation.</li>
-          <li>Reasoned about degraded serving as a more realistic availability model: accepting lower capacity during failure while keeping the service alive.</li>
-          <li>Compared the practical roles of MIG, time-slicing, full-GPU placement, active-active service replicas, and load-balancer-level traffic rerouting.</li>
+          <li>Evaluated AI serving operation where fine-grained GPU sharing was not always practical because production workloads required full-GPU allocation.</li>
+          <li>Reasoned about degraded serving as a realistic availability model: accepting lower capacity during failure while keeping the service alive.</li>
+          <li>Compared the practical roles of full-GPU placement, active-active service replicas, MIG, time-slicing, and load-balancer-level traffic rerouting.</li>
         </ul>
       </div>
     </div>
@@ -139,8 +140,8 @@ import SectionHeader from "@/components/SectionHeader.astro";
         I want to develop as a systems engineer and researcher who can reason across hardware,
         runtime, storage, networking, deployment, and service reliability. My strongest interests
         are not in building AI models themselves, but in designing the infrastructure that allows
-        services and AI workloads to operate reliably in constrained, private, and operationally
-        complex environments.
+        internal services and AI workloads to operate reliably in constrained, private, and
+        operationally complex environments.
       </p>
     </div>
   </section>
