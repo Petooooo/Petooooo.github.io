@@ -1,7 +1,7 @@
 export const siteConfig = {
   title: "Jihwan Park",
   description:
-    "A Git-based engineering notebook for reliable systems, restricted-network infrastructure, platform engineering, stateful service recovery, and resource-constrained AI systems work.",
+    "A Git-based engineering notebook for K3S platform migration, Longhorn-backed stateful recovery, private registry/Nexus workflows, and resource-constrained AI systems.",
   author: "Jihwan Park",
   ogImage: "/og-default.svg",
   githubUrl: "https://github.com/Petooooo/Petooooo.github.io",

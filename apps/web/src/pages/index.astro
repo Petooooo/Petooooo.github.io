@@ -24,8 +24,8 @@ const recentPosts = posts.slice(0, 4);
 const sections = [
   { title: "Notes", description: "Concept notes for Kubernetes, cloud infrastructure, networks, databases, algorithms, OS, and implementation details.", href: "/notes", count: notes.length },
   { title: "DevOps", description: "Operational records only: runbooks, troubleshooting notes, deployment decisions, and recovery paths.", href: "/devops", count: devops.length },
-  { title: "Projects", description: "Project-level records around restricted-network platforms, stateful recovery, artifact workflows, and resource-constrained AI systems.", href: "/projects", count: projects.length },
-  { title: "Research", description: "Research-oriented notes for reliable systems, distributed systems, storage systems, AI infrastructure, and hardware-aware systems.", href: "/research", count: research.length },
+  { title: "Projects", description: "Project-level records around K3S migration, stateful recovery, artifact workflows, and resource-constrained AI systems.", href: "/projects", count: projects.length },
+  { title: "Research", description: "Research-oriented notes around reliable systems, storage recovery, AI infrastructure, ML systems, and hardware-aware execution.", href: "/research", count: research.length },
   { title: "Paper Reviews", description: "Technical paper reading notes focused on core ideas, implementation details, limitations, and references.", href: "/paper-reviews", count: paperReviews.length }
 ];
 ---
@@ -35,10 +35,10 @@ const sections = [
     <div>
       <p class="font-mono text-xs uppercase tracking-[0.2em] text-slate-500">Jihwan Park / engineering notebook</p>
       <h1 class="mt-4 max-w-3xl text-3xl font-semibold leading-tight text-white md:text-5xl">
-        Notes on reliable infrastructure under real constraints.
+        K3S platform notes, recovery records, and resource-constrained AI systems.
       </h1>
       <p class="mt-5 max-w-2xl text-base leading-8 text-slate-300">
-        I use this site to organize work on restricted-network platform migration, stateful service recovery, private artifact workflows, operational AI serving, and resource-constrained AI systems.
+        This site collects sanitized notes from moving selected Docker-based services toward K3S, reasoning about Longhorn-backed stateful recovery, organizing private registry/Nexus workflows, and studying TinyML/FPGA projects where memory, area, and runtime constraints matter.
       </p>
       <div class="mt-7 flex flex-wrap gap-3">
         <a class="border border-white/20 px-3 py-2 text-sm text-white hover:border-signal hover:text-signal" href={withBase("/cv")}>CV</a>
@@ -51,12 +51,15 @@ const sections = [
   </section>
 
   <section class="py-10 md:py-12">
-    <SectionHeader eyebrow="Thread" title="Main Technical Axis" description="The notes and project records circle around a practical question: how services and AI workloads behave when network, storage, deployment, GPU, memory, or hardware resources are constrained." />
-    <div class="grid gap-4 md:grid-cols-3">
+    <SectionHeader eyebrow="Work Map" title="Concrete Threads" description="The recurring pattern is not a broad interest in infrastructure; it is a set of specific failure modes, constraints, and design decisions that kept showing up across service operation and AI workload projects." />
+    <div class="grid gap-4 md:grid-cols-2">
       {[
-        ["Restricted-Network Platforms", "K3S, private registry, Nexus, internal CI/CD, GitOps-style operation, service exposure, and deployment repeatability without assuming public cloud access."],
-        ["Reliability And Recovery", "Stateful workload recovery, Longhorn PVC behavior, RTO/RPO thinking, bootstrap dependency paths, and practical failure modes."],
-        ["Resource-Constrained AI", "TinyML memory planning, FPGA-based CNN acceleration, full-GPU serving tradeoffs, degraded serving, and hardware-aware implementation details."]
+        ["Docker-Based Operation To K3S", "Selected services moved from ad-hoc Docker operation toward a lightweight Kubernetes/K3S platform while dealing with image distribution, service exposure, persistent storage, and deployment standardization."],
+        ["Stateful Recovery On Longhorn", "PVC-backed services required thinking beyond pod rescheduling: detach/attach delay, replica rebuild, service readiness, downtime, and RTO/RPO boundaries."],
+        ["Private Registry And Nexus", "Restricted networks made artifact distribution part of reliability work: image mirroring, Maven/Nexus behavior, bootstrap dependency paths, and registry self-dependency risks."],
+        ["Operational AI Serving", "Full-GPU workloads made fine-grained sharing less straightforward, so degraded serving, active-active replicas, and traffic rerouting became more realistic availability questions."],
+        ["TinyML Memory Planning", "TensorFlow Lite Micro work focused on tensor lifetimes, conflict relationships, BFS-style allocation ordering, and in-place update opportunities to reduce peak memory."],
+        ["Zynq FPGA CNN Acceleration", "The accelerator project used bit-shift operations, INQ/STE quantization, IM2COL, systolic array dataflow, and AXI4-Lite PS/PL integration to study area/runtime tradeoffs."]
       ].map(([title, description]) => (
         <div class="border-b border-white/10 py-4">
           <h2 class="text-base font-semibold text-white">{title}</h2>
@@ -67,7 +70,7 @@ const sections = [
   </section>
 
   <section class="py-10 md:py-12">
-    <SectionHeader eyebrow="Index" title="Technical Index" description="The public sections are organized by the kind of work each entry records." />
+    <SectionHeader eyebrow="Index" title="Technical Index" description="Concept study notes are separated from operational records so DevOps stays closer to troubleshooting, runbooks, deployment decisions, and recovery paths." />
     <div class="grid gap-3 md:grid-cols-2">
       {sections.map((section) => (
         <a class="grid grid-cols-[1fr_auto] gap-4 border-b border-white/10 py-4 hover:border-signal/60" href={withBase(section.href)}>
