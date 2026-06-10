@@ -1,269 +1,147 @@
 ---
-
 import BaseLayout from "@/layouts/BaseLayout.astro";
 import SectionHeader from "@/components/SectionHeader.astro";
+---
 
-const interests = [
-[
-"Reliable Cloud-native Systems",
-"Kubernetes/K3S platforms, internal service reliability, constrained deployment environments, and fault-tolerant recovery under operational limitations."
-],
-[
-"Air-gapped Infrastructure",
-"Private registry, Nexus, image mirroring, bootstrap dependency paths, internal CI/CD, and artifact supply chains for restricted networks."
-],
-[
-"Stateful / Storage Systems",
-"Longhorn-like PVC behavior, detach/attach delay, RTO/RPO-aware recovery, service continuity, and the practical boundary between hot failover and recoverable systems."
-],
-[
-"Operational AI Infrastructure",
-"Full-GPU workload constraints, degraded serving, inference service availability, traffic rerouting, and infrastructure around AI workloads rather than model architecture itself."
-]
-];
-
-const infrastructureWork = [
-{
-title: "Air-gapped K3S Internal Platform Migration",
-period: "2025 - Present",
-points: [
-"Migrated Docker-only service operation toward a K3S-based internal cloud-native platform under restricted network conditions.",
-"Worked through service deployment standardization, internal image distribution, service exposure, persistent storage, and operational recovery concerns.",
-"Focused on practical service reliability in an environment where external registries, package repositories, public DNS, and managed cloud services were not freely available."
-]
-},
-{
-title: "Stateful Workload Recovery with Longhorn",
-period: "2025 - Present",
-points: [
-"Analyzed the operational gap between hot failover and fault-tolerant recovery when using Longhorn-backed PVCs for stateful services.",
-"Considered detach/attach delay, recovery time, service downtime, and RTO/RPO-aware design instead of overstating the system as fully zero-downtime.",
-"Used the experience to reason about which services can be statelessly rescheduled and which require storage-aware recovery planning."
-]
-},
-{
-title: "Private Registry, Nexus, and Bootstrap Supply Chain",
-period: "2025 - Present",
-points: [
-"Worked through private container registry, Nexus, image mirroring, and internal artifact distribution for air-gapped Kubernetes operation.",
-"Considered bootstrap dependency problems such as registry or Nexus self-dependency, where a failed artifact service must not depend only on itself for recovery.",
-"Investigated Maven/Nexus repository behavior, including how uploaded artifact paths can be governed by POM GAV metadata rather than only the chosen upload path."
-]
-},
-{
-title: "Operationally Constrained AI Serving Strategy",
-period: "2025 - Present",
-points: [
-"Evaluated GPU cluster operation for AI serving workloads where fine-grained GPU sharing was not always practical because production workloads required full-GPU allocation.",
-"Reasoned about degraded serving as a more realistic availability model: accepting lower capacity during failure while keeping the service alive.",
-"Compared the practical roles of MIG, time-slicing, full-GPU placement, active-active service replicas, and load-balancer-level traffic rerouting."
-]
-}
-];
-
-const systemsProjects = [
-[
-"Lifecycle-Aware Memory Analysis for TensorFlow Lite Micro",
-"TinyML runtime memory management project focused on tensor lifetimes, conflict relationships, BFS-style allocation ordering, and in-place update opportunities. Project evaluation reduced peak memory by 28.33% on Person Detect and 14.06% on Tiny U-Net compared with the original size-based allocation plan."
-],
-[
-"Area-Efficient CNN Accelerator Using Bit-Shift Operations on Zynq FPGA",
-"Hardware-aware AI inference project using bit-shift operations, INQ/STE-based quantization, IM2COL, systolic array dataflow, and AXI4-Lite PS/PL integration. Project evaluation reported 36.5% FPGA area decrease and 8.83ms PS+PL runtime compared with 15.9ms PS-only execution."
-]
-];
-
-const skills = [
-[
-"Systems / Infrastructure",
-"Linux, Docker, Kubernetes/K3S, Longhorn, private registry, Nexus, internal CI/CD, GitOps concepts, Traefik, NodePort/hostPort, TLS/HTTPS."
-],
-[
-"Data / Backend Systems",
-"MinIO, ClickHouse, MongoDB, RabbitMQ, asynchronous processing, SQL."
-],
-[
-"Programming",
-"C/C++, Python, JavaScript, TypeScript, Java, Go, SQL, Verilog."
-],
-[
-"Hardware / Embedded",
-"FPGA, Zynq, Vivado, Quartus, STM32, Arduino, Raspberry Pi."
-]
-];
---
-
-<BaseLayout
-title="CV"
-description="A concise CV for Jihwan Park focused on reliable cloud-native systems, air-gapped Kubernetes/K3S platforms, stateful recovery, private artifact supply chains, and resource-constrained AI systems."
-
->
-
+<BaseLayout title="CV" description="A concise CV for Jihwan Park focused on reliable cloud-native systems, air-gapped Kubernetes/K3S platforms, stateful service recovery, and resource-constrained systems work.">
   <section class="border-b border-white/10 py-12 lg:py-16">
     <p class="font-mono text-xs uppercase tracking-[0.18em] text-slate-500">CV</p>
-
-```
-<h1 class="mt-4 text-4xl font-semibold text-white md:text-5xl">
-  Jihwan Park
-</h1>
-
-<p class="mt-5 max-w-3xl text-base leading-8 text-slate-300 md:text-lg">
-  Systems-first engineer interested in reliable cloud-native systems for constrained environments.
-  My work connects air-gapped Kubernetes/K3S platforms, stateful service recovery, private artifact
-  supply chains, degraded AI serving strategies, and resource-constrained AI systems.
-</p>
-
-<p class="mt-4 max-w-3xl text-sm leading-7 text-slate-400">
-  I am not primarily focused on AI model design itself. My interest is in the systems infrastructure
-  that allows internal services and AI workloads to run reliably under network, storage, hardware,
-  and operational constraints.
-</p>
-
-<div class="mt-6 flex flex-wrap gap-3 text-sm text-slate-300">
-  <a
-    class="rounded border border-white/15 px-3 py-2 hover:border-signal hover:text-signal"
-    href="https://github.com/Petooooo"
-  >
-    GitHub
-  </a>
-</div>
-```
-
+    <h1 class="mt-4 text-4xl font-semibold text-white md:text-5xl">Jihwan Park</h1>
+    <p class="mt-5 max-w-3xl text-base leading-8 text-slate-300 md:text-lg">
+      Systems-first engineer interested in reliable cloud-native systems for constrained environments.
+      My work connects air-gapped Kubernetes/K3S platforms, stateful service recovery, private artifact supply chains,
+      degraded AI serving strategies, and resource-constrained AI systems.
+    </p>
+    <p class="mt-4 max-w-3xl text-sm leading-7 text-slate-400">
+      I am not primarily focused on AI model design itself. My interest is in the systems infrastructure
+      that allows internal services and AI workloads to run reliably under network, storage, hardware,
+      and operational constraints.
+    </p>
+    <div class="mt-6 flex flex-wrap gap-3 text-sm text-slate-300">
+      <a class="rounded border border-white/15 px-3 py-2 hover:border-signal hover:text-signal" href="https://github.com/Petooooo">GitHub</a>
+    </div>
   </section>
 
   <section class="py-12 lg:py-16">
-    <SectionHeader
-      eyebrow="Focus"
-      title="Research and Engineering Direction"
-      description="The central theme is service reliability and operational automation for infrastructure that must run under real-world constraints."
-    />
-
-```
-<div class="grid gap-4 md:grid-cols-2">
-  {interests.map(([title, body]) => (
-    <div class="border-b border-white/10 py-4">
-      <h2 class="text-base font-semibold text-white">{title}</h2>
-      <p class="mt-2 text-sm leading-6 text-slate-300">{body}</p>
+    <SectionHeader eyebrow="Interests" title="Research And Engineering Interests" description="The main direction is reliable infrastructure for internal services and AI workloads under operational constraints." />
+    <div class="grid gap-4 md:grid-cols-2">
+      {[
+        ["Reliable Cloud-Native Systems", "K3S, Kubernetes reliability, internal platforms, service exposure, GitOps-style workflows, and constrained deployment environments."],
+        ["Air-Gapped Infrastructure", "Private registry, Nexus, image mirroring, bootstrap dependency paths, internal CI/CD, and artifact supply chains for restricted networks."],
+        ["Storage / Stateful Recovery", "Longhorn-like PVC behavior, detach/attach delay, RTO/RPO-aware service design, and the practical boundary between hot failover and fault-tolerant recovery."],
+        ["Operational AI Infrastructure", "Full-GPU workload constraints, degraded serving, inference service availability, traffic rerouting, and infrastructure around AI workloads rather than model architecture itself."]
+      ].map(([title, body]) => (
+        <div class="border-b border-white/10 py-4">
+          <h2 class="text-base font-semibold text-white">{title}</h2>
+          <p class="mt-2 text-sm leading-6 text-slate-300">{body}</p>
+        </div>
+      ))}
     </div>
-  ))}
-</div>
-```
-
   </section>
 
   <section class="border-t border-white/10 py-12 lg:py-16">
-    <SectionHeader
-      eyebrow="Education"
-      title="Education"
-      description="A software and hardware background for systems work across the stack."
-    />
-
-```
-<div class="border-b border-white/10 py-4">
-  <h2 class="text-lg font-semibold text-white">Kyung Hee University</h2>
-  <p class="mt-2 text-sm leading-6 text-slate-300">
-    B.E. in Computer Science and Engineering; double major in Electronic Engineering.
-  </p>
-  <p class="mt-1 text-sm leading-6 text-slate-400">
-    GPA: 4.26 / 4.5
-  </p>
-  <p class="mt-1 font-mono text-xs uppercase tracking-[0.16em] text-slate-500">
-    2021 - 2025
-  </p>
-</div>
-```
-
+    <SectionHeader eyebrow="Education" title="Education" description="A software and hardware background for systems work across the stack." />
+    <div class="border-b border-white/10 py-4">
+      <h2 class="text-lg font-semibold text-white">Kyung Hee University</h2>
+      <p class="mt-2 text-sm leading-6 text-slate-300">B.E. in Computer Science and Engineering; double major in Electronic Engineering.</p>
+      <p class="mt-1 text-sm leading-6 text-slate-400">GPA: 4.26 / 4.5</p>
+      <p class="mt-1 font-mono text-xs uppercase tracking-[0.16em] text-slate-500">2021 - 2025</p>
+    </div>
   </section>
 
   <section class="border-t border-white/10 py-12 lg:py-16">
-    <SectionHeader
-      eyebrow="Infrastructure"
-      title="Selected Infrastructure Work"
-      description="Publicly described at the level of constraints, architecture choices, and technical direction. Sensitive operational details are intentionally generalized."
-    />
-
-```
-<div class="grid gap-5">
-  {infrastructureWork.map((work) => (
-    <div class="rounded-md border border-white/10 bg-white/[0.03] p-5">
-      <div class="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
-        <h2 class="text-xl font-semibold text-white">{work.title}</h2>
-        <p class="font-mono text-xs uppercase tracking-[0.16em] text-slate-500">
-          {work.period}
-        </p>
+    <SectionHeader eyebrow="Experience" title="Selected Infrastructure Work" description="Publicly described at the level of constraints, architecture choices, and technical direction. Sensitive operational details are intentionally generalized." />
+    <div class="grid gap-5">
+      <div class="rounded-md border border-white/10 bg-white/[0.03] p-5">
+        <h2 class="text-xl font-semibold text-white">Air-Gapped K3S Internal Platform Migration</h2>
+        <p class="mt-2 font-mono text-xs uppercase tracking-[0.16em] text-slate-500">2025 - Present</p>
+        <ul class="mt-4 grid gap-3 text-sm leading-6 text-slate-300">
+          <li>Migrated Docker-only service operation toward a K3S-based internal cloud-native platform under restricted network conditions.</li>
+          <li>Worked through service deployment standardization, internal image distribution, service exposure, persistent storage, and operational recovery concerns.</li>
+          <li>Focused on practical service reliability in an environment where external registries, package repositories, public DNS, and managed cloud services were not freely available.</li>
+        </ul>
       </div>
 
-      <ul class="mt-4 grid gap-3 text-sm leading-6 text-slate-300">
-        {work.points.map((point) => (
-          <li>{point}</li>
-        ))}
-      </ul>
-    </div>
-  ))}
-</div>
-```
+      <div class="rounded-md border border-white/10 bg-white/[0.03] p-5">
+        <h2 class="text-xl font-semibold text-white">Stateful Workload Recovery with Longhorn</h2>
+        <p class="mt-2 font-mono text-xs uppercase tracking-[0.16em] text-slate-500">2025 - Present</p>
+        <ul class="mt-4 grid gap-3 text-sm leading-6 text-slate-300">
+          <li>Analyzed the operational gap between hot failover and fault-tolerant recovery when using Longhorn-backed PVCs for stateful services.</li>
+          <li>Considered detach/attach delay, recovery time, service downtime, and RTO/RPO-aware design instead of overstating the system as fully zero-downtime.</li>
+          <li>Used the experience to reason about which services can be statelessly rescheduled and which require storage-aware recovery planning.</li>
+        </ul>
+      </div>
 
+      <div class="rounded-md border border-white/10 bg-white/[0.03] p-5">
+        <h2 class="text-xl font-semibold text-white">Private Registry, Nexus, and Bootstrap Supply Chain</h2>
+        <p class="mt-2 font-mono text-xs uppercase tracking-[0.16em] text-slate-500">2025 - Present</p>
+        <ul class="mt-4 grid gap-3 text-sm leading-6 text-slate-300">
+          <li>Worked through private container registry, Nexus, image mirroring, and internal artifact distribution for air-gapped Kubernetes operation.</li>
+          <li>Considered bootstrap dependency problems such as registry or Nexus self-dependency, where a failed artifact service must not depend only on itself for recovery.</li>
+          <li>Investigated Maven/Nexus repository behavior, including how uploaded artifact paths can be governed by POM GAV metadata rather than only the chosen upload path.</li>
+        </ul>
+      </div>
+
+      <div class="rounded-md border border-white/10 bg-white/[0.03] p-5">
+        <h2 class="text-xl font-semibold text-white">Operationally Constrained AI Serving Strategy</h2>
+        <p class="mt-2 font-mono text-xs uppercase tracking-[0.16em] text-slate-500">2025 - Present</p>
+        <ul class="mt-4 grid gap-3 text-sm leading-6 text-slate-300">
+          <li>Evaluated GPU cluster operation for AI serving workloads where fine-grained GPU sharing was not always practical because production workloads required full-GPU allocation.</li>
+          <li>Reasoned about degraded serving as a more realistic availability model: accepting lower capacity during failure while keeping the service alive.</li>
+          <li>Compared the practical roles of MIG, time-slicing, full-GPU placement, active-active service replicas, and load-balancer-level traffic rerouting.</li>
+        </ul>
+      </div>
+    </div>
   </section>
 
   <section class="border-t border-white/10 py-12 lg:py-16">
-    <SectionHeader
-      eyebrow="Projects"
-      title="Selected Systems Projects"
-      description="Graduation-level projects that connect lower-level resource constraints with AI workload execution."
-    />
+    <SectionHeader eyebrow="Projects" title="Selected Systems Projects" description="Graduation-level projects that connect lower-level resource constraints with AI workload execution." />
+    <div class="grid gap-5 md:grid-cols-2">
+      {[
+        [
+          "Lifecycle-Aware Memory Analysis for TensorFlow Lite Micro",
+          "TinyML runtime memory management project that analyzed tensor lifetimes, conflict relationships, BFS-style allocation ordering, and in-place update opportunities. Project evaluation reduced peak memory by 28.33% on Person Detect and 14.06% on Tiny U-Net compared with the original size-based allocation plan."
+        ],
+        [
+          "Area-Efficient CNN Accelerator Using Bit-Shift Operations on Zynq FPGA",
+          "Hardware-aware AI inference project using bit-shift operations, INQ/STE-based quantization, IM2COL, systolic array dataflow, and AXI4-Lite PS/PL integration. Project evaluation reported 36.5% FPGA area decrease and 8.83ms PS+PL runtime compared with 15.9ms PS-only execution."
+        ]
+      ].map(([title, body]) => (
+        <div class="rounded-md border border-white/10 bg-white/[0.03] p-5">
+          <h2 class="text-lg font-semibold text-white">{title}</h2>
+          <p class="mt-3 text-sm leading-6 text-slate-300">{body}</p>
+        </div>
+      ))}
+    </div>
+  </section>
 
-```
-<div class="grid gap-5 md:grid-cols-2">
-  {systemsProjects.map(([title, body]) => (
+  <section class="border-t border-white/10 py-12 lg:py-16">
+    <SectionHeader eyebrow="Skills" title="Technical Skills" description="Grouped by the systems layers that show up repeatedly in the work." />
+    <div class="grid gap-4 md:grid-cols-2">
+      {[
+        ["Systems / Infrastructure", "Linux, Docker, Kubernetes/K3S, Longhorn, private registry, Nexus, internal CI/CD, GitOps concepts, Traefik, NodePort/hostPort, TLS/HTTPS."],
+        ["Data / Backend Systems", "MinIO, ClickHouse, MongoDB, RabbitMQ, asynchronous processing, SQL."],
+        ["Programming", "C/C++, Python, JavaScript, TypeScript, Java, Go, SQL, Verilog."],
+        ["Hardware / Embedded", "FPGA, Zynq, Vivado, Quartus, STM32, Arduino, Raspberry Pi."]
+      ].map(([title, body]) => (
+        <div class="border-b border-white/10 py-4">
+          <h2 class="font-mono text-xs uppercase tracking-[0.16em] text-slate-500">{title}</h2>
+          <p class="mt-2 text-sm leading-6 text-slate-300">{body}</p>
+        </div>
+      ))}
+    </div>
+  </section>
+
+  <section class="border-t border-white/10 py-12 lg:py-16">
+    <SectionHeader eyebrow="Positioning" title="Working Identity" description="A concise summary of the direction I want to continue developing." />
     <div class="rounded-md border border-white/10 bg-white/[0.03] p-5">
-      <h2 class="text-lg font-semibold text-white">{title}</h2>
-      <p class="mt-3 text-sm leading-6 text-slate-300">{body}</p>
+      <p class="text-sm leading-7 text-slate-300">
+        I want to develop as a systems engineer and researcher who can reason across hardware,
+        runtime, storage, networking, deployment, and service reliability. My strongest interests
+        are not in building AI models themselves, but in designing the infrastructure that allows
+        services and AI workloads to operate reliably in constrained, private, and operationally
+        complex environments.
+      </p>
     </div>
-  ))}
-</div>
-```
-
-  </section>
-
-  <section class="border-t border-white/10 py-12 lg:py-16">
-    <SectionHeader
-      eyebrow="Skills"
-      title="Technical Skills"
-      description="Grouped by the systems layers that appear repeatedly in the work."
-    />
-
-```
-<div class="grid gap-4 md:grid-cols-2">
-  {skills.map(([title, body]) => (
-    <div class="border-b border-white/10 py-4">
-      <h2 class="font-mono text-xs uppercase tracking-[0.16em] text-slate-500">
-        {title}
-      </h2>
-      <p class="mt-2 text-sm leading-6 text-slate-300">{body}</p>
-    </div>
-  ))}
-</div>
-```
-
-  </section>
-
-  <section class="border-t border-white/10 py-12 lg:py-16">
-    <SectionHeader
-      eyebrow="Positioning"
-      title="Working Identity"
-      description="A concise summary of the direction I want to continue developing."
-    />
-
-```
-<div class="rounded-md border border-white/10 bg-white/[0.03] p-5">
-  <p class="text-sm leading-7 text-slate-300">
-    I want to develop as a systems engineer and researcher who can reason across hardware,
-    runtime, storage, networking, deployment, and service reliability. My strongest interests
-    are not in building AI models themselves, but in designing the infrastructure that allows
-    services and AI workloads to operate reliably in constrained, private, and operationally
-    complex environments.
-  </p>
-</div>
-```
-
   </section>
 </BaseLayout>
