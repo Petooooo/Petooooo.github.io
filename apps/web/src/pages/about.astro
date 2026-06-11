@@ -3,13 +3,13 @@ import BaseLayout from "@/layouts/BaseLayout.astro";
 import SectionHeader from "@/components/SectionHeader.astro";
 import { withBase } from "@/lib/urls";
 ---
-<BaseLayout title="About" description="About Jihwan Park and his engineering notebook.">
+<BaseLayout title="About" description="About Jihwan Park and his work on reliable infrastructure for constrained environments.">
   <section class="grid gap-10 border-b border-white/10 py-12 lg:grid-cols-[0.8fr_1.2fr] lg:py-16">
     <div>
       <p class="font-mono text-xs uppercase tracking-[0.18em] text-slate-500">About</p>
       <h1 class="mt-4 text-4xl font-semibold text-white md:text-5xl">Jihwan Park</h1>
-      <p class="mt-5 text-base leading-8 text-slate-300 md:text-lg">I studied computer science and electronic engineering at Kyung Hee University, then started organizing my work around one practical question: how internal services and AI workloads behave when network access, storage recovery, GPU placement, memory, or hardware area are constrained.</p>
-      <p class="mt-4 text-sm leading-7 text-slate-400">The public version of that work is intentionally sanitized. I write about constraints, architecture choices, recovery paths, and implementation details without exposing private infrastructure.</p>
+      <p class="mt-5 text-base leading-8 text-slate-300 md:text-lg">I studied computer science and electronic engineering at Kyung Hee University, and I organize my work around reliable infrastructure for constrained environments. The recurring question is how services and AI workloads behave when network access, storage recovery, GPU placement, memory, or hardware resources are limited.</p>
+      <p class="mt-4 text-sm leading-7 text-slate-400">The public version of this notebook focuses on constraints, architecture choices, recovery paths, and implementation details while omitting private infrastructure details.</p>
       <div class="mt-6 flex flex-wrap gap-3 text-sm text-slate-300">
         <a class="rounded border border-white/15 px-3 py-2 hover:border-signal hover:text-signal" href="https://github.com/Petooooo">GitHub</a>
         <a class="rounded border border-white/15 px-3 py-2 hover:border-signal hover:text-signal" href={withBase("/cv")}>CV</a>
@@ -17,25 +17,25 @@ import { withBase } from "@/lib/urls";
     </div>
     <div class="grid gap-5">
       <div class="rounded-md border border-white/10 bg-white/[0.03] p-5">
-        <h2 class="text-xl font-semibold text-white">Platform Work</h2>
+        <h2 class="text-xl font-semibold text-white">Restricted Infrastructure</h2>
         <p class="mt-3 leading-7 text-slate-300">Selected Docker-based services were moved toward a K3S-based internal platform, with private image distribution, service exposure, persistent storage, and deployment repeatability as the main concerns.</p>
       </div>
       <div class="rounded-md border border-white/10 bg-white/[0.03] p-5">
-        <h2 class="text-xl font-semibold text-white">Recovery Work</h2>
-        <p class="mt-3 leading-7 text-slate-300">Longhorn-backed PVCs made the difference between stateless self-healing and storage-aware recovery visible: detach/attach time, rebuild behavior, service readiness, and realistic RTO/RPO boundaries.</p>
+        <h2 class="text-xl font-semibold text-white">Recovery and Reliability</h2>
+        <p class="mt-3 leading-7 text-slate-300">Stateful services made recovery boundaries visible: PVC detach/attach behavior, rebuild time, readiness, operator action, and realistic RTO/RPO expectations.</p>
       </div>
       <div class="rounded-md border border-white/10 bg-white/[0.03] p-5">
-        <h2 class="text-xl font-semibold text-white">AI Systems Work</h2>
+        <h2 class="text-xl font-semibold text-white">Resource-Constrained AI Systems</h2>
         <p class="mt-3 leading-7 text-slate-300">Graduation projects looked at AI workloads from the systems side: TFLM tensor memory reuse on constrained devices and bit-shift CNN acceleration on Zynq FPGA with area/runtime tradeoffs.</p>
       </div>
     </div>
   </section>
 
   <section class="py-12 lg:py-16">
-    <SectionHeader eyebrow="Focus" title="What I Actually Track" description="The site is meant to preserve concrete engineering context rather than broad career slogans." />
+    <SectionHeader eyebrow="Focus" title="What I Actually Track" description="The site preserves the concrete constraints, failure modes, and design decisions behind each note." />
     <div class="grid gap-5 md:grid-cols-3">
       {[
-        ["Dependency Paths", "Which container images, Maven artifacts, system images, and bootstrap services must be available when the external network or primary registry is not."],
+        ["Dependency Paths", "Which images, artifacts, packages, and bootstrap services must be available when external access or the primary registry is unavailable."],
         ["Recovery Timelines", "What has to happen between a node or storage failure and service readiness: pod scheduling, volume movement, replica rebuild, health checks, and operator action."],
         ["Execution Constraints", "How AI workloads change when the limiting factor is not only model accuracy but memory arena size, FPGA area, GPU allocation, dataflow, or degraded serving."]
       ].map(([title, body]) => (
@@ -48,13 +48,13 @@ import { withBase } from "@/lib/urls";
   </section>
 
   <section class="border-t border-white/10 py-12 lg:py-16">
-    <SectionHeader eyebrow="Boundaries" title="What I Avoid Claiming" description="The strongest version of this site is specific and honest about scope." />
+    <SectionHeader eyebrow="Boundaries" title="Scope and Boundaries" description="The goal is to stay specific about engineering scope without overstating infrastructure, recovery, or AI claims." />
     <div class="grid gap-4 md:grid-cols-2">
       {[
-        ["Not A Generic Kubernetes Claim", "The point is not that I installed Kubernetes. The useful part is working through how a restricted-network Docker operation changes when image supply, storage, service exposure, and rollback paths are handled through K3S."],
-        ["Not A Hot-Failover Claim", "Using Longhorn PVCs does not automatically mean zero downtime. I describe recovery as detach/attach, rebuild, readiness, and RTO/RPO behavior rather than overstating HA."],
-        ["Not An AI Model Portfolio", "The AI thread here is operational and systems-oriented: full-GPU serving constraints, degraded availability, TinyML memory planning, and hardware-aware acceleration."],
-        ["Not A Private Incident Log", "Operational details are generalized. The public artifact should show the engineering problem and tradeoff without exposing private hostnames, internal IPs, credentials, or raw logs."]
+        ["Beyond A Kubernetes Installation", "The point is not simply that Kubernetes was installed. The useful part is understanding how restricted-network service operation changes when image supply, storage, service exposure, and rollback paths must be designed together."],
+        ["Recovery, Not Zero-Downtime Claims", "Longhorn-backed PVCs do not automatically imply zero downtime. I frame recovery in terms of detach/attach behavior, rebuild time, readiness, operator action, and RTO/RPO boundaries."],
+        ["Systems-Oriented AI Work", "The AI thread is operational and systems-oriented: full-GPU serving constraints, degraded availability, TinyML memory planning, and hardware-aware acceleration."],
+        ["Sanitized Public Notes", "Operational details are generalized. The public artifact should show the engineering problem and tradeoff without exposing private hostnames, internal IPs, credentials, or raw logs."]
       ].map(([title, body]) => (
         <div class="border-b border-white/10 py-4">
           <h3 class="text-base font-semibold text-white">{title}</h3>

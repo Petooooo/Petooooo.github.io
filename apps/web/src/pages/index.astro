@@ -22,10 +22,10 @@ const posts = [
   .sort(byDateDesc);
 const recentPosts = posts.slice(0, 4);
 const sections = [
-  { title: "Notes", description: "Concept notes for Kubernetes, cloud infrastructure, networks, databases, algorithms, OS, and implementation details.", href: "/notes", count: notes.length },
-  { title: "DevOps", description: "Operational records only: runbooks, troubleshooting notes, deployment decisions, and recovery paths.", href: "/devops", count: devops.length },
-  { title: "Projects", description: "Project-level records around K3S migration, stateful recovery, artifact workflows, and resource-constrained AI systems.", href: "/projects", count: projects.length },
-  { title: "Research", description: "Research-oriented notes around reliable systems, storage recovery, AI infrastructure, ML systems, and hardware-aware execution.", href: "/research", count: research.length },
+  { title: "Notes", description: "Concept notes for systems, cloud infrastructure, networks, databases, operating systems, algorithms, and implementation details.", href: "/notes", count: notes.length },
+  { title: "DevOps", description: "Operational records: troubleshooting notes, runbooks, deployment decisions, recovery paths, and infrastructure constraints.", href: "/devops", count: devops.length },
+  { title: "Projects", description: "Project-level records around restricted-network platform migration, stateful recovery, artifact workflows, and resource-constrained AI systems.", href: "/projects", count: projects.length },
+  { title: "Research", description: "Research-oriented notes around reliable systems, storage recovery, ML systems, AI serving infrastructure, and hardware-aware execution.", href: "/research", count: research.length },
   { title: "Paper Reviews", description: "Technical paper reading notes focused on core ideas, implementation details, limitations, and references.", href: "/paper-reviews", count: paperReviews.length }
 ];
 ---
@@ -35,10 +35,10 @@ const sections = [
     <div>
       <p class="font-mono text-xs uppercase tracking-[0.2em] text-slate-500">Jihwan Park / engineering notebook</p>
       <h1 class="mt-4 max-w-3xl text-3xl font-semibold leading-tight text-white md:text-5xl">
-        K3S platform notes, recovery records, and resource-constrained AI systems.
+        Engineering notes on constrained infrastructure, service recovery, and resource-aware AI systems.
       </h1>
       <p class="mt-5 max-w-2xl text-base leading-8 text-slate-300">
-        This site collects sanitized notes from moving selected Docker-based services toward K3S, reasoning about Longhorn-backed stateful recovery, organizing private registry/Nexus workflows, and studying TinyML/FPGA projects where memory, area, and runtime constraints matter.
+        This site collects sanitized engineering notes about restricted-network platform migration, stateful service recovery, private artifact workflows, operational AI serving constraints, and resource-constrained AI projects.
       </p>
       <div class="mt-7 flex flex-wrap gap-3">
         <a class="border border-white/20 px-3 py-2 text-sm text-white hover:border-signal hover:text-signal" href={withBase("/cv")}>CV</a>
@@ -54,12 +54,12 @@ const sections = [
     <SectionHeader eyebrow="Work Map" title="Concrete Threads" description="The recurring pattern is not a broad interest in infrastructure; it is a set of specific failure modes, constraints, and design decisions that kept showing up across service operation and AI workload projects." />
     <div class="grid gap-4 md:grid-cols-2">
       {[
-        ["Docker-Based Operation To K3S", "Selected services moved from ad-hoc Docker operation toward a lightweight Kubernetes/K3S platform while dealing with image distribution, service exposure, persistent storage, and deployment standardization."],
-        ["Stateful Recovery On Longhorn", "PVC-backed services required thinking beyond pod rescheduling: detach/attach delay, replica rebuild, service readiness, downtime, and RTO/RPO boundaries."],
-        ["Private Registry And Nexus", "Restricted networks made artifact distribution part of reliability work: image mirroring, Maven/Nexus behavior, bootstrap dependency paths, and registry self-dependency risks."],
-        ["Operational AI Serving", "Full-GPU workloads made fine-grained sharing less straightforward, so degraded serving, active-active replicas, and traffic rerouting became more realistic availability questions."],
+        ["Restricted-Network Platform Migration", "Selected services moved from ad-hoc Docker operation toward a lightweight Kubernetes/K3S-based platform while dealing with image distribution, service exposure, persistent storage, and deployment standardization."],
+        ["Stateful Service Recovery", "PVC-backed services required thinking beyond pod rescheduling: storage detach/attach delay, rebuild behavior, service readiness, downtime, and RTO/RPO boundaries."],
+        ["Private Artifact and Bootstrap Supply Chain", "Restricted networks made artifact distribution part of reliability work: image mirroring, Maven/Nexus behavior, bootstrap dependency paths, and registry self-dependency risks."],
+        ["Full-GPU Serving Availability", "Full-GPU workloads made fine-grained sharing less straightforward, so degraded serving, active-active replicas, and traffic rerouting became more realistic availability questions."],
         ["TinyML Memory Planning", "TensorFlow Lite Micro work focused on tensor lifetimes, conflict relationships, BFS-style allocation ordering, and in-place update opportunities to reduce peak memory."],
-        ["Zynq FPGA CNN Acceleration", "The accelerator project used bit-shift operations, INQ/STE quantization, IM2COL, systolic array dataflow, and AXI4-Lite PS/PL integration to study area/runtime tradeoffs."]
+        ["Hardware-Aware CNN Acceleration", "The Zynq FPGA accelerator project used bit-shift operations, INQ/STE quantization, IM2COL, systolic array dataflow, and AXI4-Lite PS/PL integration to study area/runtime tradeoffs."]
       ].map(([title, description]) => (
         <div class="border-b border-white/10 py-4">
           <h2 class="text-base font-semibold text-white">{title}</h2>
