@@ -1,0 +1,455 @@
+---
+area: "Networking"
+type: "troubleshooting"
+series: "K3s 운영 노트"
+title: "K3s MetalLB: ServiceLB/Klipper와 HostPort 충돌 분석"
+slug: "k3s-metallb-servicelbklipper-hostport"
+date: "2026-06-15"
+updated: "2026-06-15"
+draft: false
+reviewed: true
+category: "DevOps"
+tags: ["k3s", "MetalLB", "ServiceLB", "Klipper", "HostPort", "NodePort", "LoadBalancer", "Traefik", "VIP"]
+description: "K3s에서 MetalLB를 도입할 때 ServiceLB/Klipper가 LoadBalancer Service의 hostPort를 점유하면서 기존 HostPort/NodePort 노출과 충돌한 문제를 정리한다."
+---
+## 운영 배경
+
+K3s 클러스터에서 기존 서비스는 주로 `NodePort`, `HostPort`, 또는 Traefik의 `NodePort` 경로로 외부에 노출되어 있었다. 이후 MetalLB는 이미 설치된 상태였고, 추가로 하나의 VIP를 여러 서비스가 공유하도록 구성하려 했다.
+
+민감한 내부 IP는 이 글에서 모두 `[REDACTED]`로 표기한다. 예시 명령에서는 실제 값 대신 `<VIP>`, `<NODE_IP>`, `<namespace>`, `<service-name>` 같은 placeholder를 사용한다.
+
+목표 구조는 다음과 같았다.
+
+```text
+기존 경로 유지:
+client -> <NODE_IP>:<nodePort 또는 hostPort> -> Service/Pod
+
+추가 경로:
+client -> <VIP>:<port> -> MetalLB LoadBalancer Service -> Pod
+```
+
+특히 Traefik 자체를 바로 `LoadBalancer`로 바꾸면 기존 Ingress/NodePort 노출 경로 전체가 바뀔 수 있으므로, 초기 접근은 특정 서비스에만 별도 `type: LoadBalancer` Service를 추가하는 방식이었다.
+
+## 증상
+
+`type: LoadBalancer` Service를 적용하자 다음과 같은 문제가 발생했다.
+
+| 항목 | 관찰 내용 |
+| --- | --- |
+| 기존 노출 방식 | `NodePort` 또는 `HostPort`는 기존에 정상 동작 |
+| 새로 추가한 방식 | MetalLB VIP 기반 `LoadBalancer` Service 추가 |
+| 이상 증상 | LB Service를 적용하면 기존 HostPort 서비스 외부 접근이 끊김 |
+| 복구 조건 | 해당 LB Service를 삭제하면 기존 HostPort 접근이 즉시 복구됨 |
+| 범위 | 다른 namespace의 다른 Pod에 LB Service를 걸어도 기존 서비스까지 영향 |
+
+초기에는 Service selector, MetalLB `IPAddressPool`, `L2Advertisement`, `externalTrafficPolicy` 문제를 의심할 수 있었다. 그러나 핵심 단서는 다음이었다.
+
+```text
+LoadBalancer Service 생성 직후 kube-system namespace에 svclb-* DaemonSet이 생성됨
+svclb-* Pod가 Service port와 동일한 hostPort를 점유함
+```
+
+## 구성 중 자칫 실수하기 쉬운 부분
+
+### `port`와 `targetPort`
+
+`LoadBalancer` Service에서 외부 노출 포트는 `spec.ports[].port`다. `targetPort`는 실제 Pod가 listen하는 포트다.
+
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: app-lb
+  namespace: <namespace>
+spec:
+  type: LoadBalancer
+  ports:
+    - name: http
+      port: 30000       # <VIP>:30000 으로 외부 노출
+      targetPort: 8080  # Pod:8080 으로 전달
+  selector:
+    app: app
+```
+
+따라서 아래와 같이 이해하면 된다.
+
+```text
+<VIP>:30000 -> Service port 30000 -> Pod targetPort 8080
+```
+
+### `protocol: TCP`
+
+`protocol`은 생략하면 기본값이 `TCP`다. 운영 manifest에서는 명시하는 편이 더 읽기 쉽다.
+
+```yaml
+ports:
+  - name: http
+    protocol: TCP
+    port: 30000
+    targetPort: 8080
+```
+
+### `nodePort`가 자동으로 생기는 문제
+
+`type: LoadBalancer` Service는 기본적으로 `nodePort`를 자동 할당할 수 있다. VIP로만 노출하고 싶다면 다음 필드를 사용한다.
+
+```yaml
+spec:
+  type: LoadBalancer
+  allocateLoadBalancerNodePorts: false
+```
+
+다만 이 설정은 Kubernetes Service의 `nodePort` 자동 할당을 막는 설정이다. K3s ServiceLB/Klipper가 생성하는 `svclb-*` Pod의 `hostPort` 점유를 막지는 못한다.
+
+## Klipper / ServiceLB란 무엇인가
+
+K3s에는 기본 내장 LoadBalancer 구현체가 있다. 이를 보통 다음 이름으로 부른다.
+
+| 이름 | 의미 |
+| --- | --- |
+| ServiceLB | K3s 내장 LoadBalancer controller |
+| Klipper LB | ServiceLB 구현체 이름으로 자주 언급되는 이름 |
+| `svclb-*` | ServiceLB가 LoadBalancer Service마다 생성하는 DaemonSet/Pod 이름 패턴 |
+
+일반적인 cloud Kubernetes에서는 `type: LoadBalancer` Service를 만들면 cloud provider의 Load Balancer가 붙는다. 그러나 bare-metal 또는 폐쇄망 서버 환경에는 cloud LB가 없기 때문에, K3s는 기본적으로 간이 LoadBalancer인 ServiceLB/Klipper를 제공한다.
+
+ServiceLB/Klipper의 동작을 단순화하면 다음과 같다.
+
+```text
+LoadBalancer Service 생성
+-> K3s ServiceLB가 감지
+-> kube-system namespace에 svclb-* DaemonSet 생성
+-> svclb-* Pod가 Service port와 같은 hostPort를 점유
+-> hostPort로 받은 트래픽을 Service로 전달
+```
+
+즉, `port: 30000`인 `LoadBalancer` Service를 만들면 `svclb-*` Pod가 각 노드에서 `hostPort: 30000`을 잡으려 할 수 있다.
+
+## Root cause
+
+이번 이슈의 root cause는 다음으로 정리할 수 있다.
+
+```text
+MetalLB와 K3s ServiceLB/Klipper가 동시에 type: LoadBalancer Service를 처리했다.
+그 결과 ServiceLB가 svclb-* DaemonSet을 만들고 hostPort를 점유하면서
+기존 HostPort 기반 서비스와 포트 충돌이 발생했다.
+```
+
+구체적인 충돌 구조는 다음과 같다.
+
+```text
+기존 HostPort 서비스:
+<NODE_IP>:30000 -> HostPort Pod
+
+새 LoadBalancer Service:
+<VIP>:30000 -> MetalLB -> Service -> Pod:8080
+
+동시에 발생한 Klipper 동작:
+svclb-* Pod -> hostPort:30000 점유 시도
+```
+
+결과적으로 `LoadBalancer` Service를 추가하는 것만으로도 기존 `HostPort` 서비스의 외부 접근이 끊겼다. 해당 Service를 삭제하면 `svclb-*`도 사라지면서 기존 접근이 즉시 복구되었다.
+
+> `allocateLoadBalancerNodePorts: false`는 `nodePort` 자동 할당만 막는다. ServiceLB/Klipper가 별도로 만드는 `svclb-*` DaemonSet의 `hostPort` 점유를 막지는 못한다.
+
+## 왜 MetalLB를 쓰려면 ServiceLB를 꺼야 하는가
+
+MetalLB도 `type: LoadBalancer` Service를 처리하고, K3s ServiceLB도 같은 리소스를 처리한다. 둘을 함께 켜두면 하나의 Service에 두 LoadBalancer 구현체가 동시에 개입한다.
+
+```text
+LoadBalancer Service
+├─ MetalLB: VIP 할당 및 L2 advertisement
+└─ ServiceLB/Klipper: svclb-* DaemonSet 생성 및 hostPort 점유
+```
+
+이 상태에서는 다음 문제가 생길 수 있다.
+
+- 기존 `HostPort` 서비스와 `svclb-*` Pod의 `hostPort` 충돌
+- `LoadBalancer` Service의 `status.loadBalancer.ingress`에 node IP들이 섞이는 현상
+- MetalLB VIP 경로와 Klipper hostPort 경로의 동시 개입
+- namespace와 무관하게 LB Service 생성만으로 노드 레벨 포트 상태가 바뀌는 문제
+- 디버깅 시 `Service`, `EndpointSlice`, `VIP`, `hostPort`, `iptables` 원인이 섞이는 문제
+
+따라서 K3s에서 MetalLB를 주된 LoadBalancer 구현체로 사용할 경우 목표 상태는 다음과 같다.
+
+```text
+MetalLB controller/speaker: enabled
+K3s ServiceLB/Klipper: disabled
+svclb-* DaemonSet: 없음
+NodePort/HostPort: 기존 방식대로 유지
+LoadBalancer Service: MetalLB가 처리
+```
+
+## 수정 방법
+
+### 1. 실제 K3s config 경로 확인
+
+기본 경로는 보통 다음이다.
+
+```bash
+/etc/rancher/k3s/config.yaml
+```
+
+다만 별도 config 파일을 사용하고 있다면 systemd 실행 옵션을 확인해야 한다.
+
+```bash
+systemctl cat k3s
+```
+
+또는 실행 중인 프로세스를 확인한다.
+
+```bash
+ps -ef | grep '[k]3s server'
+```
+
+예를 들어 다음처럼 나오면 `/root/k3s/config/config.yml`이 실제 config다.
+
+```bash
+ExecStart=/usr/local/bin/k3s server --config /root/k3s/config/config.yml
+```
+
+확인 필요: 실제 운영 환경에서 사용하는 config 경로는 설치 방식에 따라 다를 수 있다.
+
+### 2. 모든 server 노드에 `disable: servicelb` 추가
+
+기존 config에 `data-dir`, `service-node-port-range` 등이 있다면 같은 파일에 다음을 추가한다.
+
+```yaml
+data-dir: /root/k3s/data
+service-node-port-range: 20000-32767
+disable:
+  - servicelb
+```
+
+이미 `disable:` 항목이 있다면 덮어쓰지 말고 병합한다.
+
+```yaml
+disable:
+  - servicelb
+  - <other-disabled-component>
+```
+
+HA server 구성이면 모든 server 노드에 동일하게 반영해야 한다. agent 노드는 일반적으로 이 설정 대상이 아니다.
+
+### 3. K3s server 재시작
+
+운영 중이라면 server 노드를 한 번에 모두 재시작하지 말고 순차적으로 재시작한다.
+
+```bash
+sudo systemctl restart k3s
+```
+
+재시작 후 node와 system pod 상태를 확인한다.
+
+```bash
+kubectl get nodes
+kubectl -n kube-system get pods
+```
+
+### 4. `svclb-*` 제거 확인
+
+```bash
+kubectl -n kube-system get ds,pods | grep -E 'svclb|klipper'
+```
+
+아무것도 출력되지 않는 상태가 목표다.
+
+기존 `svclb-*` DaemonSet이 남아 있다면 먼저 확인한 뒤 삭제한다.
+
+```bash
+kubectl -n kube-system get ds | grep svclb
+kubectl -n kube-system delete ds <svclb-daemonset-name>
+```
+
+### 5. LB Service 삭제 후 재생성
+
+ServiceLB가 켜진 상태에서 생성된 LB Service는 상태가 꼬여 있을 수 있으므로, 추가로 만든 LB Service는 삭제 후 재생성하는 편이 안전하다.
+
+```bash
+kubectl -n <namespace> delete svc <lb-service-name>
+kubectl apply -f app-lb.yaml
+```
+
+## MetalLB Service 예시
+
+단일 VIP를 여러 Service가 공유하되, 서비스별로 다른 포트를 사용하려면 다음 패턴을 사용한다.
+
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: app-lb
+  namespace: <namespace>
+  annotations:
+    metallb.io/loadBalancerIPs: "<VIP>"
+    metallb.io/address-pool: ip-pool
+    metallb.io/allow-shared-ip: shared-vip
+spec:
+  type: LoadBalancer
+  allocateLoadBalancerNodePorts: false
+  externalTrafficPolicy: Cluster
+  ports:
+    - name: http
+      protocol: TCP
+      port: 30000
+      targetPort: 8080
+  selector:
+    app: app
+```
+
+구성 포인트는 다음과 같다.
+
+| 필드 | 의미 |
+| --- | --- |
+| `metallb.io/loadBalancerIPs` | 특정 VIP를 요청 |
+| `metallb.io/address-pool` | 사용할 MetalLB address pool 지정 |
+| `metallb.io/allow-shared-ip` | 같은 VIP를 여러 Service가 공유하기 위한 sharing key |
+| `allocateLoadBalancerNodePorts: false` | 불필요한 `nodePort` 자동 할당 방지 |
+| `externalTrafficPolicy: Cluster` | VIP를 받은 노드에 endpoint가 없어도 cluster 내부 endpoint로 전달 가능 |
+| `port` | 외부에서 접근할 VIP 포트 |
+| `targetPort` | 실제 Pod가 listen하는 포트 |
+
+## 검증 포인트
+
+### ServiceLB/Klipper 비활성화 확인
+
+```bash
+kubectl -n kube-system get ds,pods | grep -E 'svclb|klipper'
+```
+
+예상 결과:
+
+```text
+# no output
+```
+
+### LoadBalancer Service 상태 확인
+
+```bash
+kubectl get svc -A -o wide | grep LoadBalancer
+```
+
+예상 상태:
+
+```text
+<namespace>   app-lb   LoadBalancer   ...   <VIP>   30000/TCP
+```
+
+### `nodePort`가 없는지 확인
+
+```bash
+kubectl -n <namespace> get svc <lb-service-name> -o yaml
+```
+
+원하는 형태:
+
+```yaml
+spec:
+  type: LoadBalancer
+  allocateLoadBalancerNodePorts: false
+  ports:
+    - name: http
+      port: 30000
+      targetPort: 8080
+```
+
+원하지 않는 형태:
+
+```yaml
+ports:
+  - name: http
+    port: 30000
+    targetPort: 8080
+    nodePort: 23478
+```
+
+### EndpointSlice 확인
+
+```bash
+kubectl -n <namespace> get endpointslice \
+  -l kubernetes.io/service-name=<lb-service-name> -o wide
+```
+
+여기에 `PodIP:targetPort`가 보여야 한다. 없다면 MetalLB 문제가 아니라 Service selector가 잘못되었을 가능성이 높다.
+
+### 기존 NodePort/HostPort 경로 확인
+
+```bash
+curl -v http://<NODE_IP>:<existing-port>
+```
+
+### MetalLB VIP 경로 확인
+
+```bash
+curl -v http://<VIP>:30000
+```
+
+두 경로가 모두 정상이어야 한다.
+
+## 같은 포트를 다시 써도 되는가
+
+ServiceLB/Klipper를 끄고 `svclb-*`가 더 이상 생성되지 않는다면, 다음 구조는 가능하다.
+
+```text
+<NODE_IP>:30000 -> 기존 HostPort 서비스
+<VIP>:30000     -> MetalLB LoadBalancer Service -> Pod:8080
+```
+
+같은 포트라도 IP가 다르기 때문에 개념적으로는 함께 사용할 수 있다. 다만 운영에서는 다음 조건을 확인해야 한다.
+
+- `svclb-*` DaemonSet이 없어야 한다.
+- LB Service에 `nodePort`가 자동 할당되지 않아야 한다.
+- 기존 HostPort 서비스가 여전히 정상 응답해야 한다.
+- VIP 경로도 정상 응답해야 한다.
+- CNI hostPort rule이나 iptables rule이 예상과 다르게 동작하지 않는지 확인해야 한다.
+
+안전하게 운영하려면 VIP용 포트와 HostPort용 포트를 분리하는 편이 디버깅에는 유리하다. 다만 동일 포트가 필요한 경우에는 위 검증을 통과하면 사용할 수 있다.
+
+## HTTPS 노출에 대한 구분
+
+MetalLB는 TLS termination을 수행하지 않는다. MetalLB는 VIP를 Service에 붙여주는 LoadBalancer 구현체일 뿐이다.
+
+```text
+MetalLB = VIP/L2 advertisement 및 Service forwarding
+Traefik/Nginx/앱 = HTTP 처리 및 TLS termination
+```
+
+따라서 내부 서비스가 HTTP이고 외부만 HTTPS로 노출하려면 다음 중 하나가 필요하다.
+
+| 방식 | 설명 | 비고 |
+| --- | --- | --- |
+| Traefik 앞단 유지 | `<VIP>:443 -> Traefik -> HTTP backend` | 기존 `tls: {}` 방식 활용 가능 |
+| 앱 자체 HTTPS | `<VIP>:port -> Pod:HTTPS` | 앱별 인증서 관리 필요 |
+| 별도 TLS proxy | `<VIP>:port -> Nginx/HAProxy/Envoy -> HTTP backend` | Traefik이 있으면 중복 가능성 |
+
+즉, `LoadBalancer` Service를 앱에 직접 붙이는 것만으로는 다음 구조를 만들 수 없다.
+
+```text
+client --HTTPS--> <VIP>:30000 --HTTP--> backend:8080
+```
+
+이 구조를 원하면 Traefik, Nginx, HAProxy, Envoy 같은 L7 proxy가 TLS를 종료해야 한다.
+
+## 최종 정리
+
+이번 이슈의 핵심은 다음이다.
+
+```text
+K3s는 기본적으로 ServiceLB/Klipper를 제공한다.
+ServiceLB는 LoadBalancer Service마다 svclb-* DaemonSet을 만들고 Service port와 같은 hostPort를 점유한다.
+MetalLB도 같은 LoadBalancer Service를 처리한다.
+둘을 함께 켜두면 같은 Service에 두 LoadBalancer 구현체가 동시에 개입한다.
+이번 환경에서는 svclb-*의 hostPort 점유가 기존 HostPort 서비스와 충돌했다.
+따라서 MetalLB를 주된 LoadBalancer로 사용할 경우 K3s servicelb는 비활성화하는 것이 맞다.
+```
+
+정상 목표 상태는 다음과 같다.
+
+```text
+기존 NodePort/HostPort 서비스: 유지
+Traefik NodePort 노출: 유지
+MetalLB speaker/controller: 유지
+K3s ServiceLB/Klipper: disabled
+svclb-* DaemonSet: 없음
+LoadBalancer Service: MetalLB VIP로 처리
+```
