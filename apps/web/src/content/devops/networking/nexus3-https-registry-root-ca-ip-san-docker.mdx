@@ -1,0 +1,755 @@
+---
+area: "Networking"
+type: "runbook"
+series: "Homelab Kubernetes Networking"
+title: "Nexus3 HTTPS Registry: Root CA 기반 IP SAN 인증서와 Docker 신뢰 설정"
+slug: "nexus3-https-registry-root-ca-ip-san-docker"
+date: "2026-06-27"
+updated: "2026-06-27"
+draft: false
+reviewed: true
+category: "DevOps"
+tags: ["nexus3", "docker-registry", "x509", "root-ca", "ip-san", "traefik", "k3s", "tls"]
+description: "DNS 없이 IP와 포트 기반으로 Nexus3 Docker Registry와 Traefik TLSStore를 운영할 때 Root CA, 서버 인증서, Java keystore, Docker ca.crt를 구분해 설정하는 runbook."
+---
+## 운영 맥락
+
+Nexus3를 Kubernetes chart로 배포하고, Docker Registry를 HTTPS로 노출하는 과정에서 `docker pull`과 `curl`에서 x509 오류가 발생했다. 기존에는 특정 노드 IP와 포트 조합으로 Docker HTTPS Registry를 운영했지만, 이후 MetalLB VIP 기반 노출로 변경하면서 접속 endpoint가 달라졌다.
+
+이 환경의 특징은 다음과 같다.
+
+| 항목 | 내용 |
+| --- | --- |
+| 배포 방식 | Kubernetes chart 기반 Nexus3 |
+| TLS 방식 | Nexus3 직접 HTTPS 종료와 Traefik default TLSStore 병행 |
+| 접근 방식 | DNS 없이 IP 및 포트 기반 접근 |
+| Registry client | Docker CLI |
+| 주요 증상 | `x509: certificate signed by unknown authority`, IP SAN mismatch 가능성 |
+| 민감 정보 처리 | 실제 내부 IP, 포트, password는 `[REDACTED]` 처리 |
+
+> 이 글에서는 실제 내부 IP와 포트를 사용하지 않고 `[REDACTED_IP]`, `[REDACTED_PORT]`로 표기한다.
+
+---
+
+## 핵심 구분
+
+Root CA, 서버 인증서, Docker `ca.crt`, Java keystore를 같은 것으로 보면 설정이 꼬이기 쉽다. 역할을 분리해서 봐야 한다.
+
+| 파일 | 역할 | 배포 위치 |
+| --- | --- | --- |
+| `rootCA.key` | 인증서를 발급하는 Root CA private key | 관리자 PC 또는 안전한 오프라인 저장소 |
+| `rootCA.crt` | 클라이언트가 신뢰할 Root CA certificate | 일반 PC, 서버 trust store, Docker `certs.d` |
+| `nexus-registry.crt` | Nexus3 Docker Registry가 내보낼 server certificate | Nexus3 keystore 내부 |
+| `nexus-registry.key` | Nexus3 Docker Registry server private key | Nexus3 keystore 내부 |
+| `traefik-default.crt` | Traefik default TLSStore에서 사용할 server certificate | Kubernetes TLS Secret |
+| `traefik-default.key` | Traefik default TLSStore server private key | Kubernetes TLS Secret |
+| `keystore.jks` | Nexus3 Jetty HTTPS용 Java keystore | Kubernetes Secret으로 Nexus Pod에 mount |
+
+중요한 기준은 다음과 같다.
+
+```text
+클라이언트에 배포하는 것:
+rootCA.crt
+
+서버가 내보내는 것:
+nexus-registry.crt 또는 traefik-default.crt
+
+절대 배포하면 안 되는 것:
+rootCA.key
+```
+
+---
+
+## 포트와 인증서 검증의 관계
+
+TLS certificate 검증에서 중요한 것은 접속한 hostname 또는 IP가 server certificate의 SAN(Subject Alternative Name)에 포함되어 있는지 여부다.
+
+포트는 certificate SAN 검증 대상이 아니다.
+
+```text
+https://[REDACTED_IP]:[REDACTED_PORT]
+```
+
+위 endpoint에 접속한다면 certificate에는 다음 형태의 SAN이 있어야 한다.
+
+```text
+IP Address:[REDACTED_IP]
+```
+
+따라서 기존 endpoint에서 새 VIP endpoint로 바뀌었다면, 포트 변경 자체보다 **접속 IP가 server certificate SAN에 포함되어 있는지**가 핵심이다.
+
+---
+
+## 권장 구조
+
+DNS가 없고 IP 기반으로만 접근하는 환경에서는 Root CA 하나를 만들고, 그 Root CA로 각 server certificate를 발급하는 방식이 단순하다.
+
+```text
+rootCA.crt / rootCA.key
+        │
+        ├── nexus-registry.crt / nexus-registry.key
+        └── traefik-default.crt / traefik-default.key
+```
+
+처음에는 intermediate CA까지 둘 필요는 없다.
+
+```text
+Root CA
+  └── Service server certificate
+```
+
+다음처럼 intermediate CA를 두는 구조도 가능하지만, 홈랩이나 폐쇄망 단일 운영 환경에서는 초기 복잡도가 높다.
+
+```text
+Root CA
+  └── Intermediate CA
+        └── Service server certificate
+```
+
+---
+
+## Root CA 생성 시 주의할 점
+
+`openssl req -x509`에 `-addext`를 붙이는 방식은 간단하지만, 환경에 따라 시스템 `openssl.cnf` 설정과 extension이 중복 적용될 수 있다. Java `keytool`은 duplicate extension이 있는 certificate를 엄격하게 거부한다.
+
+실제 확인된 오류는 다음과 같았다.
+
+```text
+java.security.cert.CertificateParsingException: java.io.IOException: Duplicate extensions not allowed
+```
+
+이 오류가 `rootCA.crt`에서 발생하면, Root CA 자체가 Java 기준으로 깨진 상태다.
+
+```bash
+keytool -printcert -v -file ~/homelab-ca/root/rootCA.crt
+```
+
+위 명령에서 다음 오류가 발생하면 Root CA를 다시 생성해야 한다.
+
+```text
+Duplicate extensions not allowed
+```
+
+---
+
+## 안전한 Root CA 재생성 방식
+
+Extension 중복을 피하기 위해 CSR 생성과 self-sign 단계를 분리한다. `-addext`는 사용하지 않는다.
+
+```bash
+mkdir -p ~/homelab-ca/root
+cd ~/homelab-ca/root
+chmod 700 ~/homelab-ca ~/homelab-ca/root
+```
+
+기존 `rootCA.key`를 재사용할 수 있다. 아직 널리 배포하지 않았다면 새로 만들어도 된다.
+
+```bash
+test -f rootCA.key || openssl genrsa -out rootCA.key 4096
+chmod 600 rootCA.key
+```
+
+CSR용 config를 만든다.
+
+```bash
+cat > rootCA.csr.cnf <<'EOF'
+[ req ]
+prompt = no
+distinguished_name = dn
+default_md = sha256
+
+[ dn ]
+CN = homelab-root-ca
+EOF
+```
+
+Root CA extension 파일을 만든다.
+
+```bash
+cat > rootCA.ext <<'EOF'
+[ v3_ca ]
+basicConstraints = critical, CA:TRUE, pathlen:0
+keyUsage = critical, keyCertSign, cRLSign
+subjectKeyIdentifier = hash
+EOF
+```
+
+CSR을 생성한다.
+
+```bash
+openssl req -new \
+  -key rootCA.key \
+  -out rootCA.csr \
+  -config rootCA.csr.cnf
+```
+
+self-signed Root CA certificate를 생성한다.
+
+```bash
+openssl x509 -req \
+  -in rootCA.csr \
+  -signkey rootCA.key \
+  -days 3650 \
+  -sha256 \
+  -out rootCA.crt \
+  -extfile rootCA.ext \
+  -extensions v3_ca
+```
+
+검증한다.
+
+```bash
+openssl x509 -in rootCA.crt -noout -subject -issuer -dates
+openssl x509 -in rootCA.crt -noout -text | grep -E "X509v3 Basic Constraints|X509v3 Key Usage|X509v3 Subject Key Identifier"
+keytool -printcert -v -file rootCA.crt
+```
+
+`keytool -printcert`가 성공해야 Java keystore 변환 과정에서도 문제가 적다.
+
+---
+
+## Nexus3 Docker Registry용 server certificate 발급
+
+Root CA가 깨끗하게 만들어졌다면, Nexus3 server certificate도 다시 발급한다. 기존에 깨진 Root CA로 서명한 certificate는 정리하는 것이 안전하다.
+
+```bash
+mkdir -p ~/homelab-ca/certs/nexus-registry
+cd ~/homelab-ca/certs/nexus-registry
+```
+
+기존 key를 재사용하거나 새로 만든다.
+
+```bash
+test -f nexus-registry.key || openssl genrsa -out nexus-registry.key 2048
+```
+
+CSR을 생성한다.
+
+```bash
+openssl req -new \
+  -key nexus-registry.key \
+  -out nexus-registry.csr \
+  -subj "/CN=nexus-registry"
+```
+
+IP SAN을 포함한 extension 파일을 만든다. 실제 IP는 운영 환경에 맞게 작성한다.
+
+```bash
+cat > nexus-registry.ext <<'EOF'
+[ server_ext ]
+basicConstraints = critical, CA:FALSE
+keyUsage = critical, digitalSignature, keyEncipherment
+extendedKeyUsage = serverAuth
+subjectAltName = @alt_names
+
+[ alt_names ]
+IP.1 = [REDACTED_IP]
+IP.2 = [REDACTED_IP]
+IP.3 = [REDACTED_IP]
+EOF
+```
+
+Root CA로 서명한다.
+
+```bash
+openssl x509 -req \
+  -in nexus-registry.csr \
+  -CA ~/homelab-ca/root/rootCA.crt \
+  -CAkey ~/homelab-ca/root/rootCA.key \
+  -CAcreateserial \
+  -out nexus-registry.crt \
+  -days 825 \
+  -sha256 \
+  -extfile nexus-registry.ext \
+  -extensions server_ext
+```
+
+검증한다.
+
+```bash
+openssl x509 -in nexus-registry.crt -noout -subject -issuer -dates
+openssl x509 -in nexus-registry.crt -noout -text | grep -A10 "Subject Alternative Name"
+keytool -printcert -v -file nexus-registry.crt
+```
+
+정상 조건은 다음과 같다.
+
+| 항목 | 기대값 |
+| --- | --- |
+| `issuer` | `CN = homelab-root-ca` |
+| `subject` | `CN = nexus-registry` |
+| `Basic Constraints` | `CA:FALSE` |
+| `Subject Alternative Name` | 접속에 사용할 모든 IP 포함 |
+| `keytool -printcert` | 오류 없이 성공 |
+
+---
+
+## PKCS12와 JKS 생성
+
+Nexus3 Jetty HTTPS 설정에서 `keystore.jks`를 사용한다면, `nexus-registry.crt/key`를 기반으로 PKCS12와 JKS를 생성한다.
+
+기존 `nexus-jetty` ConfigMap에서 사용하던 keystore password를 그대로 쓰면 ConfigMap 변경을 줄일 수 있다.
+
+```bash
+export KS_PASS='[REDACTED]'
+```
+
+새 password를 사용할 수도 있지만, 그 경우 `nexus-jetty` ConfigMap의 `KeyStorePassword`, `KeyManagerPassword` 등도 같이 바꿔야 한다.
+
+PKCS12를 생성한다.
+
+```bash
+openssl pkcs12 -export \
+  -name jetty \
+  -inkey nexus-registry.key \
+  -in nexus-registry.crt \
+  -certfile ~/homelab-ca/root/rootCA.crt \
+  -out nexus-registry.p12 \
+  -passout pass:"${KS_PASS}"
+```
+
+JKS로 변환한다.
+
+```bash
+rm -f keystore.jks
+
+keytool -importkeystore \
+  -srckeystore nexus-registry.p12 \
+  -srcstoretype PKCS12 \
+  -srcstorepass "${KS_PASS}" \
+  -destkeystore keystore.jks \
+  -deststoretype JKS \
+  -deststorepass "${KS_PASS}" \
+  -destkeypass "${KS_PASS}" \
+  -alias jetty
+```
+
+JKS 내용을 확인한다.
+
+```bash
+keytool -list -v \
+  -keystore keystore.jks \
+  -storepass "${KS_PASS}" \
+  | grep -E "Alias name|Entry type|Owner|Issuer|SubjectAlternativeName"
+```
+
+정상적으로는 다음 흐름이어야 한다.
+
+```text
+Alias name: jetty
+Entry type: PrivateKeyEntry
+Owner: CN=nexus-registry
+Issuer: CN=homelab-root-ca
+SubjectAlternativeName: IPAddress: [REDACTED_IP]
+```
+
+---
+
+## Nexus chart의 `nexus-keystore` Secret 교체
+
+기존 chart에서 `extraVolumes`로 `nexus-keystore` Secret을 mount하고 있었다면, 같은 Secret 이름으로 `keystore.jks`를 교체한다.
+
+먼저 백업한다.
+
+```bash
+kubectl -n nexus get secret nexus-keystore -o yaml > nexus-keystore.backup.yaml
+```
+
+Secret을 갱신한다.
+
+```bash
+kubectl -n nexus create secret generic nexus-keystore \
+  --from-file=keystore.jks=./keystore.jks \
+  --dry-run=client -o yaml | kubectl apply -f -
+```
+
+Secret key 이름이 기존 chart의 `subPath`와 일치해야 한다.
+
+```text
+subPath: keystore.jks
+```
+
+따라서 Secret data key도 `keystore.jks`여야 한다.
+
+---
+
+## `nexus-jetty` ConfigMap 확인
+
+기존에 `nexus-jetty` ConfigMap으로 Docker HTTPS hosting에 성공했다면, 구조는 유지하고 다음 항목만 확인한다.
+
+```bash
+kubectl -n nexus get cm nexus-jetty -o yaml | grep -Ei "keystore|truststore|password|application-port|ssl|jetty|[REDACTED_PORT]"
+```
+
+확인할 값은 다음과 같다.
+
+| 항목 | 확인 내용 |
+| --- | --- |
+| keystore path | Pod 내부에 mount된 `keystore.jks` 경로와 일치 |
+| keystore password | JKS 생성 시 사용한 `KS_PASS`와 일치 |
+| key manager password | JKS 생성 시 사용한 `KS_PASS`와 일치 |
+| HTTPS connector port | 외부에서 접근할 registry port와 Service mapping이 일치 |
+| 기존 port | 이전 port가 남아있지 않은지 확인 |
+
+예시 형태는 다음과 같다.
+
+```xml
+<Set name="KeyStorePath">/nexus-data/etc/ssl/keystore.jks</Set>
+<Set name="KeyStorePassword">[REDACTED]</Set>
+<Set name="KeyManagerPassword">[REDACTED]</Set>
+```
+
+새 password를 사용했다면 ConfigMap도 반드시 수정해야 한다.
+
+> password를 ConfigMap에 평문으로 넣는 구성은 운영 보안상 좋지 않다. 기존 chart 구조를 유지하더라도 장기적으로는 Secret 분리를 검토하는 것이 좋다.
+
+---
+
+## Nexus Service와 Docker HTTPS connector port 확인
+
+Nexus Docker Registry는 일반적인 URL path 기반 라우팅이 아니라 Docker repository connector port를 사용한다. 따라서 다음 mapping이 맞아야 한다.
+
+```text
+Docker client
+  → https://[REDACTED_IP]:[REDACTED_PORT]
+  → Kubernetes Service port [REDACTED_PORT]
+  → targetPort [REDACTED_PORT]
+  → Nexus Docker HTTPS connector [REDACTED_PORT]
+```
+
+Service를 확인한다.
+
+```bash
+kubectl -n nexus get svc -o wide
+kubectl -n nexus get svc -o yaml | grep -A8 -B4 "[REDACTED_PORT]"
+```
+
+확인할 점은 다음과 같다.
+
+| 계층 | 값 |
+| --- | --- |
+| External IP | `[REDACTED_IP]` |
+| Service port | `[REDACTED_PORT]` |
+| targetPort | Nexus container가 실제 listen하는 Docker HTTPS connector port |
+| Nexus repository connector | HTTPS port `[REDACTED_PORT]` |
+
+---
+
+## Nexus Pod 재시작
+
+Secret이나 ConfigMap을 바꾼 뒤에는 Nexus/Jetty가 keystore를 자동 reload한다고 가정하지 않는 것이 안전하다.
+
+```bash
+kubectl -n nexus rollout restart deploy/nexus
+kubectl -n nexus rollout status deploy/nexus
+```
+
+로그를 확인한다.
+
+```bash
+kubectl -n nexus logs deploy/nexus -f
+```
+
+자주 발생하는 오류와 의미는 다음과 같다.
+
+| 로그 또는 오류 | 의미 |
+| --- | --- |
+| `Keystore was tampered with, or password was incorrect` | JKS password와 ConfigMap password 불일치 |
+| `No such file or directory` | keystore mount path와 Jetty 설정 path 불일치 |
+| `Address already in use` | Nexus 내부에서 port 충돌 |
+| `Duplicate extensions not allowed` | certificate 자체가 Java 파서 기준으로 잘못됨 |
+
+---
+
+## Traefik default TLSStore용 certificate 재발급
+
+Root CA가 깨진 상태였다면, 그 Root CA로 서명한 `traefik-default.crt`도 다시 발급해야 한다.
+
+```bash
+mkdir -p ~/homelab-ca/certs/traefik-default
+cd ~/homelab-ca/certs/traefik-default
+```
+
+기존 key를 재사용하거나 새로 만든다.
+
+```bash
+test -f traefik-default.key || openssl genrsa -out traefik-default.key 2048
+```
+
+CSR 생성:
+
+```bash
+openssl req -new \
+  -key traefik-default.key \
+  -out traefik-default.csr \
+  -subj "/CN=traefik-default"
+```
+
+Extension 파일:
+
+```bash
+cat > traefik-default.ext <<'EOF'
+[ server_ext ]
+basicConstraints = critical, CA:FALSE
+keyUsage = critical, digitalSignature, keyEncipherment
+extendedKeyUsage = serverAuth
+subjectAltName = @alt_names
+
+[ alt_names ]
+IP.1 = [REDACTED_IP]
+IP.2 = [REDACTED_IP]
+IP.3 = [REDACTED_IP]
+EOF
+```
+
+Root CA로 서명:
+
+```bash
+openssl x509 -req \
+  -in traefik-default.csr \
+  -CA ~/homelab-ca/root/rootCA.crt \
+  -CAkey ~/homelab-ca/root/rootCA.key \
+  -CAcreateserial \
+  -out traefik-default.crt \
+  -days 825 \
+  -sha256 \
+  -extfile traefik-default.ext \
+  -extensions server_ext
+```
+
+검증:
+
+```bash
+openssl x509 -in traefik-default.crt -noout -subject -issuer -dates
+openssl x509 -in traefik-default.crt -noout -text | grep -A10 "Subject Alternative Name"
+keytool -printcert -v -file traefik-default.crt
+```
+
+---
+
+## Traefik default TLSStore Secret 교체
+
+기존 Secret 이름이 `traefik-default-tls`라면 같은 이름으로 갱신한다.
+
+```bash
+kubectl -n kube-system create secret tls traefik-default-tls \
+  --cert=~/homelab-ca/certs/traefik-default/traefik-default.crt \
+  --key=~/homelab-ca/certs/traefik-default/traefik-default.key \
+  --dry-run=client -o yaml | kubectl apply -f -
+```
+
+TLSStore가 다음 Secret을 참조하고 있어야 한다.
+
+```yaml
+apiVersion: traefik.io/v1alpha1
+kind: TLSStore
+metadata:
+  name: default
+  namespace: kube-system
+spec:
+  defaultCertificate:
+    secretName: traefik-default-tls
+```
+
+확인:
+
+```bash
+kubectl -n kube-system get secret traefik-default-tls
+kubectl -n kube-system get tlsstore default -o yaml
+```
+
+확실하게 반영하려면 Traefik을 재시작한다.
+
+```bash
+kubectl -n kube-system rollout restart deploy/traefik
+kubectl -n kube-system rollout status deploy/traefik
+```
+
+---
+
+## 클라이언트 OS에 Root CA 설치
+
+일반 PC에서 `rootCA.crt`를 Trusted Root CA로 설치하면, 그 Root CA로 서명된 Traefik/Nexus server certificate를 브라우저와 `curl`이 신뢰할 수 있다.
+
+Windows 기준으로는 다음 위치에 설치한다.
+
+```text
+로컬 컴퓨터
+→ 모든 인증서를 다음 저장소에 저장
+→ 신뢰할 수 있는 루트 인증 기관
+```
+
+Chrome과 Edge는 일반적으로 Windows certificate store를 따른다. Firefox는 설정에 따라 자체 certificate store를 사용할 수 있으므로, Firefox에서만 경고가 남으면 Firefox certificate manager도 확인해야 한다.
+
+RPM 계열 Linux에서는 다음처럼 설치한다.
+
+```bash
+sudo cp rootCA.crt /etc/pki/ca-trust/source/anchors/homelab-root-ca.crt
+sudo update-ca-trust extract
+```
+
+Debian/Ubuntu 계열에서는 다음처럼 설치한다.
+
+```bash
+sudo cp rootCA.crt /usr/local/share/ca-certificates/homelab-root-ca.crt
+sudo update-ca-certificates
+```
+
+---
+
+## Docker client에 Root CA 등록
+
+Docker는 registry endpoint별로 certificate directory를 본다.
+
+```text
+/etc/docker/certs.d/<registry-host>:<registry-port>/ca.crt
+```
+
+여기 들어가는 것은 `nexus-registry.crt`가 아니라 `rootCA.crt`다.
+
+```bash
+sudo mkdir -p /etc/docker/certs.d/[REDACTED_IP]:[REDACTED_PORT]
+sudo cp rootCA.crt /etc/docker/certs.d/[REDACTED_IP]:[REDACTED_PORT]/ca.crt
+sudo systemctl restart docker
+```
+
+기존 endpoint와 신규 endpoint를 동시에 유지한다면 각각의 `host:port` 경로에 `ca.crt`를 넣어야 한다.
+
+```text
+/etc/docker/certs.d/[OLD_REDACTED_IP]:[OLD_REDACTED_PORT]/ca.crt
+/etc/docker/certs.d/[NEW_REDACTED_IP]:[NEW_REDACTED_PORT]/ca.crt
+```
+
+---
+
+## 검증 절차
+
+### 1. 서버가 내보내는 certificate 확인
+
+Nexus 직접 HTTPS endpoint:
+
+```bash
+echo | openssl s_client -connect [REDACTED_IP]:[REDACTED_PORT] -showcerts 2>/dev/null \
+  | openssl x509 -noout -subject -issuer
+```
+
+SAN 확인:
+
+```bash
+echo | openssl s_client -connect [REDACTED_IP]:[REDACTED_PORT] -showcerts 2>/dev/null \
+  | openssl x509 -noout -text | grep -A10 "Subject Alternative Name"
+```
+
+기대값:
+
+```text
+subject=CN = nexus-registry
+issuer=CN = homelab-root-ca
+IP Address:[REDACTED_IP]
+```
+
+Traefik default TLS endpoint:
+
+```bash
+echo | openssl s_client -connect [REDACTED_IP]:443 -showcerts 2>/dev/null \
+  | openssl x509 -noout -subject -issuer
+```
+
+기대값:
+
+```text
+subject=CN = traefik-default
+issuer=CN = homelab-root-ca
+```
+
+### 2. Root CA로 검증
+
+```bash
+openssl s_client \
+  -connect [REDACTED_IP]:[REDACTED_PORT] \
+  -CAfile ~/homelab-ca/root/rootCA.crt \
+  -verify_return_error </dev/null
+```
+
+성공 기준:
+
+```text
+Verify return code: 0 (ok)
+```
+
+### 3. curl 검증
+
+```bash
+curl -v --cacert ~/homelab-ca/root/rootCA.crt https://[REDACTED_IP]:[REDACTED_PORT]/v2/
+```
+
+정상적인 결과는 환경에 따라 다음 중 하나일 수 있다.
+
+```text
+{}
+```
+
+또는 인증이 필요한 registry라면 다음도 정상이다.
+
+```text
+401 Unauthorized
+```
+
+`401 Unauthorized`는 TLS 검증이 통과했고 Docker Registry 인증만 필요한 상태로 볼 수 있다.
+
+### 4. Docker 검증
+
+```bash
+docker login [REDACTED_IP]:[REDACTED_PORT]
+docker pull [REDACTED_IP]:[REDACTED_PORT]/<image>:<tag>
+```
+
+---
+
+## 브라우저 경고가 사라지는 조건
+
+일반 PC에 `rootCA.crt`를 Trusted Root CA로 설치하면 Traefik을 통해 접근하는 서비스에서 `안전하지 않음` 경고가 사라질 수 있다. 단, 다음 조건을 모두 만족해야 한다.
+
+| 조건 | 설명 |
+| --- | --- |
+| Root CA 설치 | `rootCA.crt`가 Trusted Root CA로 설치되어 있음 |
+| Server certificate 서명 | `traefik-default.crt`가 해당 Root CA로 서명됨 |
+| SAN 일치 | 접속 IP가 `traefik-default.crt`의 SAN에 포함됨 |
+| 실제 TLS 종료 지점 | 해당 서비스가 Traefik TLSStore/default cert를 통해 TLS 종료 중 |
+| 브라우저 trust store | 사용하는 브라우저가 해당 OS trust store를 사용함 |
+
+주의할 점은 다음과 같다.
+
+```text
+rootCA.crt를 설치했는데도 경고가 뜬다
+→ Traefik이 예전 certificate를 내보내는지 확인
+→ 접속 IP가 SAN에 포함되어 있는지 확인
+→ 해당 서비스가 Traefik이 아니라 앱 자체 TLS로 응답하는지 확인
+```
+
+---
+
+## 장애 원인 후보와 구분 기준
+
+| 증상 | 원인 후보 | 확인 방법 |
+| --- | --- | --- |
+| `certificate signed by unknown authority` | 클라이언트가 Root CA를 신뢰하지 않음 | OS trust store, Docker `certs.d` 확인 |
+| `doesn't contain any IP SANs` | server certificate SAN 누락 | `openssl x509 -text`로 SAN 확인 |
+| `certificate is valid for ..., not ...` | 접속 IP와 SAN 불일치 | 접속 endpoint와 SAN 비교 |
+| `Duplicate extensions not allowed` | certificate extension 중복 | `keytool -printcert -v -file <crt>` |
+| Docker만 실패 | Docker `certs.d` 미설정 | `/etc/docker/certs.d/<host>:<port>/ca.crt` 확인 |
+| curl도 실패 | OS trust store 미설정 | `update-ca-trust` 또는 `update-ca-certificates` 확인 |
+| 브라우저만 실패 | 브라우저 trust store 또는 cache 문제 | Windows certificate store, Firefox certificate manager 확인 |
+
+---
+
+## 정리
+
+이번 구성에서 가장 중요한 결론은 다음과 같다.
+
+1. `rootCA.crt`는 클라이언트가 신뢰할 기준이고, `rootCA.key`는 절대 배포하지 않는다.
+2. Nexus3 Docker Registry는 `nexus-registry.crt/key`를 Java `keystore.jks`로 만들어 Jetty HTTPS 설정에 연결한다.
+3. Traefik default TLSStore는 `traefik-default.crt/key`를 Kubernetes TLS Secret으로 등록한다.
+4. DNS 없이 IP 기반으로 접근하려면 server certificate의 SAN에 실제 접속 IP가 반드시 들어가야 한다.
+5. Docker client는 OS trust store와 별개로 `/etc/docker/certs.d/<host>:<port>/ca.crt`에 `rootCA.crt`를 넣는 것이 안전하다.
+6. `Duplicate extensions not allowed`가 `rootCA.crt`에서 발생하면 Root CA부터 재생성하고, 그 Root CA로 서명한 Nexus/Traefik certificate도 다시 발급하는 것이 안전하다.
