@@ -2,7 +2,7 @@ import { promises as fs } from "fs";
 import { basename, join, relative } from "path";
 import process from "process";
 
-const collections = new Set(["notes", "devops", "research", "paper-reviews", "archive", "projects"]);
+const collections = new Set(["notes", "research", "archive", "projects"]);
 const contentTypes = new Set([
   "troubleshooting-log",
   "terminal-log",
@@ -100,7 +100,7 @@ node automation/scripts/generate-draft.mjs --source automation/raw/inbox/example
 Options:
   --title "Title"
   --description "Short description"
-  --collection notes|devops|research|paper-reviews|archive|projects
+  --collection notes|research|archive|projects
   --type troubleshooting-log|terminal-log|deployment-note|implementation-note|algorithm-study|system-design|infrastructure-decision|debugging-note|experiment-note|paper-review|engineering-observation
   --sourceKind raw-note|terminal-log|git-diff|deployment-log|study-note|manual
   --tags "docker,github-pages,deployment"
@@ -152,10 +152,10 @@ function inferContentType(text) {
 function inferCollection(contentType, text) {
   const lower = text.toLowerCase();
   if (["troubleshooting-log", "terminal-log", "deployment-note", "infrastructure-decision", "debugging-note"].includes(contentType)) {
-    return "devops";
+    return "notes";
   }
   if (contentType === "paper-review") {
-    return "paper-reviews";
+    return "notes";
   }
   if (
     ["algorithm-study", "experiment-note"].includes(contentType) ||
@@ -200,9 +200,9 @@ function inferTags(text, contentType) {
 }
 
 function defaultCategory(collection, contentType) {
-  if (collection === "devops") return "operations";
+  if (collection === "notes" && ["troubleshooting-log", "terminal-log", "deployment-note", "infrastructure-decision", "debugging-note"].includes(contentType)) return "operations";
   if (collection === "research") return "engineering-research";
-  if (collection === "paper-reviews") return "paper-review";
+  if (contentType === "paper-review") return "paper-review";
   if (collection === "archive") return "archive";
   return contentType;
 }

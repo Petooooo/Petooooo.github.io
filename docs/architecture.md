@@ -13,10 +13,8 @@ The site is static-first and notebook-shaped. Astro builds content collections i
 ## Information Architecture
 
 - Projects: larger implementations and ongoing engineering work.
-- Notes: technical study notes and reusable engineering references.
+- Notes: technical study notes, infrastructure operations, deployment runbooks, troubleshooting, and paper reading notes.
 - Research: computer science, electrical/electronic engineering, systems, AI infrastructure, algorithms, and embedded/system-level research notes.
-- DevOps: operations, troubleshooting, deployment, recovery, and infrastructure decisions.
-- Paper Reviews: concise technical reviews with implementation details and practical observations.
 - Archive: unreviewed drafts, automation outputs, temporary notes, and experimental content.
 
 ## Publishing Model

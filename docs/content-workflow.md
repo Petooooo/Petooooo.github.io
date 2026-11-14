@@ -9,10 +9,8 @@ Raw notes and logs can be staged under `automation/raw/inbox` before conversion.
 ## Collections
 
 - Projects: systems implementation records.
-- Notes: reusable technical references.
-- DevOps: operation logs, deployment notes, and runbooks.
+- Notes: reusable technical references, operational logs, deployment runbooks, troubleshooting, and paper reading notes.
 - Research: computer science, electrical/electronic engineering, systems engineering, AI infrastructure, software engineering, algorithms, and embedded/system-level engineering notes.
-- Paper Reviews: concise reviewed-paper notes with summary, core idea, implementation details, limitations, references, and related work.
 - Archive: temporary notes, experiments, and reviewed archive material.
 
 ## Taxonomy
@@ -25,9 +23,9 @@ Top-level collections describe the content type. Keep navigation simple and use 
 - `tags`: specific keywords.
 - `problemId`: optional problem identifier for coding-test or Baekjoon notes.
 
-Notes areas include Algorithms, Baekjoon, Computer Networks, Operating Systems, Databases, System Software, Digital Circuits, Computer Architecture, Cloud Infrastructure, Programming, and Security.
+Notes areas include Algorithms, Baekjoon, Computer Networks, Operating Systems, Databases, System Software, Digital Circuits, Computer Architecture, Cloud Infrastructure, Kubernetes, Networking, Troubleshooting, Programming, and Security.
 
-DevOps areas include Kubernetes, Docker, CI/CD, Git/GitHub, Registry/Nexus, Networking/DNS/TLS, Observability, Raspberry Pi / Homelab, Storage, and Troubleshooting.
+Operational material is grouped under Notes using areas such as Kubernetes, Networking, CI/CD, Registry/Nexus, Storage, and Troubleshooting.
 
 Research areas are limited to computer science and electrical/electronic engineering topics: Computer Architecture, Systems, Distributed Systems, AI Infrastructure, Embedded Systems, and Electronic Engineering.
 
@@ -36,9 +34,9 @@ Placement rules:
 - Concept study notes go to Notes.
 - Algorithm and Baekjoon notes go to Notes.
 - Computer networks, operating systems, databases, system software, and digital circuits study notes go to Notes.
-- Real operational logs, deployment notes, troubleshooting, and incident notes go to DevOps.
+- Real operational logs, deployment notes, troubleshooting, and incident notes go to Notes.
 - Built systems and tools go to Projects.
-- Paper summaries go to Paper Reviews.
+- Paper reading notes go to Notes; original research experiments go to Research.
 - CS/EE research ideas and experiments go to Research.
 - Old drafts or low-confidence generated material goes to Archive.
 
@@ -109,13 +107,13 @@ sourceUrl: "https://example.com/source"
 Use the local generator for a first-pass structure:
 
 ```bash
-npm run draft:from-note -- --source automation/raw/inbox/example.md --collection devops --type deployment-note --tags "deployment,github-pages"
+npm run draft:from-note -- --source automation/raw/inbox/example.md --collection notes --type deployment-note --tags "deployment,github-pages"
 ```
 
 The generator:
 
 - reads one raw note or log file
-- redacts obvious IPs, emails, bearer tokens, and key/value secrets
+- redacts obvious IPs, emails, bearer [REDACTED], and key/value secrets
 - infers a collection and content type when not supplied
 - writes an MDX draft into the existing Astro content collections
 - never publishes content

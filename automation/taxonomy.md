@@ -6,9 +6,7 @@ The automation layer supports draft organization only. It does not decide what i
 
 - `projects`: implementation records for systems in the lab. Use manually or with explicit `--collection projects` because projects require role, period, and status metadata.
 - `research`: computer science, electrical/electronic engineering, systems engineering, AI infrastructure, software engineering, algorithms, and embedded/system-level engineering notes.
-- `devops`: deployment notes, troubleshooting logs, terminal logs, infrastructure decisions, rollback notes, and operating records.
-- `notes`: implementation notes, study notes, practical observations, and reusable technical references.
-- `paper-reviews`: concise reviews of computer science, electrical/electronic engineering, systems, AI infrastructure, software engineering, algorithms, and embedded/system-level engineering papers.
+- `notes`: implementation notes, study notes, operational logs, deployment notes, troubleshooting, rollback notes, paper reviews, and reusable technical references.
 - `archive`: temporary notes, experiments, migrated material, and older archive entries.
 
 ## Content Types

@@ -66,16 +66,12 @@ const projects = defineCollection({
 });
 
 const notes = defineCollection({ type: "content", schema: basePostSchema });
-const devops = defineCollection({ type: "content", schema: basePostSchema });
 const research = defineCollection({ type: "content", schema: basePostSchema });
-const paperReviews = defineCollection({ type: "content", schema: basePostSchema });
 const archive = defineCollection({ type: "content", schema: basePostSchema });
 
 export const collections = {
   projects,
   notes,
-  devops,
   research,
-  "paper-reviews": paperReviews,
   archive
 };

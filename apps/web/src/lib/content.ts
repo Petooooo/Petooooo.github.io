@@ -3,7 +3,7 @@ import { withBase } from "@/lib/urls";
 
 export type RoutedCollectionKey = Extract<
   CollectionKey,
-  "projects" | "notes" | "devops" | "research" | "paper-reviews" | "archive"
+  "projects" | "notes" | "research" | "archive"
 >;
 
 export type RoutedEntry = CollectionEntry<RoutedCollectionKey>;
@@ -80,9 +80,8 @@ export function sortAreas(areas: string[], preferredOrder: readonly string[] = [
 }
 
 export function formatDate(date: Date) {
-  return new Intl.DateTimeFormat("en", {
-    year: "numeric",
-    month: "short",
-    day: "numeric"
-  }).format(date);
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(date.getUTCDate()).padStart(2, "0");
+  return `${year}.${month}.${day}`;
 }

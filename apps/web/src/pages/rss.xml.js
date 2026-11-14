@@ -8,9 +8,7 @@ export async function GET(context) {
   const entries = [
     ...(await getCollection("projects")),
     ...(await getCollection("notes")),
-    ...(await getCollection("devops")),
     ...(await getCollection("research")),
-    ...(await getCollection("paper-reviews")),
     ...(await getCollection("archive"))
   ].filter(isPublishedEntry).sort(byDateDesc);
 

@@ -1,0 +1,26 @@
+---
+import { withBase } from "@/lib/urls";
+
+interface Props {
+  to: string;
+}
+
+const { to } = Astro.props;
+const destination = withBase(to);
+const canonical = new URL(destination, Astro.site ?? "https://petooooo.github.io");
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="robots" content="noindex, follow" />
+    <meta http-equiv="refresh" content={`0; url=${destination}`} />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="canonical" href={canonical} />
+    <title>Moved to Notes · Jihwan Park</title>
+  </head>
+  <body>
+    <p>This page has moved. <a href={destination}>Continue to Notes</a>.</p>
+  </body>
+</html>

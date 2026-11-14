@@ -1,6 +1,6 @@
 # Petooooo.github.io
 
-This repository contains the public site for my personal engineering notebook. It is a static Astro/MDX site for projects, study notes, DevOps records, research-oriented writing, paper reviews, and archived drafts.
+This repository contains the public site for my personal engineering notebook. It is a static Astro/MDX site for projects, technical and operational notes, research-oriented writing, and archived drafts.
 
 The site is intentionally simple: write in Markdown or MDX, review changes in Git, push to `main`, and let GitHub Pages publish the static build. A Raspberry Pi 4 Docker/Caddy path is kept as optional self-hosting documentation, but GitHub Pages is the primary public deployment for this repository.
 
@@ -24,14 +24,12 @@ This repository is not the private Workbench itself. Some writing and experiment
 
 ## Content Areas
 
-- `projects`: larger implementations and project-level records.
-- `notes`: study notes and conceptual learning material.
-- `devops`: infrastructure, deployment, operations, and troubleshooting notes.
+- `projects`: implementations and project-level records.
+- `notes`: study notes, infrastructure operations, troubleshooting, deployment runbooks, and paper reading notes.
 - `research`: computer science and electrical/electronic engineering research notes.
-- `paper-reviews`: concise paper reading notes.
-- `archive`: old drafts, temporary material, and lower-confidence notes that should not crowd the main sections.
+- `archive`: older drafts, experiments, and material outside the main sections.
 
-Drafts use `draft: true` and are excluded from public routes. Published content should avoid secrets, private hostnames, internal IPs, tokens, and sensitive operational details.
+Former `/devops/` URLs use static compatibility redirects to `/notes/`; all public articles were retained. Drafts use `draft: true` and are excluded from public routes. Published content should avoid secrets, private hostnames, internal IPs, tokens, and sensitive operational details.
 
 ## Local Development
 

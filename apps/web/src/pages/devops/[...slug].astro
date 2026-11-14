@@ -1,10 +1,21 @@
 ---
-import { getCollection } from "astro:content";
-import ContentLayout from "@/layouts/ContentLayout.astro";
-import { isPublishedEntry } from "@/lib/content";
-export async function getStaticPaths() {
-  return (await getCollection("devops")).filter(isPublishedEntry).map((entry) => ({ params: { slug: entry.slug }, props: { entry } }));
+import LegacyRedirect from "@/components/LegacyRedirect.astro";
+
+export function getStaticPaths() {
+  const legacySlugs = [
+    "k3s-registry-bootstrap-nexus-self-dependency",
+    "k3s-kubeconfig-kubectl-k9s",
+    "k3s-metallb-servicelbklipper-hostport",
+    "k3s-traefik-nodeport-metallb-vip",
+    "nexus3-https-registry-root-ca-ip-san-docker"
+  ];
+
+  return legacySlugs.map((slug) => ({
+    params: { slug },
+    props: { destination: `/notes/${slug}/` }
+  }));
 }
-const { entry } = Astro.props;
+
+const { destination } = Astro.props;
 ---
-<ContentLayout entry={entry} />
+<LegacyRedirect to={destination} />

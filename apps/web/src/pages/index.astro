@@ -1,142 +1,129 @@
 ---
 import { getCollection } from "astro:content";
 import BaseLayout from "@/layouts/BaseLayout.astro";
+import OverviewCard from "@/components/OverviewCard.astro";
 import ContentCard from "@/components/ContentCard.astro";
 import SectionHeader from "@/components/SectionHeader.astro";
 import { byDateDesc, getCollectionUrl, isPublishedEntry } from "@/lib/content";
 import { withBase } from "@/lib/urls";
 
 const notes = (await getCollection("notes")).filter(isPublishedEntry);
-const devops = (await getCollection("devops")).filter(isPublishedEntry);
 const research = (await getCollection("research")).filter(isPublishedEntry);
-const paperReviews = (await getCollection("paper-reviews")).filter(isPublishedEntry);
-const recentPosts = [...notes, ...devops, ...research, ...paperReviews].sort(byDateDesc).slice(0, 4);
+const recentPosts = [...notes, ...research].sort(byDateDesc).slice(0, 4);
 
-const focus = [
+const interests = [
   {
-    title: "Kernel & I/O",
-    topics: "Linux · VFS · Page cache · Block layer",
-    detail: "Following an I/O request through the OS, understanding where time goes, and learning how to measure it."
+    label: "Research interest",
+    title: "Linux kernel & I/O",
+    description: "How file systems, the VFS, page cache, and block layer affect performance and behavior.",
+    tags: ["Linux", "VFS", "Block I/O"]
   },
   {
+    label: "Research interest",
     title: "Flash storage",
-    topics: "File systems · NVMe · ZNS · Garbage collection",
-    detail: "Looking at the interaction between file-system design, flash devices, and software bottlenecks."
+    description: "The interaction between NVMe, zoned flash, garbage collection, and file-system design.",
+    tags: ["NVMe", "ZNS", "File systems"]
   },
   {
+    label: "Research interest",
     title: "Memory & data movement",
-    topics: "Memory management · GPU–storage I/O · AI workloads",
-    detail: "Exploring how memory use and data movement affect modern computing systems."
+    description: "Memory management and the path between accelerators, host memory, and storage.",
+    tags: ["Memory", "GPU–storage I/O", "Performance"]
   }
 ];
 
-const selectedWork = [
+const experience = [
   {
-    eyebrow: "Memory-efficient ML",
+    label: "Project",
+    period: "Undergraduate",
     title: "TensorFlow Lite Micro memory planning",
-    description: "Tensor lifetimes, allocation conflicts, and buffer reuse. Project evaluation reduced peak memory by 28.33% and 14.06% on two workloads.",
+    description: "Analyzed tensor lifetimes and allocation conflicts to reduce peak memory use in constrained inference.",
     href: "/cv/#selected-projects",
-    stack: ["C / C++", "TFLite Micro", "Memory allocation"]
+    tags: ["C / C++", "TFLite Micro", "Memory allocation"]
   },
   {
-    eyebrow: "Hardware-aware acceleration",
+    label: "Project",
+    period: "Undergraduate",
     title: "CNN acceleration on Zynq FPGA",
-    description: "Quantized inference and systolic-array dataflow with measured area and runtime trade-offs.",
+    description: "Explored quantized inference and systolic-array dataflow with measured area and runtime trade-offs.",
     href: "/cv/#selected-projects",
-    stack: ["Verilog", "FPGA", "Zynq"]
+    tags: ["Verilog", "FPGA", "Zynq"]
   },
   {
-    eyebrow: "Linux / Kernel training",
-    title: "Tracing Linux with ftrace & KernelShark",
-    description: "Completed the Linux System & Kernel Expert Course (KDT). Practiced tracing and inspecting kernel execution with ftrace and KernelShark.",
+    label: "Kernel training",
+    period: "2023–2024",
+    title: "Linux System & Kernel Expert Course",
+    description: "Studied Linux internals and system programming; practiced tracing kernel execution using ftrace and KernelShark.",
     href: "/cv/#technical-training",
-    stack: ["Linux", "ftrace", "KernelShark"]
+    tags: ["Linux", "ftrace", "KernelShark"]
   },
   {
-    eyebrow: "Systems engineering",
+    label: "Systems engineering",
+    period: "2025–2026",
     title: "Linux infrastructure & recovery",
-    description: "K3s, private image distribution, persistent storage, and the realities of restoring stateful services.",
+    description: "Worked with K3s, private image distribution, persistent storage, and recovery of stateful services.",
     href: "/cv/#infrastructure-experience",
-    stack: ["Linux", "Kubernetes", "Longhorn"]
+    tags: ["K3s", "Longhorn", "Nexus"]
   }
 ];
 
 const skillGroups = [
-  { title: "Programming", items: ["C", "C++", "Python", "Shell", "TypeScript", "SQL"] },
+  { title: "Languages", items: ["C", "C++", "Python", "Shell", "TypeScript", "SQL"] },
   { title: "Systems", items: ["Linux", "Git", "Docker", "Kubernetes / K3s", "Longhorn"] },
   { title: "Data & infrastructure", items: ["ClickHouse", "MinIO", "MongoDB", "Nexus"] },
   { title: "Hardware & embedded", items: ["Verilog", "FPGA", "Zynq", "TFLite Micro"] }
 ];
 ---
-<BaseLayout description="Jihwan Park — incoming KAIST AI Systems M.S. student. Operating systems, storage, memory systems, Linux infrastructure, and hardware-aware computing.">
-  <section class="border-b border-white/10 py-16 md:py-24">
-    <div class="grid gap-12 lg:grid-cols-[minmax(0,1fr)_16rem] lg:gap-16">
-      <div>
-        <p class="font-mono text-xs uppercase tracking-[0.2em] text-signal">Software / Systems</p>
-        <h1 class="mt-6 text-5xl font-semibold leading-[1.1] tracking-[-0.04em] text-white sm:text-6xl md:text-7xl">Jihwan Park<span class="text-signal">.</span></h1>
-        <p class="mt-6 max-w-2xl text-xl leading-9 text-slate-200 md:text-2xl">
-          Operating systems, storage, and the layers in between.
-        </p>
-        <p class="mt-6 max-w-2xl text-base leading-8 text-slate-400">
-          I've worked on memory-efficient ML, FPGA acceleration, and Linux systems—from kernel tracing exercises to running stateful infrastructure.
-        </p>
-        <p class="mt-9 border-l-2 border-signal/50 pl-4 text-sm leading-7 text-slate-400">
+
+<BaseLayout description="Jihwan Park — incoming KAIST M.S. in AI Systems, joining the Operating Systems Laboratory in Spring 2027. Linux, file systems, storage and memory.">
+  <section class="border-b border-white/10 py-16 md:py-20">
+    <div class="max-w-4xl">
+      <p class="font-mono text-xs uppercase tracking-[0.16em] text-signal">
+        KAIST · Incoming M.S. · Spring 2027
+      </p>
+      <h1 class="mt-5 text-5xl font-semibold leading-[1.1] tracking-[-0.035em] text-white sm:text-6xl md:text-7xl">
+        Jihwan Park<span class="text-signal">.</span>
+      </h1>
+      <p class="mt-5 text-xl leading-8 text-slate-200 md:text-2xl">
+        Department of AI Systems <span class="text-slate-500">/</span> Operating Systems Laboratory
+      </p>
+      <p class="mt-6 max-w-3xl text-base leading-8 text-slate-300">
+        Interested in Linux, file systems, storage, and memory systems.
+        My experience so far spans kernel training, embedded ML, FPGA acceleration, and operating Linux infrastructure.
+      </p>
+      <div class="mt-9 border-t border-white/10 pt-5">
+        <p class="font-mono text-xs uppercase tracking-[0.12em] text-slate-500">Background</p>
+        <p class="mt-2 text-sm leading-7 text-slate-400">
           B.S. Computer Science &amp; Engineering · Electronic Engineering (double major)<br />
           Kyung Hee University
         </p>
       </div>
-      <aside class="border-l border-white/15 pl-6 lg:mt-2" aria-label="Upcoming academic affiliation">
-        <p class="font-mono text-xs uppercase tracking-[0.18em] text-signal">Next / Spring 2027</p>
-        <p class="mt-5 text-lg font-semibold leading-7 text-white">KAIST</p>
-        <p class="mt-2 text-sm leading-7 text-slate-300">Incoming M.S. student<br />Department of AI Systems<br />Operating Systems Laboratory</p>
-        <div class="mt-8 h-px bg-white/10"></div>
-        <p class="mt-6 font-mono text-xs uppercase tracking-[0.16em] text-slate-500">Focus</p>
-        <p class="mt-2 text-sm leading-7 text-slate-300">Linux · File systems<br />I/O · Storage · Memory</p>
-      </aside>
     </div>
   </section>
 
   <section class="py-12 md:py-16">
-    <SectionHeader eyebrow="Research interests" title="Current interests" description="Topics I'm preparing to study in graduate school, informed by my earlier training and engineering work." />
+    <SectionHeader eyebrow="Direction" title="Research interests" description="Topics I'm preparing to explore during graduate study." />
     <div class="grid gap-4 md:grid-cols-3">
-      {focus.map((area) => (
-        <div class="border-t border-white/20 pt-5">
-          <span class="block h-1 w-8 bg-signal/80" aria-hidden="true"></span>
-          <h2 class="mt-4 text-xl font-semibold text-white">{area.title}</h2>
-          <p class="mt-2 font-mono text-xs leading-6 text-slate-400">{area.topics}</p>
-          <p class="mt-4 text-sm leading-7 text-slate-300">{area.detail}</p>
-        </div>
-      ))}
+      {interests.map((item) => <OverviewCard {...item} />)}
     </div>
   </section>
 
   <section class="border-t border-white/10 py-12 md:py-16">
-    <SectionHeader eyebrow="Experience" title="Projects &amp; practice" description="What I've worked on, from undergraduate projects to Linux training and infrastructure operations." />
+    <SectionHeader eyebrow="Background" title="Projects &amp; experience" description="Undergraduate work, kernel training, and systems operations." />
     <div class="grid gap-4 md:grid-cols-2">
-      {selectedWork.map((work) => (
-        <a href={withBase(work.href)} class="group flex h-full flex-col justify-between border border-white/10 bg-white/[0.025] p-5 transition hover:border-signal/50">
-          <div>
-            <p class="font-mono text-xs uppercase tracking-wider text-signal">{work.eyebrow}</p>
-            <h3 class="mt-4 text-lg font-semibold text-white group-hover:text-signal">{work.title}</h3>
-            <p class="mt-3 text-sm leading-7 text-slate-300">{work.description}</p>
-          </div>
-          <div class="mt-7 flex flex-wrap gap-2 border-t border-white/10 pt-4">
-            {work.stack.map((tech) => <span class="bg-white/[0.055] px-2 py-1 font-mono text-[0.68rem] text-slate-300">{tech}</span>)}
-          </div>
-        </a>
-      ))}
+      {experience.map((item) => <OverviewCard {...item} href={withBase(item.href)} />)}
     </div>
-    <p class="mt-5 text-sm text-slate-400">Project results are from my undergraduate evaluations. More detail and context are in the <a class="text-signal underline underline-offset-4" href={withBase("/cv")}>CV</a>.</p>
   </section>
 
   <section class="border-t border-white/10 py-12 md:py-16">
-    <SectionHeader eyebrow="Toolkit" title="Technologies" description="Tools from my projects and systems work." />
-    <div class="grid gap-x-8 gap-y-7 md:grid-cols-2">
+    <SectionHeader eyebrow="Toolkit" title="Technologies" description="Tools I've used in projects, training, and infrastructure work." />
+    <div class="grid gap-4 md:grid-cols-2">
       {skillGroups.map((group) => (
-        <div>
-          <h3 class="mb-3 font-mono text-xs uppercase tracking-widest text-slate-400">{group.title}</h3>
-          <div class="flex flex-wrap gap-2">
-            {group.items.map((item) => <span class="border border-white/15 bg-white/[0.025] px-3 py-1.5 text-sm text-slate-200">{item}</span>)}
+        <div class="flex min-w-0 flex-col rounded-md border border-white/10 bg-white/[0.025] p-5">
+          <p class="font-mono text-xs uppercase tracking-[0.12em] text-slate-400">Toolkit</p>
+          <h3 class="mt-4 text-lg font-semibold text-white">{group.title}</h3>
+          <div class="mt-6 flex flex-wrap gap-2 border-t border-white/10 pt-4">
+            {group.items.map((tech) => <span class="rounded-sm border border-white/10 px-2 py-1 text-xs text-slate-300">{tech}</span>)}
           </div>
         </div>
       ))}
@@ -145,9 +132,9 @@ const skillGroups = [
 
   {recentPosts.length > 0 && (
     <section class="border-t border-white/10 py-12 md:py-16">
-      <SectionHeader eyebrow="Notebook" title="Recent writing" description="Notes from things I've studied, built, and debugged." />
+      <SectionHeader eyebrow="Notebook" title="Recent notes" description="Technical writing, organized by publication date." />
       <div class="grid gap-4 md:grid-cols-2">
-        {recentPosts.map((entry) => <ContentCard entry={entry} href={getCollectionUrl(entry)} label={entry.collection} />)}
+        {recentPosts.map((entry) => <ContentCard entry={entry} href={getCollectionUrl(entry)} label={entry.collection === "research" ? "Research" : "Note"} />)}
       </div>
     </section>
   )}

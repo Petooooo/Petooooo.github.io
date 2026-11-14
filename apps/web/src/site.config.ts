@@ -10,9 +10,7 @@ export const siteConfig = {
     { label: "Projects", href: "/projects" },
     { label: "Research", href: "/research" },
     { label: "Notes", href: "/notes" },
-    { label: "DevOps", href: "/devops" },
     { label: "About", href: "/about" },
-    { label: "CV", href: "/cv" },
-    { label: "Paper Reviews", href: "/paper-reviews" }
+    { label: "CV", href: "/cv" }
   ]
 };
