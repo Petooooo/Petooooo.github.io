@@ -1,7 +1,6 @@
 ---
 import { getCollection } from "astro:content";
 import BaseLayout from "@/layouts/BaseLayout.astro";
-import OverviewCard from "@/components/OverviewCard.astro";
 import ContentCard from "@/components/ContentCard.astro";
 import SectionHeader from "@/components/SectionHeader.astro";
 import { byDateDesc, getCollectionUrl, isPublishedEntry } from "@/lib/content";
@@ -13,118 +12,123 @@ const recentPosts = [...notes, ...research].sort(byDateDesc).slice(0, 4);
 
 const interests = [
   {
-    label: "Research interest",
-    title: "Linux kernel & I/O",
-    description: "How file systems, the VFS, page cache, and block layer affect performance and behavior.",
-    tags: ["Linux", "VFS", "Block I/O"]
+    title: "Kernel & file systems",
+    description: "Linux internals, VFS, page cache, and the block I/O path.",
+    topics: "Linux · VFS · I/O tracing"
   },
   {
-    label: "Research interest",
     title: "Flash storage",
-    description: "The interaction between NVMe, zoned flash, garbage collection, and file-system design.",
-    tags: ["NVMe", "ZNS", "File systems"]
+    description: "File-system design, NVMe, zoned flash, and storage performance.",
+    topics: "NVMe · ZNS · File systems"
   },
   {
-    label: "Research interest",
     title: "Memory & data movement",
-    description: "Memory management and the path between accelerators, host memory, and storage.",
-    tags: ["Memory", "GPU–storage I/O", "Performance"]
+    description: "How memory and GPU–storage I/O affect modern systems.",
+    topics: "Memory · GPU / Storage · Performance"
   }
 ];
 
 const experience = [
   {
-    label: "Project",
-    period: "Undergraduate",
-    title: "TensorFlow Lite Micro memory planning",
-    description: "Analyzed tensor lifetimes and allocation conflicts to reduce peak memory use in constrained inference.",
-    href: "/cv/#selected-projects",
-    tags: ["C / C++", "TFLite Micro", "Memory allocation"]
-  },
-  {
-    label: "Project",
-    period: "Undergraduate",
-    title: "CNN acceleration on Zynq FPGA",
-    description: "Explored quantized inference and systolic-array dataflow with measured area and runtime trade-offs.",
-    href: "/cv/#selected-projects",
-    tags: ["Verilog", "FPGA", "Zynq"]
-  },
-  {
-    label: "Kernel training",
-    period: "2023–2024",
-    title: "Linux System & Kernel Expert Course",
-    description: "Studied Linux internals and system programming; practiced tracing kernel execution using ftrace and KernelShark.",
-    href: "/cv/#technical-training",
-    tags: ["Linux", "ftrace", "KernelShark"]
-  },
-  {
-    label: "Systems engineering",
-    period: "2025–2026",
+    type: "Systems engineering",
+    period: "2025–Present",
     title: "Linux infrastructure & recovery",
-    description: "Worked with K3s, private image distribution, persistent storage, and recovery of stateful services.",
-    href: "/cv/#infrastructure-experience",
-    tags: ["K3s", "Longhorn", "Nexus"]
+    description: "Operating K3s services, private artifact delivery, and recovery of persistent workloads.",
+    href: "/cv/#infrastructure-experience"
+  },
+  {
+    type: "Linux training",
+    period: "Oct 2023–Mar 2024",
+    title: "Linux System & Kernel Expert Course",
+    description: "Kernel internals and system programming, including ftrace and KernelShark.",
+    href: "/cv/#technical-training"
+  },
+  {
+    type: "Undergraduate project",
+    period: "During B.S.",
+    title: "TensorFlow Lite Micro memory planning",
+    description: "Tensor lifetimes, buffer reuse, and memory allocation for resource-constrained inference.",
+    href: "/cv/#selected-projects"
+  },
+  {
+    type: "Undergraduate project",
+    period: "During B.S.",
+    title: "CNN acceleration on Zynq FPGA",
+    description: "Quantized inference and systolic-array design with measured area and runtime trade-offs.",
+    href: "/cv/#selected-projects"
   }
 ];
 
-const skillGroups = [
-  { title: "Languages", items: ["C", "C++", "Python", "Shell", "TypeScript", "SQL"] },
-  { title: "Systems", items: ["Linux", "Git", "Docker", "Kubernetes / K3s", "Longhorn"] },
-  { title: "Data & infrastructure", items: ["ClickHouse", "MinIO", "MongoDB", "Nexus"] },
-  { title: "Hardware & embedded", items: ["Verilog", "FPGA", "Zynq", "TFLite Micro"] }
+const toolGroups = [
+  { label: "Programming", values: "C · C++ · Python · Shell · TypeScript · SQL" },
+  { label: "Systems", values: "Linux · Docker · Kubernetes / K3s · Longhorn" },
+  { label: "Data", values: "ClickHouse · MinIO · MongoDB · Nexus" },
+  { label: "Hardware", values: "Verilog · FPGA · Zynq · TensorFlow Lite Micro" }
 ];
 ---
-
-<BaseLayout description="Jihwan Park — incoming KAIST M.S. in AI Systems, joining the Operating Systems Laboratory in Spring 2027. Linux, file systems, storage and memory.">
-  <section class="border-b border-white/10 py-16 md:py-20">
-    <div class="max-w-4xl">
-      <p class="font-mono text-xs uppercase tracking-[0.16em] text-signal">
-        KAIST · Incoming M.S. · Spring 2027
-      </p>
-      <h1 class="mt-5 text-5xl font-semibold leading-[1.1] tracking-[-0.035em] text-white sm:text-6xl md:text-7xl">
-        Jihwan Park<span class="text-signal">.</span>
+<BaseLayout description="Jihwan Park — incoming KAIST AI Systems M.S. student (Spring 2027), joining the Operating Systems Laboratory. Linux, storage, and memory systems.">
+  <section class="border-b border-white/10 pb-16 pt-14 md:pb-20 md:pt-20">
+    <div class="max-w-5xl">
+      <p class="font-mono text-xs uppercase tracking-[0.18em] text-slate-400">Jihwan Park <span class="mx-2 text-slate-600">/</span> Systems software</p>
+      <p class="mt-11 font-mono text-xs uppercase tracking-[0.16em] text-signal">Spring 2027 · Incoming M.S.</p>
+      <h1 class="mt-4 text-5xl font-semibold leading-[1.12] tracking-[-0.04em] text-white sm:text-6xl md:text-7xl">
+        KAIST<span class="text-signal">.</span>
       </h1>
-      <p class="mt-5 text-xl leading-8 text-slate-200 md:text-2xl">
-        Department of AI Systems <span class="text-slate-500">/</span> Operating Systems Laboratory
+      <p class="mt-5 text-xl font-medium leading-8 text-slate-200 md:text-2xl">
+        AI Systems <span class="px-1 text-slate-600">/</span> Operating Systems Laboratory
       </p>
-      <p class="mt-6 max-w-3xl text-base leading-8 text-slate-300">
-        Interested in Linux, file systems, storage, and memory systems.
-        My experience so far spans kernel training, embedded ML, FPGA acceleration, and operating Linux infrastructure.
+      <p class="mt-8 max-w-3xl text-base leading-8 text-slate-300">
+        I'm preparing for graduate study in operating systems, storage, and memory.
+        My background includes Linux kernel training, systems infrastructure, and hardware-aware computing.
       </p>
-      <div class="mt-9 border-t border-white/10 pt-5">
-        <p class="font-mono text-xs uppercase tracking-[0.12em] text-slate-500">Background</p>
-        <p class="mt-2 text-sm leading-7 text-slate-400">
-          B.S. Computer Science &amp; Engineering · Electronic Engineering (double major)<br />
-          Kyung Hee University
-        </p>
+      <div class="mt-10 flex flex-wrap items-center gap-x-8 gap-y-2 border-t border-white/10 pt-5 font-mono text-xs text-slate-400">
+        <span>Operating systems</span>
+        <span class="text-signal">/</span>
+        <span>Storage</span>
+        <span class="text-signal">/</span>
+        <span>Memory</span>
       </div>
     </div>
   </section>
 
   <section class="py-12 md:py-16">
-    <SectionHeader eyebrow="Direction" title="Research interests" description="Topics I'm preparing to explore during graduate study." />
-    <div class="grid gap-4 md:grid-cols-3">
-      {interests.map((item) => <OverviewCard {...item} />)}
+    <SectionHeader eyebrow="Research direction" title="Interests" description="Areas I'm interested in exploring as I begin graduate study." />
+    <div class="grid gap-6 md:grid-cols-3">
+      {interests.map((item) => (
+        <div class="border-t border-white/15 pt-5">
+          <h3 class="text-lg font-semibold text-white">{item.title}</h3>
+          <p class="mt-3 text-sm leading-7 text-slate-300">{item.description}</p>
+          <p class="mt-5 font-mono text-xs leading-6 text-slate-500">{item.topics}</p>
+        </div>
+      ))}
     </div>
   </section>
 
   <section class="border-t border-white/10 py-12 md:py-16">
-    <SectionHeader eyebrow="Background" title="Projects &amp; experience" description="Undergraduate work, kernel training, and systems operations." />
-    <div class="grid gap-4 md:grid-cols-2">
-      {experience.map((item) => <OverviewCard {...item} href={withBase(item.href)} />)}
-    </div>
-  </section>
-
-  <section class="border-t border-white/10 py-12 md:py-16">
-    <SectionHeader eyebrow="Toolkit" title="Technologies" description="Tools I've used in projects, training, and infrastructure work." />
-    <div class="grid gap-4 md:grid-cols-2">
-      {skillGroups.map((group) => (
-        <div class="flex min-w-0 flex-col rounded-md border border-white/10 bg-white/[0.025] p-5">
-          <p class="font-mono text-xs uppercase tracking-[0.12em] text-slate-400">Toolkit</p>
-          <h3 class="mt-4 text-lg font-semibold text-white">{group.title}</h3>
-          <div class="mt-6 flex flex-wrap gap-2 border-t border-white/10 pt-4">
-            {group.items.map((tech) => <span class="rounded-sm border border-white/10 px-2 py-1 text-xs text-slate-300">{tech}</span>)}
+    <SectionHeader eyebrow="Background" title="Experience" description="Selected work and training, from infrastructure to embedded systems." />
+    <div class="divide-y divide-white/10 border-y border-white/10">
+      {experience.map((item) => (
+        <a href={withBase(item.href)} class="group grid gap-2 py-6 transition-colors hover:bg-white/[0.025] md:grid-cols-[11rem_minmax(0,1fr)] md:gap-8 md:py-7">
+          <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+            <p class="font-mono text-xs leading-6 text-slate-500">{item.period}</p>
           </div>
+          <div class="min-w-0">
+            <p class="font-mono text-xs uppercase tracking-[0.08em] text-slate-500">{item.type}</p>
+            <h3 class="mt-2 text-lg font-semibold leading-7 text-white group-hover:text-signal">{item.title}</h3>
+            <p class="mt-2 max-w-3xl text-sm leading-7 text-slate-300">{item.description}</p>
+          </div>
+        </a>
+      ))}
+    </div>
+  </section>
+
+  <section class="border-t border-white/10 py-12 md:py-16">
+    <SectionHeader eyebrow="Toolkit" title="Technologies" />
+    <div class="grid gap-x-10 md:grid-cols-2">
+      {toolGroups.map((group) => (
+        <div class="grid gap-2 border-t border-white/10 py-5 sm:grid-cols-[7rem_minmax(0,1fr)]">
+          <h3 class="text-sm font-medium text-slate-300">{group.label}</h3>
+          <p class="text-sm leading-7 text-slate-400">{group.values}</p>
         </div>
       ))}
     </div>
@@ -132,7 +136,7 @@ const skillGroups = [
 
   {recentPosts.length > 0 && (
     <section class="border-t border-white/10 py-12 md:py-16">
-      <SectionHeader eyebrow="Notebook" title="Recent notes" description="Technical writing, organized by publication date." />
+      <SectionHeader eyebrow="Notebook" title="Recent notes" description="Technical notes, newest first." />
       <div class="grid gap-4 md:grid-cols-2">
         {recentPosts.map((entry) => <ContentCard entry={entry} href={getCollectionUrl(entry)} label={entry.collection === "research" ? "Research" : "Note"} />)}
       </div>
