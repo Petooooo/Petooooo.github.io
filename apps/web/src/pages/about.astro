@@ -2,65 +2,68 @@
 import BaseLayout from "@/layouts/BaseLayout.astro";
 import SectionHeader from "@/components/SectionHeader.astro";
 import { withBase } from "@/lib/urls";
+
+const journey = [
+  { period: "2021 — 2025", title: "Computer science + electronic engineering", detail: "At Kyung Hee University, I worked across programming, digital hardware, and resource-constrained ML systems." },
+  { period: "2025 — 2026", title: "Linux systems in practice", detail: "Operating restricted-network services brought me into Kubernetes, persistent storage, recovery, artifact delivery, and operational reliability." },
+  { period: "Spring 2027", title: "KAIST · Incoming M.S.", detail: "Joining the Department of AI Systems and the Operating Systems Laboratory, with a growing focus on kernel, storage, and memory systems." }
+];
+
+const interests = [
+  { title: "Below the application layer", detail: "I'm interested in how the Linux kernel, file systems, and I/O paths shape performance and reliability." },
+  { title: "Where software meets hardware", detail: "Memory planning and FPGA projects made the cost of data movement and hardware constraints feel concrete." },
+  { title: "Engineering that holds up", detail: "My operations background makes me care about reproducibility, failure recovery, and what actually happens outside a benchmark." }
+];
 ---
-<BaseLayout title="About" description="About Jihwan Park and his work on reliable infrastructure for constrained environments.">
-  <section class="grid gap-10 border-b border-white/10 py-12 lg:grid-cols-[0.8fr_1.2fr] lg:py-16">
-    <div>
-      <p class="font-mono text-xs uppercase tracking-[0.18em] text-slate-500">About</p>
-      <h1 class="mt-4 text-4xl font-semibold text-white md:text-5xl">Jihwan Park</h1>
-      <p class="mt-5 text-base leading-8 text-slate-300 md:text-lg">I studied computer science and electronic engineering at Kyung Hee University, and I organize my work around reliable infrastructure for constrained environments. The recurring question is how services and AI workloads behave when network access, storage recovery, GPU placement, memory, or hardware resources are limited.</p>
-      <p class="mt-4 text-sm leading-7 text-slate-400">The public version of this notebook focuses on constraints, architecture choices, recovery paths, and implementation details while omitting private infrastructure details.</p>
-      <div class="mt-6 flex flex-wrap gap-3 text-sm text-slate-300">
-        <a class="rounded border border-white/15 px-3 py-2 hover:border-signal hover:text-signal" href="https://github.com/Petooooo">GitHub</a>
-        <a class="rounded border border-white/15 px-3 py-2 hover:border-signal hover:text-signal" href={withBase("/cv")}>CV</a>
+<BaseLayout title="About" description="About Jihwan Park — computer science, electronic engineering, Linux infrastructure, and upcoming graduate study in operating systems and storage.">
+  <section class="border-b border-white/10 py-12 lg:py-20">
+    <p class="font-mono text-xs uppercase tracking-[0.18em] text-signal">About me</p>
+    <div class="mt-6 grid gap-8 lg:grid-cols-[0.9fr_1.1fr]">
+      <div>
+        <h1 class="text-4xl font-semibold leading-tight text-white md:text-5xl">Jihwan Park</h1>
+        <p class="mt-4 text-lg text-slate-400">Systems software, storage, and the layers in between.</p>
+        <div class="mt-7 flex flex-wrap gap-3 text-sm">
+          <a class="border border-white/20 px-4 py-2 text-white transition hover:border-signal hover:text-signal" href="https://github.com/Petooooo">GitHub ↗</a>
+          <a class="border border-white/20 px-4 py-2 text-white transition hover:border-signal hover:text-signal" href={withBase("/cv")}>View CV ↗</a>
+        </div>
       </div>
-    </div>
-    <div class="grid gap-5">
-      <div class="rounded-md border border-white/10 bg-white/[0.03] p-5">
-        <h2 class="text-xl font-semibold text-white">Restricted Infrastructure</h2>
-        <p class="mt-3 leading-7 text-slate-300">Selected Docker-based services were moved toward a K3S-based internal platform, with private image distribution, service exposure, persistent storage, and deployment repeatability as the main concerns.</p>
-      </div>
-      <div class="rounded-md border border-white/10 bg-white/[0.03] p-5">
-        <h2 class="text-xl font-semibold text-white">Recovery and Reliability</h2>
-        <p class="mt-3 leading-7 text-slate-300">Stateful services made recovery boundaries visible: PVC detach/attach behavior, rebuild time, readiness, operator action, and realistic RTO/RPO expectations.</p>
-      </div>
-      <div class="rounded-md border border-white/10 bg-white/[0.03] p-5">
-        <h2 class="text-xl font-semibold text-white">Resource-Constrained AI Systems</h2>
-        <p class="mt-3 leading-7 text-slate-300">Graduation projects looked at AI workloads from the systems side: TFLM tensor memory reuse on constrained devices and bit-shift CNN acceleration on Zynq FPGA with area/runtime tradeoffs.</p>
+      <div class="space-y-4 text-base leading-8 text-slate-300">
+        <p>I studied computer science and electronic engineering at Kyung Hee University. I enjoy the part of computing where software behavior meets real hardware limits.</p>
+        <p>My undergraduate projects involved TensorFlow Lite Micro memory allocation and a CNN accelerator on Zynq FPGA. Later, operating Linux-based services gave me hands-on experience with Kubernetes, persistent storage, and failure recovery.</p>
+        <p>Those experiences led me toward operating systems and storage. I'll join KAIST's AI Systems master's program and Operating Systems Laboratory in spring 2027, where I hope to study these problems at a deeper level.</p>
       </div>
     </div>
   </section>
 
   <section class="py-12 lg:py-16">
-    <SectionHeader eyebrow="Focus" title="What I Actually Track" description="The site preserves the concrete constraints, failure modes, and design decisions behind each note." />
-    <div class="grid gap-5 md:grid-cols-3">
-      {[
-        ["Dependency Paths", "Which images, artifacts, packages, and bootstrap services must be available when external access or the primary registry is unavailable."],
-        ["Recovery Timelines", "What has to happen between a node or storage failure and service readiness: pod scheduling, volume movement, replica rebuild, health checks, and operator action."],
-        ["Execution Constraints", "How AI workloads change when the limiting factor is not only model accuracy but memory arena size, FPGA area, GPU allocation, dataflow, or degraded serving."]
-      ].map(([title, body]) => (
-        <div class="rounded-md border border-white/10 bg-white/[0.03] p-5">
-          <h3 class="text-lg font-semibold text-white">{title}</h3>
-          <p class="mt-3 text-sm leading-6 text-slate-300">{body}</p>
+    <SectionHeader eyebrow="Background" title="How I got here" description="Different kinds of work, connected by an interest in how systems behave under constraints." />
+    <div class="grid gap-0">
+      {journey.map((item) => (
+        <div class="grid gap-3 border-t border-white/10 py-5 md:grid-cols-[10rem_1fr] md:gap-8">
+          <p class="font-mono text-xs uppercase tracking-wider text-signal">{item.period}</p>
+          <div>
+            <h2 class="text-lg font-semibold text-white">{item.title}</h2>
+            <p class="mt-2 max-w-3xl text-sm leading-7 text-slate-300">{item.detail}</p>
+          </div>
         </div>
       ))}
     </div>
   </section>
 
   <section class="border-t border-white/10 py-12 lg:py-16">
-    <SectionHeader eyebrow="Boundaries" title="Scope and Boundaries" description="The goal is to stay specific about engineering scope without overstating infrastructure, recovery, or AI claims." />
-    <div class="grid gap-4 md:grid-cols-2">
-      {[
-        ["Beyond A Kubernetes Installation", "The point is not simply that Kubernetes was installed. The useful part is understanding how restricted-network service operation changes when image supply, storage, service exposure, and rollback paths must be designed together."],
-        ["Recovery, Not Zero-Downtime Claims", "Longhorn-backed PVCs do not automatically imply zero downtime. I frame recovery in terms of detach/attach behavior, rebuild time, readiness, operator action, and RTO/RPO boundaries."],
-        ["Systems-Oriented AI Work", "The AI thread is operational and systems-oriented: full-GPU serving constraints, degraded availability, TinyML memory planning, and hardware-aware acceleration."],
-        ["Sanitized Public Notes", "Operational details are generalized. The public artifact should show the engineering problem and tradeoff without exposing private hostnames, internal IPs, credentials, or raw logs."]
-      ].map(([title, body]) => (
-        <div class="border-b border-white/10 py-4">
-          <h3 class="text-base font-semibold text-white">{title}</h3>
-          <p class="mt-2 text-sm leading-6 text-slate-300">{body}</p>
+    <SectionHeader eyebrow="Looking ahead" title="Questions I want to explore" description="Research interests I'm developing, not completed research contributions." />
+    <div class="grid gap-5 md:grid-cols-3">
+      {interests.map((item) => (
+        <div class="border-t border-white/20 pt-4">
+          <h3 class="text-lg font-semibold text-white">{item.title}</h3>
+          <p class="mt-3 text-sm leading-7 text-slate-300">{item.detail}</p>
         </div>
       ))}
     </div>
+  </section>
+
+  <section class="border-t border-white/10 py-12 lg:py-16">
+    <SectionHeader eyebrow="Notebook" title="Why I keep this site" description="A place to keep useful technical details instead of just project titles." />
+    <p class="max-w-3xl text-base leading-8 text-slate-300">I use this site to collect notes from things I've built, studied, and debugged. The operations notes leave out internal hostnames, credentials, and other private infrastructure details. I prefer explaining concrete decisions and trade-offs over polishing an impressive-sounding summary.</p>
   </section>
 </BaseLayout>

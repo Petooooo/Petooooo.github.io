@@ -4,11 +4,19 @@ import BaseLayout from "@/layouts/BaseLayout.astro";
 import ContentCard from "@/components/ContentCard.astro";
 import SectionHeader from "@/components/SectionHeader.astro";
 import { byDateDesc, getCollectionUrl, isPublishedEntry } from "@/lib/content";
+
 const entries = (await getCollection("research")).filter(isPublishedEntry).sort(byDateDesc);
 ---
-<BaseLayout title="Research" description="Computer science and electrical/electronic engineering research notes.">
-  <section class="py-12 md:py-14">
-    <SectionHeader eyebrow="Research" title="Engineering Research Notes" description="Research-oriented notes for systems, AI infrastructure, distributed systems, networking, architecture, embedded systems, performance analysis, algorithms, and software engineering." />
-    <div class="grid gap-4 md:grid-cols-2">{entries.map((entry) => <ContentCard entry={entry} href={getCollectionUrl(entry)} label="research" />)}</div>
+<BaseLayout title="Research" description="Jihwan Park's upcoming systems research notes, focusing on Linux, file systems, storage, and memory.">
+  <section class="py-12 md:py-16">
+    <SectionHeader eyebrow="Research" title="Research notebook" description="I'm preparing to join KAIST's Operating Systems Laboratory in spring 2027. This section is reserved for research notes, experiments, and results I can stand behind." />
+    {entries.length > 0 ? (
+      <div class="grid gap-4 md:grid-cols-2">{entries.map((entry) => <ContentCard entry={entry} href={getCollectionUrl(entry)} label="research" />)}</div>
+    ) : (
+      <div class="max-w-3xl border-t border-white/10 pt-6">
+        <p class="text-base leading-8 text-slate-300">I haven't published research results here yet. My current interests include Linux file systems, I/O performance, flash/NVMe storage, and memory management. As work progresses, I plan to share notes with clear methods, measurements, and limitations.</p>
+        <p class="mt-4 text-sm text-slate-400">Until then, my earlier systems projects and engineering notes are available elsewhere on this site.</p>
+      </div>
+    )}
   </section>
 </BaseLayout>

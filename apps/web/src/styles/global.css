@@ -3,7 +3,7 @@
 @tailwind utilities;
 
 :root {
-  color-scheme: dark light;
+  color-scheme: dark;
   --bg: #08090d;
   --panel: rgba(14, 17, 23, 0.78);
   --text: #f4f7fb;
@@ -240,19 +240,4 @@ a {
   color: #9aa6b8;
   font-size: 0.88rem;
   line-height: 1.6;
-}
-
-@media (prefers-color-scheme: light) {
-  :root {
-    --bg: #f6f8fb;
-    --panel: rgba(255, 255, 255, 0.76);
-    --text: #121722;
-    --muted: #526070;
-    --line: rgba(8, 9, 13, 0.12);
-    --paper: rgba(8, 9, 13, 0.035);
-  }
-
-  body {
-    color: var(--text);
-  }
 }

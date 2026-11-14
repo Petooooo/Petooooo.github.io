@@ -3,91 +3,148 @@ import { getCollection } from "astro:content";
 import BaseLayout from "@/layouts/BaseLayout.astro";
 import ContentCard from "@/components/ContentCard.astro";
 import SectionHeader from "@/components/SectionHeader.astro";
-import { siteConfig } from "@/site.config";
 import { byDateDesc, getCollectionUrl, isPublishedEntry } from "@/lib/content";
 import { withBase } from "@/lib/urls";
 
-const projects = (await getCollection("projects")).filter(isPublishedEntry);
 const notes = (await getCollection("notes")).filter(isPublishedEntry);
 const devops = (await getCollection("devops")).filter(isPublishedEntry);
 const research = (await getCollection("research")).filter(isPublishedEntry);
 const paperReviews = (await getCollection("paper-reviews")).filter(isPublishedEntry);
-const posts = [
-  ...notes,
-  ...devops,
-  ...research,
-  ...paperReviews
-]
-  .filter(isPublishedEntry)
-  .sort(byDateDesc);
-const recentPosts = posts.slice(0, 4);
-const sections = [
-  { title: "Notes", description: "Concept notes for systems, cloud infrastructure, networks, databases, operating systems, algorithms, and implementation details.", href: "/notes", count: notes.length },
-  { title: "DevOps", description: "Operational records: troubleshooting notes, runbooks, deployment decisions, recovery paths, and infrastructure constraints.", href: "/devops", count: devops.length },
-  { title: "Projects", description: "Project-level records around restricted-network platform migration, stateful recovery, artifact workflows, and resource-constrained AI systems.", href: "/projects", count: projects.length },
-  { title: "Research", description: "Research-oriented notes around reliable systems, storage recovery, ML systems, AI serving infrastructure, and hardware-aware execution.", href: "/research", count: research.length },
-  { title: "Paper Reviews", description: "Technical paper reading notes focused on core ideas, implementation details, limitations, and references.", href: "/paper-reviews", count: paperReviews.length }
+const recentPosts = [...notes, ...devops, ...research, ...paperReviews].sort(byDateDesc).slice(0, 4);
+
+const focus = [
+  {
+    number: "01",
+    title: "Operating Systems",
+    topics: "Linux kernel · VFS · File systems · I/O tracing",
+    detail: "Understanding what happens between an application, the kernel, and the storage device."
+  },
+  {
+    number: "02",
+    title: "Storage & Memory",
+    topics: "Flash / SSD · NVMe · Memory management",
+    detail: "Exploring the paths that move data, the resources they use, and how to measure the trade-offs."
+  },
+  {
+    number: "03",
+    title: "Systems in Practice",
+    topics: "Linux · K3s · Reliability · Hardware-aware AI",
+    detail: "Building on experience with stateful services, constrained runtimes, and embedded acceleration."
+  }
+];
+
+const selectedWork = [
+  {
+    eyebrow: "Memory-efficient ML",
+    title: "TensorFlow Lite Micro memory planning",
+    description: "Tensor lifetimes, allocation conflicts, and buffer reuse. Project evaluation reduced peak memory by 28.33% and 14.06% on two workloads.",
+    href: "/cv/#selected-projects",
+    stack: ["C / C++", "TFLite Micro", "Memory allocation"]
+  },
+  {
+    eyebrow: "Hardware-aware acceleration",
+    title: "CNN acceleration on Zynq FPGA",
+    description: "Quantized inference and systolic-array dataflow with measured area and runtime trade-offs.",
+    href: "/cv/#selected-projects",
+    stack: ["Verilog", "FPGA", "Zynq"]
+  },
+  {
+    eyebrow: "Systems engineering",
+    title: "Linux infrastructure & recovery",
+    description: "K3s, private image distribution, persistent storage, and the realities of restoring stateful services.",
+    href: "/cv/#infrastructure-experience",
+    stack: ["Linux", "Kubernetes", "Longhorn"]
+  }
+];
+
+const skillGroups = [
+  { title: "Programming", items: ["C", "C++", "Python", "Shell", "TypeScript", "SQL"] },
+  { title: "Systems", items: ["Linux", "Git", "Docker", "Kubernetes / K3s", "Longhorn"] },
+  { title: "Data & infrastructure", items: ["ClickHouse", "MinIO", "MongoDB", "Nexus"] },
+  { title: "Hardware & embedded", items: ["Verilog", "FPGA", "Zynq", "TFLite Micro"] }
 ];
 ---
-
-<BaseLayout>
-  <section class="border-b border-white/10 py-10 md:py-14">
-    <div>
-      <p class="font-mono text-xs uppercase tracking-[0.2em] text-slate-500">Jihwan Park / engineering notebook</p>
-      <h1 class="mt-4 max-w-3xl text-3xl font-semibold leading-tight text-white md:text-5xl">
-        Engineering notes on constrained infrastructure, service recovery, and resource-aware AI systems.
+<BaseLayout description="Jihwan Park — incoming KAIST AI Systems M.S. student. Operating systems, storage, memory systems, Linux infrastructure, and hardware-aware computing.">
+  <section class="border-b border-white/10 pb-14 pt-14 md:pb-20 md:pt-20">
+    <div class="max-w-4xl">
+      <p class="font-mono text-xs uppercase tracking-[0.18em] text-signal">Jihwan Park / Systems &amp; Software</p>
+      <h1 class="mt-6 max-w-4xl text-4xl font-semibold leading-[1.16] tracking-tight text-white md:text-6xl">
+        Hi, I'm Jihwan.<br />
+        <span class="text-slate-400">I work across software, systems, and hardware.</span>
       </h1>
-      <p class="mt-5 max-w-2xl text-base leading-8 text-slate-300">
-        This site collects sanitized engineering notes about restricted-network platform migration, stateful service recovery, private artifact workflows, operational AI serving constraints, and resource-constrained AI projects.
+      <p class="mt-7 max-w-3xl text-base leading-8 text-slate-300 md:text-lg">
+        I studied computer science and electronic engineering and have worked on Linux infrastructure, memory-constrained ML, and FPGA acceleration.
+        Now I'm heading deeper into operating systems, storage, and memory systems.
       </p>
-      <div class="mt-7 flex flex-wrap gap-3">
-        <a class="border border-white/20 px-3 py-2 text-sm text-white hover:border-signal hover:text-signal" href={withBase("/cv")}>CV</a>
-        <a class="border border-white/20 px-3 py-2 text-sm text-white hover:border-signal hover:text-signal" href={withBase("/notes")}>Notes</a>
-        <a class="border border-white/20 px-3 py-2 text-sm text-white hover:border-signal hover:text-signal" href={withBase("/devops")}>DevOps</a>
-        <a class="border border-white/20 px-3 py-2 text-sm text-white hover:border-signal hover:text-signal" href={withBase("/projects")}>Projects</a>
-        <a class="border border-white/20 px-3 py-2 text-sm text-white hover:border-signal hover:text-signal" href={siteConfig.githubUrl}>GitHub</a>
+      <div class="mt-8 flex flex-wrap items-center gap-3 text-sm">
+        <span class="border border-signal/35 bg-signal/5 px-3 py-2 font-medium text-signal">KAIST · Incoming M.S. · Spring 2027</span>
+        <span class="text-slate-400">AI Systems / Operating Systems Laboratory</span>
+      </div>
+      <div class="mt-8 flex flex-wrap gap-3 text-sm">
+        <a class="border border-signal bg-signal px-4 py-2.5 font-medium text-slate-950 transition hover:bg-white" href={withBase("/projects")}>Selected work <span aria-hidden="true">↗</span></a>
+        <a class="border border-white/20 px-4 py-2.5 text-white transition hover:border-white/50" href={withBase("/cv")}>View CV</a>
+        <a class="border border-white/20 px-4 py-2.5 text-white transition hover:border-white/50" href="https://github.com/Petooooo">GitHub</a>
       </div>
     </div>
   </section>
 
-  <section class="py-10 md:py-12">
-    <SectionHeader eyebrow="Work Map" title="Concrete Threads" description="The recurring pattern is not a broad interest in infrastructure; it is a set of specific failure modes, constraints, and design decisions that kept showing up across service operation and AI workload projects." />
-    <div class="grid gap-4 md:grid-cols-2">
-      {[
-        ["Restricted-Network Platform Migration", "Selected services moved from ad-hoc Docker operation toward a lightweight Kubernetes/K3S-based platform while dealing with image distribution, service exposure, persistent storage, and deployment standardization."],
-        ["Stateful Service Recovery", "PVC-backed services required thinking beyond pod rescheduling: storage detach/attach delay, rebuild behavior, service readiness, downtime, and RTO/RPO boundaries."],
-        ["Private Artifact and Bootstrap Supply Chain", "Restricted networks made artifact distribution part of reliability work: image mirroring, Maven/Nexus behavior, bootstrap dependency paths, and registry self-dependency risks."],
-        ["Full-GPU Serving Availability", "Full-GPU workloads made fine-grained sharing less straightforward, so degraded serving, active-active replicas, and traffic rerouting became more realistic availability questions."],
-        ["TinyML Memory Planning", "TensorFlow Lite Micro work focused on tensor lifetimes, conflict relationships, BFS-style allocation ordering, and in-place update opportunities to reduce peak memory."],
-        ["Hardware-Aware CNN Acceleration", "The Zynq FPGA accelerator project used bit-shift operations, INQ/STE quantization, IM2COL, systolic array dataflow, and AXI4-Lite PS/PL integration to study area/runtime tradeoffs."]
-      ].map(([title, description]) => (
-        <div class="border-b border-white/10 py-4">
-          <h2 class="text-base font-semibold text-white">{title}</h2>
-          <p class="mt-2 text-sm leading-6 text-slate-300">{description}</p>
+  <section class="py-12 md:py-16">
+    <SectionHeader eyebrow="Research direction" title="Where I'm headed" description="Areas I'm exploring as I prepare for graduate study — not claims of completed research." />
+    <div class="grid gap-4 md:grid-cols-3">
+      {focus.map((area) => (
+        <div class="border-t border-white/20 pt-5">
+          <p class="font-mono text-xs text-signal">{area.number} / FOCUS</p>
+          <h2 class="mt-4 text-xl font-semibold text-white">{area.title}</h2>
+          <p class="mt-2 font-mono text-xs leading-6 text-slate-400">{area.topics}</p>
+          <p class="mt-4 text-sm leading-7 text-slate-300">{area.detail}</p>
         </div>
       ))}
     </div>
   </section>
 
-  <section class="py-10 md:py-12">
-    <SectionHeader eyebrow="Index" title="Technical Index" description="Concept study notes are separated from operational records so DevOps stays closer to troubleshooting, runbooks, deployment decisions, and recovery paths." />
-    <div class="grid gap-3 md:grid-cols-2">
-      {sections.map((section) => (
-        <a class="grid grid-cols-[1fr_auto] gap-4 border-b border-white/10 py-4 hover:border-signal/60" href={withBase(section.href)}>
+  <section class="border-t border-white/10 py-12 md:py-16">
+    <SectionHeader eyebrow="Experience" title="Things I've built and worked on" description="A few projects and real-world systems problems that led me toward the OS and storage stack." />
+    <div class="grid gap-4 md:grid-cols-3">
+      {selectedWork.map((work) => (
+        <a href={withBase(work.href)} class="group flex h-full flex-col justify-between border border-white/10 bg-white/[0.025] p-5 transition hover:border-signal/50">
           <div>
-            <h3 class="text-base font-semibold text-white">{section.title}</h3>
-            <p class="mt-1 text-sm leading-6 text-slate-300">{section.description}</p>
+            <p class="font-mono text-xs uppercase tracking-wider text-signal">{work.eyebrow}</p>
+            <h3 class="mt-4 text-lg font-semibold text-white group-hover:text-signal">{work.title}</h3>
+            <p class="mt-3 text-sm leading-7 text-slate-300">{work.description}</p>
           </div>
-          <p class="font-mono text-xs text-slate-500">{section.count}</p>
+          <div class="mt-7 flex flex-wrap gap-2 border-t border-white/10 pt-4">
+            {work.stack.map((tech) => <span class="bg-white/[0.055] px-2 py-1 font-mono text-[0.68rem] text-slate-300">{tech}</span>)}
+          </div>
         </a>
+      ))}
+    </div>
+    <p class="mt-5 text-sm text-slate-400">Project results are from my undergraduate evaluations. More detail and context are in the <a class="text-signal underline underline-offset-4" href={withBase("/cv")}>CV</a>.</p>
+  </section>
+
+  <section class="border-t border-white/10 py-12 md:py-16">
+    <SectionHeader eyebrow="Tools" title="Technical stack" description="Technologies I've used across projects, experiments, and infrastructure work." />
+    <div class="grid gap-x-8 gap-y-7 md:grid-cols-2">
+      {skillGroups.map((group) => (
+        <div>
+          <h3 class="mb-3 font-mono text-xs uppercase tracking-widest text-slate-400">{group.title}</h3>
+          <div class="flex flex-wrap gap-2">
+            {group.items.map((item) => <span class="border border-white/15 bg-white/[0.025] px-3 py-1.5 text-sm text-slate-200">{item}</span>)}
+          </div>
+        </div>
       ))}
     </div>
   </section>
 
-  <section class="py-10 md:py-12">
-    <SectionHeader eyebrow="Recent" title="Recent Entries" description="Latest published notes from the public technical sections." />
-    <div class="grid gap-4 md:grid-cols-2">
-      {recentPosts.map((entry) => <ContentCard entry={entry} href={getCollectionUrl(entry)} label={entry.collection} />)}
-    </div>
-  </section>
+  {recentPosts.length > 0 && (
+    <section class="border-t border-white/10 py-12 md:py-16">
+      <SectionHeader eyebrow="Notebook" title="Recent writing" description="Notes from things I've studied, built, and debugged." />
+      <div class="grid gap-4 md:grid-cols-2">
+        {recentPosts.map((entry) => <ContentCard entry={entry} href={getCollectionUrl(entry)} label={entry.collection} />)}
+      </div>
+      <div class="mt-6 flex flex-wrap gap-5 text-sm text-signal">
+        <a href={withBase("/notes")}>Browse notes ↗</a>
+        <a href={withBase("/devops")}>Operations journal ↗</a>
+      </div>
+    </section>
+  )}
 </BaseLayout>

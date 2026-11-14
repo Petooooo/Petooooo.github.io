@@ -3,33 +3,32 @@ import BaseLayout from "@/layouts/BaseLayout.astro";
 import SectionHeader from "@/components/SectionHeader.astro";
 ---
 
-<BaseLayout title="CV" description="A concise CV for Jihwan Park focused on reliable systems, restricted-network infrastructure, platform engineering, stateful service recovery, and resource-constrained AI systems work.">
+<BaseLayout title="CV" description="Jihwan Park — incoming KAIST M.S. student interested in operating systems, storage, memory management, and systems engineering.">
   <section class="border-b border-white/10 py-12 lg:py-16">
-    <p class="font-mono text-xs uppercase tracking-[0.18em] text-slate-500">CV</p>
+    <p class="font-mono text-xs uppercase tracking-[0.18em] text-signal">Curriculum vitae</p>
     <h1 class="mt-4 text-4xl font-semibold text-white md:text-5xl">Jihwan Park</h1>
     <p class="mt-5 max-w-3xl text-base leading-8 text-slate-300 md:text-lg">
-      Systems engineer interested in reliable infrastructure for constrained environments.
-      My work connects restricted-network platform migration, stateful service recovery,
-      private artifact supply chains, operational AI serving, and resource-constrained AI systems.
+      Incoming KAIST AI Systems M.S. student (Spring 2027), joining the Operating Systems Laboratory.
+      Interested in Linux systems, file systems, storage, and memory management.
     </p>
     <p class="mt-4 max-w-3xl text-sm leading-7 text-slate-400">
-      I focus on systems infrastructure that enables internal services and AI workloads to operate
-      reliably under network, storage, hardware, and deployment constraints, rather than on AI model
-      architecture itself.
+      Background in computer science and electronic engineering, with projects in TinyML memory efficiency and FPGA acceleration,
+      plus hands-on experience operating Linux services and stateful infrastructure.
     </p>
     <div class="mt-6 flex flex-wrap gap-3 text-sm text-slate-300">
-      <a class="rounded border border-white/15 px-3 py-2 hover:border-signal hover:text-signal" href="https://github.com/Petooooo">GitHub</a>
+      <a class="border border-white/15 px-3 py-2 transition hover:border-signal hover:text-signal" href="https://github.com/Petooooo">GitHub ↗</a>
+      <a class="border border-white/15 px-3 py-2 transition hover:border-signal hover:text-signal" href="https://petooooo.github.io/">Personal website ↗</a>
     </div>
   </section>
 
   <section class="py-12 lg:py-16">
-    <SectionHeader eyebrow="Interests" title="Research and Engineering Interests" description="The main direction is reliable systems and infrastructure for services that must run under real operational constraints." />
+    <SectionHeader eyebrow="Direction" title="Research interests" description="Areas I want to develop in graduate school; distinct from my prior project and operational experience." />
     <div class="grid gap-4 md:grid-cols-2">
       {[
-        ["Reliable Systems / Platform Engineering", "Service reliability, deployment repeatability, recovery planning, and cloud-native operations for constrained internal environments."],
-        ["Restricted-Network Infrastructure", "Private artifact workflows, image distribution, repository behavior, bootstrap dependency paths, and deployment automation in restricted networks."],
-        ["Storage / Stateful Recovery", "Stateful workload recovery, storage attach/detach behavior, RTO/RPO-aware service design, and the practical boundary between hot failover and recoverable systems."],
-        ["Resource-Constrained AI Systems", "TinyML memory management, hardware-aware CNN acceleration, full-GPU workload constraints, degraded serving, and infrastructure around AI workloads."]
+        ["Operating Systems & File Systems", "Linux kernel, VFS, file-system design, I/O paths, and performance tracing."],
+        ["Storage & Memory Systems", "Flash / SSD, NVMe, memory management, data movement, and storage/software performance trade-offs."],
+        ["Hardware-Aware Systems", "Memory-constrained ML, hardware/software interaction, and efficient execution on limited resources."],
+        ["Reliability in Practice", "Stateful service recovery, private artifact distribution, and reliable Linux infrastructure."],
       ].map(([title, body]) => (
         <div class="border-b border-white/10 py-4">
           <h2 class="text-base font-semibold text-white">{title}</h2>
@@ -40,17 +39,22 @@ import SectionHeader from "@/components/SectionHeader.astro";
   </section>
 
   <section class="border-t border-white/10 py-12 lg:py-16">
-    <SectionHeader eyebrow="Education" title="Education" description="A software and hardware background for systems work across the stack." />
-    <div class="border-b border-white/10 py-4">
-      <h2 class="text-lg font-semibold text-white">Kyung Hee University</h2>
-      <p class="mt-2 text-sm leading-6 text-slate-300">Bachelor's degree in Computer Science and Engineering, with a double major in Electronic Engineering.</p>
-      <p class="mt-1 text-sm leading-6 text-slate-400">GPA: 4.01 / 4.3 · Top 5% graduate</p>
-      <p class="mt-1 text-sm leading-6 text-slate-400">Academic Excellence Award</p>
-      <p class="mt-1 font-mono text-xs uppercase tracking-[0.16em] text-slate-500">2021 - 2025</p>
+    <SectionHeader eyebrow="Education" title="Education" description="Training across both the software and hardware sides of computing." />
+    <div class="border-b border-white/10 py-5">
+      <p class="font-mono text-xs uppercase tracking-wider text-signal">Incoming · Spring 2027</p>
+      <h2 class="mt-2 text-lg font-semibold text-white">Korea Advanced Institute of Science and Technology (KAIST)</h2>
+      <p class="mt-2 text-sm leading-6 text-slate-300">M.S. student, Department of AI Systems · Operating Systems Laboratory</p>
+      <p class="mt-1 text-sm text-slate-400">Admission confirmed; program and lab participation begin in 2027.</p>
+    </div>
+    <div class="border-b border-white/10 py-5">
+      <p class="font-mono text-xs uppercase tracking-wider text-slate-500">2021 — 2025</p>
+      <h2 class="mt-2 text-lg font-semibold text-white">Kyung Hee University</h2>
+      <p class="mt-2 text-sm leading-6 text-slate-300">B.S. in Computer Science and Engineering · Double major in Electronic Engineering</p>
+      <p class="mt-1 text-sm leading-6 text-slate-400">GPA 4.01 / 4.3 · Top 5% graduate · Academic Excellence Award</p>
     </div>
   </section>
 
-  <section class="border-t border-white/10 py-12 lg:py-16">
+  <section id="infrastructure-experience" class="border-t border-white/10 py-12 lg:py-16">
     <SectionHeader eyebrow="Experience" title="Infrastructure Experience" description="Publicly described at the level of constraints, architecture choices, and technical direction. Sensitive operational details are intentionally generalized." />
     <div class="grid gap-5">
       <div class="rounded-md border border-white/10 bg-white/[0.03] p-5">
@@ -105,7 +109,7 @@ import SectionHeader from "@/components/SectionHeader.astro";
     </div>
   </section>
 
-  <section class="border-t border-white/10 py-12 lg:py-16">
+  <section id="selected-projects" class="border-t border-white/10 py-12 lg:py-16">
     <SectionHeader eyebrow="Projects" title="Resource-Constrained Systems Projects" description="Graduation-level projects that connect lower-level resource constraints with AI workload execution." />
     <div class="grid gap-5 md:grid-cols-2">
       {[
@@ -127,17 +131,19 @@ import SectionHeader from "@/components/SectionHeader.astro";
   </section>
 
   <section class="border-t border-white/10 py-12 lg:py-16">
-    <SectionHeader eyebrow="Skills" title="Technical Skills" description="Grouped by the systems layers that show up repeatedly in the work." />
-    <div class="grid gap-4 md:grid-cols-2">
+    <SectionHeader eyebrow="Skills" title="Technical skills" description="Technologies I've used in engineering projects, coursework, and systems operations." />
+    <div class="grid gap-x-8 gap-y-7 md:grid-cols-2">
       {[
-        ["Systems / Infrastructure", "Linux, Docker, Kubernetes/K3S, Longhorn, private registry, Nexus, internal CI/CD, GitOps concepts, Traefik, NodePort/hostPort, TLS/HTTPS."],
-        ["Data / Backend Systems", "MinIO, ClickHouse, MongoDB, RabbitMQ, asynchronous processing, SQL."],
-        ["Programming", "C/C++, Python, JavaScript, TypeScript, Java, Go, SQL, Verilog."],
-        ["Hardware / Embedded", "FPGA, Zynq, Vivado, Quartus, STM32, Arduino, Raspberry Pi."]
-      ].map(([title, body]) => (
-        <div class="border-b border-white/10 py-4">
-          <h2 class="font-mono text-xs uppercase tracking-[0.16em] text-slate-500">{title}</h2>
-          <p class="mt-2 text-sm leading-6 text-slate-300">{body}</p>
+        ["Programming", ["C", "C++", "Python", "Shell", "TypeScript", "SQL", "Verilog"]],
+        ["Linux & Systems", ["Linux", "Git", "Docker", "Kubernetes / K3s", "Longhorn", "Traefik", "CI/CD"]],
+        ["Data & Infrastructure", ["ClickHouse", "MinIO", "MongoDB", "Nexus", "RabbitMQ"]],
+        ["Hardware & Embedded", ["FPGA", "Zynq", "Vivado", "Quartus", "STM32", "Arduino", "Raspberry Pi"]],
+      ].map(([title, items]) => (
+        <div>
+          <h2 class="mb-3 font-mono text-xs uppercase tracking-wider text-slate-400">{title}</h2>
+          <div class="flex flex-wrap gap-2">
+            {(items as string[]).map((tech) => <span class="border border-white/15 bg-white/[0.025] px-3 py-1.5 text-sm text-slate-200">{tech}</span>)}
+          </div>
         </div>
       ))}
     </div>

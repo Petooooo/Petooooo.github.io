@@ -4,17 +4,63 @@ import BaseLayout from "@/layouts/BaseLayout.astro";
 import ProjectCard from "@/components/ProjectCard.astro";
 import SectionHeader from "@/components/SectionHeader.astro";
 import { byDateDesc, isPublishedEntry } from "@/lib/content";
+import { withBase } from "@/lib/urls";
 
-const projects = (await getCollection("projects"))
-  .filter(isPublishedEntry)
-  .sort(byDateDesc);
+const projects = (await getCollection("projects")).filter(isPublishedEntry).sort(byDateDesc);
+const highlights = [
+  {
+    type: "Undergraduate project / memory efficiency",
+    title: "Lifecycle-aware allocation for TensorFlow Lite Micro",
+    result: "28.33% / 14.06%",
+    metric: "Peak-memory reductions on Person Detect / Tiny U-Net",
+    description: "Analyzed tensor lifetimes and allocation conflicts, then explored buffer reuse and in-place updates to reduce memory pressure.",
+    tags: ["TFLite Micro", "Memory planning", "C / C++"]
+  },
+  {
+    type: "Undergraduate project / hardware acceleration",
+    title: "Area-efficient CNN acceleration on Zynq FPGA",
+    result: "36.5%",
+    metric: "FPGA area reduction in project evaluation",
+    description: "Used bit-shift arithmetic, quantization, IM2COL, and systolic-array dataflow to explore the area/runtime trade-offs of embedded inference.",
+    tags: ["FPGA", "Zynq", "Verilog"]
+  },
+  {
+    type: "Engineering experience / Linux systems",
+    title: "Stateful infrastructure in restricted networks",
+    result: "K3s / Linux",
+    metric: "Operational engineering",
+    description: "Moved services toward Kubernetes/K3s, worked with private artifacts and persistent volumes, and analyzed recovery paths for stateful workloads.",
+    tags: ["Kubernetes", "Longhorn", "Nexus"]
+  }
+];
 ---
-
-<BaseLayout title="Projects" description="Implementation records for larger engineering work.">
-  <section class="py-12 md:py-14">
-    <SectionHeader eyebrow="Projects" title="Implementation Records" description="Larger engineering work: platform design, deployment systems, automation pipelines, tooling, troubleshooting, tradeoffs, progress logs, and future plans." />
-    <div class="grid gap-4 md:grid-cols-2">
-      {projects.map((project) => <ProjectCard project={project} />)}
+<BaseLayout title="Projects" description="Selected projects and engineering experience: TinyML memory planning, FPGA acceleration, and Linux infrastructure.">
+  <section class="border-b border-white/10 py-12 md:py-16">
+    <p class="font-mono text-xs uppercase tracking-[0.18em] text-signal">Selected work</p>
+    <h1 class="mt-4 text-4xl font-semibold text-white md:text-5xl">Projects &amp; engineering</h1>
+    <p class="mt-5 max-w-3xl text-base leading-8 text-slate-300">Work across memory-constrained ML, hardware acceleration, and running Linux services. These are past projects and practical experience, separate from my upcoming graduate research.</p>
+    <div class="mt-6 grid gap-5 md:grid-cols-3">
+      {highlights.map((item) => (
+        <article class="flex flex-col border border-white/10 bg-white/[0.025] p-5">
+          <p class="font-mono text-xs uppercase tracking-wider text-signal">{item.type}</p>
+          <h2 class="mt-4 text-xl font-semibold text-white">{item.title}</h2>
+          <p class="mt-5 text-2xl font-semibold tracking-tight text-white">{item.result}</p>
+          <p class="mt-1 text-xs leading-5 text-slate-400">{item.metric}</p>
+          <p class="mt-5 flex-1 text-sm leading-7 text-slate-300">{item.description}</p>
+          <div class="mt-5 flex flex-wrap gap-2 border-t border-white/10 pt-4">
+            {item.tags.map((tag) => <span class="border border-white/10 px-2 py-1 font-mono text-xs text-slate-300">{tag}</span>)}
+          </div>
+        </article>
+      ))}
     </div>
+    <p class="mt-6 text-sm leading-7 text-slate-400">The measurement summaries come from undergraduate project evaluations described in my <a class="text-signal underline underline-offset-4" href={withBase("/cv/#selected-projects")}>CV</a>. Full reports and reproducible project details will be linked when ready for public release.</p>
+  </section>
+  <section class="py-12 md:py-16">
+    <SectionHeader eyebrow="Write-ups" title="Project notes" description="Detailed, reviewed implementation records appear here as they become ready to publish." />
+    {projects.length > 0 ? (
+      <div class="grid gap-4 md:grid-cols-2">{projects.map((project) => <ProjectCard project={project} />)}</div>
+    ) : (
+      <p class="border-t border-white/10 pt-6 text-sm leading-7 text-slate-400">No detailed project write-ups are public yet. The project summaries above are available in the meantime.</p>
+    )}
   </section>
 </BaseLayout>
