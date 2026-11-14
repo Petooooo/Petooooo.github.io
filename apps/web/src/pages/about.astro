@@ -4,15 +4,16 @@ import SectionHeader from "@/components/SectionHeader.astro";
 import { withBase } from "@/lib/urls";
 
 const journey = [
-  { period: "2021 — 2025", title: "Computer science + electronic engineering", detail: "At Kyung Hee University, I worked across programming, digital hardware, and resource-constrained ML systems." },
-  { period: "2025 — 2026", title: "Linux systems in practice", detail: "Operating restricted-network services brought me into Kubernetes, persistent storage, recovery, artifact delivery, and operational reliability." },
+  { period: "2021 — 2025", title: "Kyung Hee University", detail: "B.S. in Computer Science and Engineering, with a double major in Electronic Engineering. Projects included TinyML memory planning and FPGA CNN acceleration." },
+  { period: "2023 — 2024", title: "Linux System & Kernel Expert Course (KDT)", detail: "Studied Linux internals and system programming, including hands-on kernel tracing with ftrace and KernelShark." },
+  { period: "2025 — 2026", title: "Linux infrastructure in practice", detail: "Operated restricted-network services, working with Kubernetes, persistent storage, recovery, and artifact distribution." },
   { period: "Spring 2027", title: "KAIST · Incoming M.S.", detail: "Joining the Department of AI Systems and the Operating Systems Laboratory, with a growing focus on kernel, storage, and memory systems." }
 ];
 
 const interests = [
-  { title: "Below the application layer", detail: "I'm interested in how the Linux kernel, file systems, and I/O paths shape performance and reliability." },
-  { title: "Where software meets hardware", detail: "Memory planning and FPGA projects made the cost of data movement and hardware constraints feel concrete." },
-  { title: "Engineering that holds up", detail: "My operations background makes me care about reproducibility, failure recovery, and what actually happens outside a benchmark." }
+  { title: "Tracing kernel behavior", detail: "I'd like to move from observing kernel execution to understanding and improving bottlenecks along the VFS and block I/O path." },
+  { title: "Flash-aware file systems", detail: "I'm curious about how NVMe, zoned flash, garbage collection, and write ordering affect the software stack." },
+  { title: "Data movement for AI", detail: "My earlier memory and FPGA projects inform a growing interest in memory management and GPU–storage I/O." }
 ];
 ---
 <BaseLayout title="About" description="About Jihwan Park — computer science, electronic engineering, Linux infrastructure, and upcoming graduate study in operating systems and storage.">
@@ -29,8 +30,8 @@ const interests = [
       </div>
       <div class="space-y-4 text-base leading-8 text-slate-300">
         <p>I studied computer science and electronic engineering at Kyung Hee University. I enjoy the part of computing where software behavior meets real hardware limits.</p>
-        <p>My undergraduate projects involved TensorFlow Lite Micro memory allocation and a CNN accelerator on Zynq FPGA. Later, operating Linux-based services gave me hands-on experience with Kubernetes, persistent storage, and failure recovery.</p>
-        <p>Those experiences led me toward operating systems and storage. I'll join KAIST's AI Systems master's program and Operating Systems Laboratory in spring 2027, where I hope to study these problems at a deeper level.</p>
+        <p>My undergraduate projects involved TensorFlow Lite Micro memory allocation and a CNN accelerator on Zynq FPGA. During KDT Linux kernel training, I used ftrace and KernelShark to inspect how the system runs. Later, operating Linux services brought me into Kubernetes, persistent storage, and failure recovery.</p>
+        <p>Those experiences led me toward the kernel and I/O stack: file systems, flash storage, and the path between GPUs, memory, and storage. I'll join KAIST's AI Systems master's program and Operating Systems Laboratory in spring 2027.</p>
       </div>
     </div>
   </section>
@@ -51,7 +52,7 @@ const interests = [
   </section>
 
   <section class="border-t border-white/10 py-12 lg:py-16">
-    <SectionHeader eyebrow="Looking ahead" title="Questions I want to explore" description="Research interests I'm developing, not completed research contributions." />
+    <SectionHeader eyebrow="Looking ahead" title="Research interests" description="Questions I want to explore during graduate study." />
     <div class="grid gap-5 md:grid-cols-3">
       {interests.map((item) => (
         <div class="border-t border-white/20 pt-4">

@@ -14,19 +14,19 @@ const recentPosts = [...notes, ...devops, ...research, ...paperReviews].sort(byD
 
 const focus = [
   {
-    title: "Operating Systems",
-    topics: "Linux kernel · VFS · File systems · I/O tracing",
-    detail: "Understanding what happens between an application, the kernel, and the storage device."
+    title: "Kernel & I/O",
+    topics: "Linux · VFS · Page cache · Block layer",
+    detail: "Following an I/O request through the OS, understanding where time goes, and learning how to measure it."
   },
   {
-    title: "Storage & Memory",
-    topics: "Flash / SSD · NVMe · Memory management",
-    detail: "Exploring the paths that move data, the resources they use, and how to measure the trade-offs."
+    title: "Flash storage",
+    topics: "File systems · NVMe · ZNS · Garbage collection",
+    detail: "Looking at the interaction between file-system design, flash devices, and software bottlenecks."
   },
   {
-    title: "Systems in Practice",
-    topics: "Linux · K3s · Reliability · Hardware-aware AI",
-    detail: "Building on experience with stateful services, constrained runtimes, and embedded acceleration."
+    title: "Memory & data movement",
+    topics: "Memory management · GPU–storage I/O · AI workloads",
+    detail: "Exploring how memory use and data movement affect modern computing systems."
   }
 ];
 
@@ -44,6 +44,13 @@ const selectedWork = [
     description: "Quantized inference and systolic-array dataflow with measured area and runtime trade-offs.",
     href: "/cv/#selected-projects",
     stack: ["Verilog", "FPGA", "Zynq"]
+  },
+  {
+    eyebrow: "Linux / Kernel training",
+    title: "Tracing Linux with ftrace & KernelShark",
+    description: "Completed the Linux System & Kernel Expert Course (KDT). Practiced tracing and inspecting kernel execution with ftrace and KernelShark.",
+    href: "/cv/#technical-training",
+    stack: ["Linux", "ftrace", "KernelShark"]
   },
   {
     eyebrow: "Systems engineering",
@@ -71,13 +78,12 @@ const skillGroups = [
           Operating systems, storage, and the layers in between.
         </p>
         <p class="mt-6 max-w-2xl text-base leading-8 text-slate-400">
-          My background is in computer science and electronic engineering, with experience in Linux infrastructure, memory-constrained ML, and FPGA acceleration.
-          I'm now moving toward systems research.
+          I've worked on memory-efficient ML, FPGA acceleration, and Linux systems—from kernel tracing exercises to running stateful infrastructure.
         </p>
-        <div class="mt-9 flex flex-wrap gap-x-8 gap-y-3 text-sm">
-          <a class="border-b border-signal pb-1 font-medium text-white transition hover:text-signal" href={withBase("/projects")}>Selected work ↗</a>
-          <a class="border-b border-white/30 pb-1 text-slate-300 transition hover:border-signal hover:text-signal" href="mailto:jihwan.park@kaist.ac.kr">Get in touch ↗</a>
-        </div>
+        <p class="mt-9 border-l-2 border-signal/50 pl-4 text-sm leading-7 text-slate-400">
+          B.S. Computer Science &amp; Engineering · Electronic Engineering (double major)<br />
+          Kyung Hee University
+        </p>
       </div>
       <aside class="border-l border-white/15 pl-6 lg:mt-2" aria-label="Upcoming academic affiliation">
         <p class="font-mono text-xs uppercase tracking-[0.18em] text-signal">Next / Spring 2027</p>
@@ -91,7 +97,7 @@ const skillGroups = [
   </section>
 
   <section class="py-12 md:py-16">
-    <SectionHeader eyebrow="Interests" title="What I want to understand better" description="The systems questions I'm heading toward in graduate school." />
+    <SectionHeader eyebrow="Research interests" title="Current interests" description="Topics I'm preparing to study in graduate school, informed by my earlier training and engineering work." />
     <div class="grid gap-4 md:grid-cols-3">
       {focus.map((area) => (
         <div class="border-t border-white/20 pt-5">
@@ -105,8 +111,8 @@ const skillGroups = [
   </section>
 
   <section class="border-t border-white/10 py-12 md:py-16">
-    <SectionHeader eyebrow="Experience" title="Selected work" description="Projects and engineering experience that shaped my interests." />
-    <div class="grid gap-4 md:grid-cols-3">
+    <SectionHeader eyebrow="Experience" title="Projects &amp; practice" description="What I've worked on, from undergraduate projects to Linux training and infrastructure operations." />
+    <div class="grid gap-4 md:grid-cols-2">
       {selectedWork.map((work) => (
         <a href={withBase(work.href)} class="group flex h-full flex-col justify-between border border-white/10 bg-white/[0.025] p-5 transition hover:border-signal/50">
           <div>

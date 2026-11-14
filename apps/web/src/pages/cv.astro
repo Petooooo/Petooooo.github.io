@@ -25,10 +25,10 @@ import SectionHeader from "@/components/SectionHeader.astro";
     <SectionHeader eyebrow="Direction" title="Research interests" description="Areas I want to develop in graduate school; distinct from my prior project and operational experience." />
     <div class="grid gap-4 md:grid-cols-2">
       {[
-        ["Operating Systems & File Systems", "Linux kernel, VFS, file-system design, I/O paths, and performance tracing."],
-        ["Storage & Memory Systems", "Flash / SSD, NVMe, memory management, data movement, and storage/software performance trade-offs."],
-        ["Hardware-Aware Systems", "Memory-constrained ML, hardware/software interaction, and efficient execution on limited resources."],
-        ["Reliability in Practice", "Stateful service recovery, private artifact distribution, and reliable Linux infrastructure."],
+        ["Linux Kernel & I/O", "VFS and file-system internals, page cache, block I/O paths, and kernel tracing/performance analysis."],
+        ["Flash Storage & File Systems", "Flash / NVMe / ZNS, garbage collection, write ordering, and software bottlenecks across storage layers."],
+        ["Memory & GPU-Storage I/O", "Memory management, data movement, GPU-centric AI systems, and the interface between software and emerging hardware."],
+        ["Systems Engineering", "Stateful service recovery, private artifact distribution, Linux infrastructure, and practical reliability."],
       ].map(([title, body]) => (
         <div class="border-b border-white/10 py-4">
           <h2 class="text-base font-semibold text-white">{title}</h2>
@@ -51,6 +51,18 @@ import SectionHeader from "@/components/SectionHeader.astro";
       <h2 class="mt-2 text-lg font-semibold text-white">Kyung Hee University</h2>
       <p class="mt-2 text-sm leading-6 text-slate-300">B.S. in Computer Science and Engineering · Double major in Electronic Engineering</p>
       <p class="mt-1 text-sm leading-6 text-slate-400">GPA 4.01 / 4.3 · Top 5% graduate · Academic Excellence Award</p>
+    </div>
+  </section>
+
+  <section id="technical-training" class="border-t border-white/10 py-12 lg:py-16">
+    <SectionHeader eyebrow="Training" title="Linux kernel training" description="Hands-on foundation in Linux internals before graduate research." />
+    <div class="grid gap-3 border-t border-white/10 py-5 md:grid-cols-[10rem_1fr] md:gap-8">
+      <p class="font-mono text-xs uppercase tracking-wider text-slate-500">Oct 2023 — Mar 2024</p>
+      <div>
+        <h2 class="text-lg font-semibold text-white">Linux System &amp; Kernel Expert Course · K-Digital Training (2nd cohort)</h2>
+        <p class="mt-2 text-sm leading-7 text-slate-300">Studied Linux system internals, kernel concepts, system programming, and troubleshooting. Practiced observing kernel execution using <code>ftrace</code> and <code>KernelShark</code>.</p>
+
+      </div>
     </div>
   </section>
 
