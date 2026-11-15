@@ -44,11 +44,11 @@ The team investigated two related training mechanisms:
 
 These techniques are not inventions of this project. Our contribution was to use them in the project's quantized model and hardware-aware inference design.
 
-<figure className="project-source-figure">
-  <a href="/figures/original/cnn-quantization-original.webp" target="_blank" rel="noopener noreferrer" aria-label="Open original figure full size">
-    <img src="/figures/original/cnn-quantization-original.webp" alt="Original team-poster diagram of power-of-two quantization, straight-through estimator forward and backward passes." loading="lazy" decoding="async" />
+<figure className="project-concept-figure">
+  <a href="/figures/redrawn/cnn-quantization.svg" target="_blank" rel="noopener noreferrer" aria-label="Open original figure full size">
+    <img src="/figures/redrawn/cnn-quantization.svg" alt="Original team-poster diagram of power-of-two quantization, straight-through estimator forward and backward passes." loading="lazy" decoding="async" />
   </a>
-  <figcaption>Figure 1. Original training/quantization diagram from the 2024 graduation poster: quantized weights and STE gradient treatment.</figcaption>
+  <figcaption>Figure 1. Redrawn from the original poster: INQ/STE quantization and its forward/backward roles.</figcaption>
 </figure>
 
 
@@ -56,11 +56,11 @@ These techniques are not inventions of this project. Our contribution was to use
 
 The project used a **Zynq processing system (PS) + programmable logic (PL)** design.
 
-<figure className="project-source-figure">
-  <a href="/figures/original/cnn-zynq-original.webp" target="_blank" rel="noopener noreferrer" aria-label="Open original figure full size">
-    <img src="/figures/original/cnn-zynq-original.webp" alt="Original Zynq PS/PL architecture: IM2COL, ReLU, max pooling, AXI4-Lite links, input/output BRAM banks, controller FSM and IS/WS PE arrays." loading="lazy" decoding="async" />
+<figure className="project-concept-figure">
+  <a href="/figures/redrawn/cnn-pspl.svg" target="_blank" rel="noopener noreferrer" aria-label="Open original figure full size">
+    <img src="/figures/redrawn/cnn-pspl.svg" alt="Original Zynq PS/PL architecture: IM2COL, ReLU, max pooling, AXI4-Lite links, input/output BRAM banks, controller FSM and IS/WS PE arrays." loading="lazy" decoding="async" />
   </a>
-  <figcaption>Figure 2. Original complete PS/PL architecture from the team poster, including the actual BRAM banks, FSM, and two PE-array dataflows.</figcaption>
+  <figcaption>Figure 2. PS/PL block-level architecture redrawn from the final team poster. Components are schematic.</figcaption>
 </figure>
 
 
@@ -83,11 +83,11 @@ This division matters because accelerating a CNN involves more than replacing th
 
 The poster includes an **IM2COL** illustration: convolution input patches and filters are reshaped into a form suitable for regular dot products and parallel matrix-style processing.
 
-<figure className="project-source-figure">
-  <a href="/figures/original/cnn-dataflow-original.webp" target="_blank" rel="noopener noreferrer" aria-label="Open original figure full size">
-    <img src="/figures/original/cnn-dataflow-original.webp" alt="Original systolic-array dataflow diagram showing convolution layers, PE array tiles, datapath outputs and 16 output BRAM banks." loading="lazy" decoding="async" />
+<figure className="project-concept-figure">
+  <a href="/figures/redrawn/cnn-dataflow.svg" target="_blank" rel="noopener noreferrer" aria-label="Open original figure full size">
+    <img src="/figures/redrawn/cnn-dataflow.svg" alt="Original systolic-array dataflow diagram showing convolution layers, PE array tiles, datapath outputs and 16 output BRAM banks." loading="lazy" decoding="async" />
   </a>
-  <figcaption>Figure 3. Original convolution dataflow and PE/BRAM arrangement from the final team poster.</figcaption>
+  <figcaption>Figure 3. Convolution dataflow and PE-array mapping, reconstructed from the original poster.</figcaption>
 </figure>
 
 
@@ -95,11 +95,11 @@ It also compares **weight-stationary (WS)** and **input-stationary (IS)** systol
 
 Within one PE, the documented computation is deliberately simple:
 
-<figure className="project-source-figure project-source-figure--narrow">
-  <a href="/figures/original/cnn-pe-original.webp" target="_blank" rel="noopener noreferrer" aria-label="Open original figure full size">
-    <img src="/figures/original/cnn-pe-original.webp" alt="Original single processing element diagram with shift operation and partial-sum accumulation." loading="lazy" decoding="async" />
+<figure className="project-concept-figure project-source-figure--narrow">
+  <a href="/figures/redrawn/cnn-pe.svg" target="_blank" rel="noopener noreferrer" aria-label="Open original figure full size">
+    <img src="/figures/redrawn/cnn-pe.svg" alt="Original single processing element diagram with shift operation and partial-sum accumulation." loading="lazy" decoding="async" />
   </a>
-  <figcaption>Figure 4. Original bit-shift processing element. Multiplication is replaced by a shift/sign operation; accumulation remains.</figcaption>
+  <figcaption>Figure 4. Recreated processing-element datapath. Shift/sign processing and accumulation are distinct.</figcaption>
 </figure>
 
 
@@ -123,6 +123,14 @@ This was a **team capstone**, not an individual project, but my contribution ext
 
 ## 5. Evaluation: hardware resources, accuracy and runtime
 
+<figure className="project-concept-figure">
+  <a href="/figures/redrawn/cnn-results.svg" target="_blank" rel="noopener noreferrer" aria-label="Open performance results full size">
+    <img src="/figures/redrawn/cnn-results.svg" alt="Vector chart comparing original poster results: FPGA LUT usage, PS-only versus PS+PL latency, and top-1 accuracy." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Figure 5. Original evaluation numbers redrawn with distinct baselines for resources, execution time, and accuracy.</figcaption>
+</figure>
+
+
 The poster provides three distinct comparisons. They should not be treated as interchangeable measurements.
 
 ### FPGA resource utilization
@@ -137,14 +145,6 @@ The poster reports a **36.5% area decrease**. The resource table supports this m
 
 ### Model accuracy
 
-<figure className="project-source-figure">
-  <a href="/figures/original/cnn-accuracy-original.webp" target="_blank" rel="noopener noreferrer" aria-label="Open original figure full size">
-    <img src="/figures/original/cnn-accuracy-original.webp" alt="Original top-1 accuracy comparison chart for the team's quantized CNN and reference models." loading="lazy" decoding="async" />
-  </a>
-  <figcaption>Figure 5. Original poster's model accuracy chart; comparisons here are limited to the recorded evaluation.</figcaption>
-</figure>
-
-
 
 The chart compares the project's quantized model with a traditional model:
 
@@ -156,14 +156,6 @@ The chart compares the project's quantized model with a traditional model:
 That is a **0.6 percentage-point difference** in the presented experiment. The poster does not give enough detail about the dataset and evaluation protocol to generalize this accuracy figure to unrelated models or tasks.
 
 ### End-to-end processing time
-
-<figure className="project-source-figure">
-  <a href="/figures/original/cnn-latency-original.webp" target="_blank" rel="noopener noreferrer" aria-label="Open original figure full size">
-    <img src="/figures/original/cnn-latency-original.webp" alt="Original benchmark table showing 15.9 ms PS-only processing and 8.83 ms PS plus PL processing on the Cortex-A9 evaluation setup." loading="lazy" decoding="async" />
-  </a>
-  <figcaption>Figure 6. Original runtime comparison from the graduation poster; PS-only versus PS+PL is distinct from the LUT comparison.</figcaption>
-</figure>
-
 
 
 | Execution | Average runtime |

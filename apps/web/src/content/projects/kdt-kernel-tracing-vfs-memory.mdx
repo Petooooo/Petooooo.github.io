@@ -1,0 +1,53 @@
+---
+title: "Kernel Tracing, Virtual Memory and File-System Foundations"
+description: "How the KDT course connected scheduler traces, page tables, VFS and storage semantics to practical Linux debugging."
+date: "2026-11-15"
+draft: false
+reviewed: true
+sensitivity: public
+category: "Technical Training"
+area: "Linux Kernel & Storage"
+tags: ["Linux Kernel", "ftrace", "KernelShark", "Memory", "VFS", "EXT4"]
+type: "implementation-note"
+role: "K-Digital Training · Linux Systems and Kernel Expert Course (2nd cohort)"
+period: "Oct 2023–Mar 2024"
+status: "archived"
+techStack: ["Linux Kernel", "ftrace", "KernelShark", "Memory", "VFS", "EXT4"]
+---
+
+> **KDT learning record.** This page summarizes subjects covered in the documented training sessions and what I took away from them. It does not claim independent kernel patch submissions, a completed debugger implementation, or a specific trace measurement that I cannot verify.
+
+## Connecting symptoms to kernel subsystems
+
+System bugs often appear at the top of the stack: a slow request, a blocked thread, a stalled write. The course introduced tools and kernel abstractions for finding which subsystem may be involved.
+
+| Area | Core ideas from the material |
+| --- | --- |
+| Scheduling | Process states, runqueues, scheduling classes, preemption and multicore behavior |
+| Interrupts | IRQ and exception entry, interrupt context and deferred work |
+| Virtual memory | VMA, address translation, page tables, page faults, allocator behavior |
+| File systems | VFS objects (inode/dentry/superblock), file access paths, page cache |
+| Storage | EXT2 examples, EXT4 journaling concepts, flash/FTL and F2FS motivations |
+| Debugging | ftrace, KernelShark, GDB, Trace32, crash utility and vmcore concepts |
+
+## A trace is evidence, not the explanation itself
+
+The course used **ftrace** and related visual/debugging tools to inspect kernel execution. Trace data can tell an investigator which events happened and when; by itself it does not establish why the scheduler made a decision or why a device blocked.
+
+I learned to combine three perspectives: an **observed symptom**, the relevant **kernel data structures and call paths**, and a **testable hypothesis**. This remains important when diagnosing storage or networking incidents at the infrastructure layer.
+
+## Virtual memory and page-cache behavior
+
+The training covered virtual-to-physical translation, page faults, allocator concepts and file-backed memory. The practical insight was that application memory use, page cache, kernel allocations and physical storage I/O are related but separate accounting layers.
+
+## VFS and storage mechanisms
+
+VFS makes different filesystem implementations accessible through shared interfaces, while metadata and persistence mechanisms depend on the filesystem and device. The course discussed EXT2 structures, EXT4 journaling, flash characteristics and F2FS design motivations.
+
+Those subjects later became especially relevant while working with replicated volumes and database recovery: **a storage API may report a success condition without explaining persistence, ordering or failure semantics underneath**.
+
+## What I did not claim
+
+The original course documents describe many exercises, including kernel dumping, device drivers and performance diagnostics. They do not establish that I personally completed every proposed exercise or retained its test output. My verified public record therefore describes this as **training and conceptual learning**, not as a standalone implemented OS research project.
+
+[Back to the full KDT training record](/projects/kdt-linux-system-kernel-expert-course/).

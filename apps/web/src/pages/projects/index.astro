@@ -8,6 +8,28 @@ import { byDateDesc, isPublishedEntry } from "@/lib/content";
 import { withBase } from "@/lib/urls";
 
 const projects = (await getCollection("projects")).filter(isPublishedEntry).sort(byDateDesc);
+
+const rokafOrder = [
+  "rokaf-private-artifacts-and-ci",
+  "rokaf-stateful-storage-and-recovery",
+  "rokaf-database-ha-and-langfuse-migrations",
+  "rokaf-identity-rbac-and-policy",
+  "rokaf-networking-and-tls",
+  "rokaf-gpu-scheduling-and-capacity"
+];
+const trainingOrder = [
+  "kdt-linux-system-kernel-expert-course",
+  "kdt-posix-system-programming",
+  "kdt-kernel-tracing-vfs-memory",
+  "kdt-embedded-linux-drivers"
+];
+const journal = projects
+  .filter((p) => rokafOrder.includes(p.slug))
+  .sort((a, b) => rokafOrder.indexOf(a.slug) - rokafOrder.indexOf(b.slug));
+const trainingRecords = projects
+  .filter((p) => trainingOrder.includes(p.slug))
+  .sort((a, b) => trainingOrder.indexOf(a.slug) - trainingOrder.indexOf(b.slug));
+
 const highlights = [
   {
     type: "Undergraduate project / memory efficiency",
@@ -59,12 +81,18 @@ const highlights = [
     </div>
     <p class="mt-6 text-sm leading-7 text-slate-400">The two undergraduate projects now have detailed write-ups based on my original 2024 report and team poster. Reported results, individual responsibilities, and unverified aspects are distinguished within each article.</p>
   </section>
+
   <section class="border-t border-white/10 py-12 md:py-16">
-    <SectionHeader eyebrow="Write-ups" title="Project write-ups" description="Design decisions, implementation details, experiment results, and limitations." />
-    {projects.length > 0 ? (
-      <div class="grid gap-4 md:grid-cols-2">{projects.map((project) => <ProjectCard project={project} />)}</div>
-    ) : (
-      <p class="border-t border-white/10 pt-6 text-sm leading-7 text-slate-400">No detailed project write-ups are public yet. The project summaries above are available in the meantime.</p>
-    )}
+    <SectionHeader eyebrow="ROKAF · Engineering journal" title="Systems engineering records" description="Six focused accounts of actual platform design, operations, and troubleshooting. The main K3s project above is the overview." />
+    <div class="grid gap-4 md:grid-cols-2">
+      {journal.map((project) => <ProjectCard project={project} />)}
+    </div>
+  </section>
+
+  <section class="border-t border-white/10 py-12 md:py-16">
+    <SectionHeader eyebrow="K-Digital Training · 2023–2024" title="Linux systems foundations" description="A course overview and three topic records, grounded in the original syllabus and archived study notes. These are training records, not claimed original research projects." />
+    <div class="grid gap-4 md:grid-cols-2">
+      {trainingRecords.map((project) => <ProjectCard project={project} />)}
+    </div>
   </section>
 </BaseLayout>

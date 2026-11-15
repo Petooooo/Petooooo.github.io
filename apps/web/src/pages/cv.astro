@@ -25,6 +25,7 @@ const training = [
     period: "Oct 2023–Mar 2024",
     title: "Linux System & Kernel Expert Course",
     subtitle: "K-Digital Training · 2nd cohort",
+    href: "/projects/kdt-linux-system-kernel-expert-course/",
     detail: "C/POSIX system programming, processes/threads and IPC, scheduling, virtual memory, VFS/file systems, device drivers, and tracing/dump analysis with tools such as ftrace and crash."
   }
 ];
@@ -32,61 +33,32 @@ const training = [
 const infrastructure = [
   {
     period: "Jul 2025–Present",
-    title: "ROKAF · On-Premises K3s Platform",
+    title: "ROKAF · Independent On-Premises K3s Engineering",
     href: "/projects/independent-on-premises-k3s-platform-engineering/",
-    subtitle: "AI Systems Infrastructure · Independent platform engineering",
-    detail: "Received an award from the ROKAF Chief of Staff in recognition of this work.",
+    subtitle: "AI Systems Infrastructure · Closed-network platform design and operations",
+    detail: "ROKAF Chief of Staff Award · 2026",
     highlights: [
-      "Independently established, operated, and troubleshot a K3s-based platform in an on-premises, closed-network environment following my unit assignment.",
-      "Handled platform deployments and day-to-day operations across container delivery, persistent storage, internal service networking, and recovery.",
-      "Maintained systems under restricted external connectivity, taking responsibility for diagnosing failures and restoring service without relying on public cloud infrastructure."
-    ]
-  },
-  {
-    period: "Jul 2025–Present",
-    title: "Restricted-Network Platform Migration",
-    highlights: [
-      "Migrated selected services from ad-hoc Docker operation toward a lightweight Kubernetes/K3s platform in a restricted network.",
-      "Worked through deployment standardization, private image distribution, service exposure, persistent storage, and operational recovery.",
-      "Designed around limited access to external registries, package repositories, public DNS, and managed cloud services."
-    ]
-  },
-  {
-    period: "Jul 2025–Present",
-    title: "Stateful Service Recovery Analysis",
-    highlights: [
-      "Analyzed the difference between zero-downtime failover and fault-tolerant recovery for persistent workloads.",
-      "Studied Longhorn-backed PVC detach/attach behavior, recovery time, downtime, and RTO/RPO trade-offs.",
-      "Distinguished stateless rescheduling from storage-aware recovery planning."
-    ]
-  },
-  {
-    period: "Jul 2025–Present",
-    title: "Private Artifact and Bootstrap Supply Chain",
-    highlights: [
-      "Worked with Nexus, private container registries, image mirroring, and artifact distribution.",
-      "Investigated bootstrap dependencies that can prevent a failed artifact service from recovering.",
-      "Examined how Maven/Nexus artifact paths relate to POM GAV metadata."
-    ]
-  },
-  {
-    period: "Jul 2025–Present",
-    title: "Internal Delivery and Operational Automation",
-    highlights: [
-      "Evaluated CI/CD and GitOps delivery flows from image builds and registry pushes to deployment synchronization and rollback.",
-      "Used Git history and declarative configuration to reason about reproducibility, traceability, and recovery.",
-      "Connected service routing, storage, artifact repositories, and automation into a coherent operating model."
-    ]
-  },
-  {
-    period: "Jul 2025–Present",
-    title: "Full-GPU Serving Availability Strategy",
-    highlights: [
-      "Evaluated AI serving workloads where full-GPU allocation was more practical than fine-grained sharing.",
-      "Considered degraded-capacity serving as a realistic failure-mode strategy.",
-      "Compared placement, active-active replicas, MIG, time-slicing, and load-balancer rerouting."
+      "Independently established, operated and troubleshot an on-premises K3s platform supporting AI services.",
+      "Worked across private artifact delivery, networking, persistent storage, database HA, identity and GPU service operations.",
+      "Detailed technical records are linked below; sensitive environment details are intentionally omitted."
     ]
   }
+];
+
+const engineeringRecords = [
+  ["Private CI & artifacts", "Nexus3, GitLab Runner/Kaniko and bootstrap dependencies", "/projects/rokaf-private-artifacts-and-ci/"],
+  ["Storage & recovery", "Longhorn, MinIO and stateful failover semantics", "/projects/rokaf-stateful-storage-and-recovery/"],
+  ["Database HA", "MongoDB, PostgreSQL, ClickHouse/Keeper and Langfuse migrations", "/projects/rokaf-database-ha-and-langfuse-migrations/"],
+  ["Identity & access", "ServiceAccount RBAC, OAuth2, Keycloak/OpenFGA design", "/projects/rokaf-identity-rbac-and-policy/"],
+  ["Service networking", "Traefik, load balancing and private TLS", "/projects/rokaf-networking-and-tls/"],
+  ["GPU infrastructure", "Placement, time-slicing options and degraded capacity", "/projects/rokaf-gpu-scheduling-and-capacity/"]
+];
+
+const trainingRecords = [
+  ["Training overview", "/projects/kdt-linux-system-kernel-expert-course/"],
+  ["System programming", "/projects/kdt-posix-system-programming/"],
+  ["Kernel, VFS & memory", "/projects/kdt-kernel-tracing-vfs-memory/"],
+  ["Embedded drivers", "/projects/kdt-embedded-linux-drivers/"]
 ];
 
 const selectedProjects = [
@@ -102,13 +74,6 @@ const selectedProjects = [
     href: "/projects/bit-shift-cnn-accelerator-zynq/",
     detail: "Explored INQ/STE-based quantization, bit-shift operations, IM2COL, systolic-array dataflow, and AXI4-Lite PS/PL integration. Project evaluation reported a 36.5% FPGA area decrease and 8.83 ms PS+PL runtime versus 15.9 ms PS-only."
   }
-];
-
-const researchInterests = [
-  ["Linux kernel & I/O", "VFS, file-system internals, page cache, block I/O paths, and performance tracing."],
-  ["Flash storage", "Flash / NVMe / ZNS, garbage collection, write ordering, and storage-layer bottlenecks."],
-  ["Memory & data movement", "Memory management, GPU–storage I/O, and hardware/software performance trade-offs."],
-  ["Systems engineering", "Persistent storage, reliable Linux infrastructure, and stateful service recovery."]
 ];
 
 const skills = [
@@ -138,22 +103,15 @@ const skills = [
     </div>
   </section>
 
-  <section class="border-t border-white/10 py-10 md:py-14">
-    <SectionHeader eyebrow="Direction" title="Research interests" description="Areas of interest for graduate study." />
-    <div class="grid gap-x-10 md:grid-cols-2">
-      {researchInterests.map(([title, description]) => (
-        <div class="border-t border-white/10 py-5">
-          <h3 class="text-base font-semibold text-white">{title}</h3>
-          <p class="mt-2 text-sm leading-7 text-slate-400">{description}</p>
-        </div>
-      ))}
-    </div>
-  </section>
-
   <section id="technical-training" class="scroll-mt-24 border-t border-white/10 py-10 md:py-14">
     <SectionHeader eyebrow="Foundation" title="Technical training" />
     <div>
       {training.map((entry) => <CVEntry {...entry} />)}
+    </div>
+    <div class="mt-3 flex flex-wrap gap-2 border-t border-white/10 pt-5">
+      {trainingRecords.map(([label, href]) => (
+        <a href={href} class="border border-white/15 px-3 py-1.5 text-xs text-slate-300 transition hover:border-signal/60 hover:text-signal">{label}</a>
+      ))}
     </div>
   </section>
 
@@ -161,6 +119,14 @@ const skills = [
     <SectionHeader eyebrow="Experience" title="ROKAF · AI Systems Infrastructure" description="Independently built, operated, and troubleshot on-premises K3s infrastructure in a closed network. Internal system details are omitted." />
     <div>
       {infrastructure.map((entry) => <CVEntry {...entry} />)}
+    </div>
+    <div class="mt-6 grid gap-x-8 border-t border-white/10 md:grid-cols-2">
+      {engineeringRecords.map(([title, description, href]) => (
+        <a href={href} class="group block border-b border-white/10 py-4 transition hover:border-signal/40">
+          <h3 class="text-sm font-semibold text-white group-hover:text-signal">{title} <span aria-hidden="true" class="text-slate-500">↗</span></h3>
+          <p class="mt-2 text-xs leading-6 text-slate-400">{description}</p>
+        </a>
+      ))}
     </div>
   </section>
 

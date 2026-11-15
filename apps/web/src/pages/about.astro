@@ -1,61 +1,48 @@
 ---
 import BaseLayout from "@/layouts/BaseLayout.astro";
-import SectionHeader from "@/components/SectionHeader.astro";
 import PageHeader from "@/components/PageHeader.astro";
+import SectionHeader from "@/components/SectionHeader.astro";
+import { withBase } from "@/lib/urls";
 
-const journey = [
-  { period: "2021 — 2025", title: "Kyung Hee University", detail: "B.S. in Computer Science and Engineering, with a double major in Electronic Engineering. Projects included TinyML memory planning and FPGA CNN acceleration." },
-  { period: "Oct 2023 — Mar 2024", title: "Linux System & Kernel Expert Course (KDT)", detail: "Studied C/POSIX system programming, scheduling, virtual memory, VFS/file systems, device drivers, and tracing/debugging." },
-  { period: "Jul 2025 — Present", title: "ROKAF · AI Systems Infrastructure", detail: "Independently built and operated an on-premises K3s platform in a closed network, handling infrastructure troubleshooting and recovery. Received an award from the ROKAF Chief of Staff for this work." },
-  { period: "Spring 2027", title: "KAIST · Incoming M.S.", detail: "Joining the Department of AI Systems and the Operating Systems Laboratory, with a growing focus on kernel, storage, and memory systems." }
-];
-
-const interests = [
-  { title: "Tracing kernel behavior", detail: "I'd like to move from observing kernel execution to understanding and improving bottlenecks along the VFS and block I/O path." },
-  { title: "Flash-aware file systems", detail: "I'm curious about how NVMe, zoned flash, garbage collection, and write ordering affect the software stack." },
-  { title: "Data movement for AI", detail: "My earlier memory and FPGA projects inform a growing interest in memory management and GPU–storage I/O." }
+const directions = [
+  {
+    title: "Operating systems & I/O",
+    detail: "I want to understand the path between application requests, VFS, filesystem operations and the block layer — and how to measure the bottlenecks."
+  },
+  {
+    title: "Storage & persistence",
+    detail: "Flash-aware design, write ordering, data movement, recovery behavior and the software mechanisms that make persistent data dependable."
+  },
+  {
+    title: "Memory & hardware-aware systems",
+    detail: "From tiny-device buffer allocation to FPGA accelerators, I enjoy reasoning about what computation costs in memory, bandwidth and resources."
+  }
 ];
 ---
-<BaseLayout title="About" description="About Jihwan Park — computer science, electronic engineering, Linux infrastructure, and upcoming graduate study in operating systems and storage.">
-  <PageHeader eyebrow="Profile" title="About" description="My background connects computer science, hardware, and hands-on systems engineering." />
-
-  <section class="border-b border-white/10 py-12 md:py-16">
-    <div class="max-w-3xl space-y-4 text-base leading-8 text-slate-300">
-      <p>I studied computer science and electronic engineering at Kyung Hee University, working on memory-constrained ML and FPGA acceleration. I later studied Linux system programming and kernel internals through KDT.</p>
-      <p>At the Republic of Korea Air Force (ROKAF), I independently built and operated a K3s-based platform for on-premises AI systems infrastructure in a closed network. I handled deployments, persistent storage, troubleshooting, and recovery, and received an award from the ROKAF Chief of Staff for this work.</p>
-      <p>I'll join KAIST's AI Systems master's program and Operating Systems Laboratory in spring 2027. I'm particularly interested in file systems, storage, memory management, and I/O performance.</p>
-    </div>
-  </section>
+<BaseLayout title="About" description="Jihwan Park — incoming KAIST master's student interested in operating systems, file systems, storage and memory systems.">
+  <PageHeader eyebrow="Background & direction" title="About" description="I'm interested in the systems software behind reliable storage, efficient memory use, and predictable I/O." />
 
   <section class="py-12 md:py-16">
-    <SectionHeader eyebrow="Background" title="How I got here" description="Different kinds of work, connected by an interest in how systems behave under constraints." />
-    <div class="grid gap-0">
-      {journey.map((item) => (
-        <div class="grid gap-3 border-t border-white/10 py-5 md:grid-cols-[10rem_1fr] md:gap-8">
-          <p class="font-mono text-xs uppercase tracking-wider text-signal">{item.period}</p>
-          <div>
-            <h2 class="text-lg font-semibold text-white">{item.title}</h2>
-            <p class="mt-2 max-w-3xl text-sm leading-7 text-slate-300">{item.detail}</p>
-          </div>
-        </div>
-      ))}
+    <div class="max-w-3xl space-y-5 text-base leading-8 text-slate-300">
+      <p>I studied computer science and electronic engineering at Kyung Hee University. Working on TinyML memory planning and FPGA CNN acceleration made me interested in the boundary between software abstractions and hardware resources.</p>
+      <p>Later, I independently built and operated a closed-network K3s platform during my service in the Republic of Korea Air Force. Operating real stateful systems taught me that restoring service and understanding its underlying failure mechanism are different problems.</p>
+      <p>I'm joining KAIST's AI Systems master's program and the Operating Systems Laboratory in spring 2027. I want to go deeper into the layers underneath the infrastructure I've used: Linux, file systems, storage, memory management, and I/O behavior.</p>
     </div>
   </section>
 
   <section class="border-t border-white/10 py-12 md:py-16">
-    <SectionHeader eyebrow="Looking ahead" title="Research interests" description="Questions I want to explore during graduate study." />
-    <div class="grid gap-5 md:grid-cols-3">
-      {interests.map((item) => (
-        <div class="border-t border-white/20 pt-4">
-          <h3 class="text-lg font-semibold text-white">{item.title}</h3>
+    <SectionHeader eyebrow="Looking ahead" title="Research interests" description="Questions I want to investigate, not a list of research results already completed." />
+    <div class="grid gap-6 md:grid-cols-3">
+      {directions.map((item) => (
+        <div class="border-t border-white/20 pt-5">
+          <h2 class="text-lg font-semibold text-white">{item.title}</h2>
           <p class="mt-3 text-sm leading-7 text-slate-300">{item.detail}</p>
         </div>
       ))}
     </div>
   </section>
 
-  <section class="border-t border-white/10 py-12 md:py-16">
-    <SectionHeader eyebrow="Notebook" title="Why I keep this site" description="A place to keep useful technical details instead of just project titles." />
-    <p class="max-w-3xl text-base leading-8 text-slate-300">I use this site to collect notes from things I've built, studied, and debugged. The operations notes leave out internal hostnames, credentials, and other private infrastructure details. I prefer explaining concrete decisions and trade-offs over polishing an impressive-sounding summary.</p>
+  <section class="border-t border-white/10 py-10 md:py-12">
+    <p class="max-w-3xl text-sm leading-7 text-slate-400">For dates, responsibilities and awards, see my <a class="text-signal underline underline-offset-4" href={withBase("/cv/")}>CV</a>. For the engineering decisions and work behind them, see <a class="text-signal underline underline-offset-4" href={withBase("/projects/")}>Projects</a>. I keep my ongoing study notes in the <a class="text-signal underline underline-offset-4" href={withBase("/notes/")}>technical notebook</a>.</p>
   </section>
 </BaseLayout>

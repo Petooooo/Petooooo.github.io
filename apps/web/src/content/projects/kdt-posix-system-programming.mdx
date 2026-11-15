@@ -1,0 +1,52 @@
+---
+title: "POSIX System Programming — Processes, IPC and Networking"
+description: "What I learned about C/C++ system programming, process boundaries, synchronization, file descriptors and socket services."
+date: "2026-11-15"
+draft: false
+reviewed: true
+sensitivity: public
+category: "Technical Training"
+area: "System Programming"
+tags: ["C++", "Linux", "POSIX", "IPC", "Sockets", "GDB"]
+type: "implementation-note"
+role: "K-Digital Training · Linux Systems and Kernel Expert Course (2nd cohort)"
+period: "Oct 2023–Mar 2024"
+status: "archived"
+techStack: ["C++", "Linux", "POSIX", "IPC", "Sockets", "GDB"]
+---
+
+> **KDT curriculum study record (2023–2024).** Based on the training notes and official syllabus. The examples discussed here are course concepts; no benchmarks or runnable lab outputs are claimed without preserved artifacts.
+
+## From a single program to cooperating processes
+
+A conventional C++ exercise often runs as one program with ordinary function calls. System programming introduces **separate address spaces, process lifetimes, blocking system calls, shared resources and failure boundaries**.
+
+The course developed these subjects from build tools and debugging toward multi-process and networked programming:
+
+| Mechanism | Question it addresses |
+| --- | --- |
+| Process creation and exit | Who owns the process state, file descriptors and exit status? |
+| Threads and locks | Which memory is shared, and what prevents races? |
+| Signals and timers | How are asynchronous events reported and handled? |
+| Message queues | How can processes exchange discrete messages? |
+| Shared memory / mmap | How is data shared or mapped with explicit lifetime rules? |
+| TCP / UDP sockets | How do processes communicate across host/network boundaries? |
+| File descriptors and I/O | What does the kernel track when a process opens, reads and closes a resource? |
+
+## Why file descriptors matter
+
+The file-descriptor abstraction unifies far more than ordinary files. It is central to sockets, pipes and event-oriented APIs. Understanding descriptor ownership, blocking behavior and cleanup gives a better way to reason about missing data, leaked resources and unavailable servers.
+
+The curriculum included server/client patterns and I/O multiplexing. The important learning outcome for me was the distinction between **application protocol correctness**, **kernel syscall behavior**, and **transport-level delivery**.
+
+## Synchronization and the memory model
+
+Threads share an address space, while processes normally do not. The course discussed mutexes, critical sections, shared memory and the practical challenge of coordinating concurrent operations. These ideas connect directly to how operating systems schedule tasks and protect mutable kernel data structures.
+
+## My takeaway
+
+This material was a foundation, not a capstone performance claim. It gave me a systematic vocabulary for understanding why a service can deadlock, block indefinitely, leak file descriptors, or behave differently under concurrent load.
+
+In my later infrastructure work, the same concepts reappeared in worker queues, health probes, database connections and the distinction between container startup and application readiness.
+
+[Back to the full KDT training record](/projects/kdt-linux-system-kernel-expert-course/).

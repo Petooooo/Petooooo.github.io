@@ -52,11 +52,11 @@ For an input buffer `A` and an output buffer `B`, the original report represents
 
 The original report illustrates how input and output lifetimes overlap along both the **operator-execution axis** and **memory-address axis**. The marked length `L` describes the allowable overlap under the specific operator's access order.
 
-<figure className="project-source-figure">
-  <a href="/figures/original/tflm-lifetime-original.webp" target="_blank" rel="noopener noreferrer" aria-label="Open original figure full size">
-    <img src="/figures/original/tflm-lifetime-original.webp" alt="Original tensor lifetime diagram from 2024 report showing operator timing, input tensor A, output tensor B, and overlap length L." loading="lazy" decoding="async" />
+<figure className="project-concept-figure">
+  <a href="/figures/redrawn/tflm-lifetime.svg" target="_blank" rel="noopener noreferrer" aria-label="Open original figure full size">
+    <img src="/figures/redrawn/tflm-lifetime.svg" alt="Original tensor lifetime diagram from 2024 report showing operator timing, input tensor A, output tensor B, and overlap length L." loading="lazy" decoding="async" />
   </a>
-  <figcaption>Figure 1. Original capstone figure: tensor A/B lifetimes and the overlap distance L. Extracted directly from the report, with source colors and labels preserved.</figcaption>
+  <figcaption>Figure 1. Vector recreation of the 2024 source: tensor lifetimes and constrained overlap distance L. Spacing is schematic.</figcaption>
 </figure>
 
 
@@ -70,11 +70,11 @@ The project kept the greedy planner's overall placement framework but divided te
 
 **Buffers with Conflict Data** are ordered using a reverse, output-to-input graph traversal. For example, given relations `A → B`, `B → C`, `C → E`, and `D → E`, the terminal output `E` becomes the traversal root. A breadth-first traversal (BFS) places outputs before their inputs; when candidates have the same depth, larger buffers take priority.
 
-<figure className="project-source-figure project-source-figure--narrow">
-  <a href="/figures/original/tflm-conflict-graph-original.webp" target="_blank" rel="noopener noreferrer" aria-label="Open original figure full size">
-    <img src="/figures/original/tflm-conflict-graph-original.webp" alt="Original conflict graph showing output E first, followed by D, C, B, and A in reverse breadth-first placement priority." loading="lazy" decoding="async" />
+<figure className="project-concept-figure project-source-figure--narrow">
+  <a href="/figures/redrawn/tflm-conflict-graph.svg" target="_blank" rel="noopener noreferrer" aria-label="Open original figure full size">
+    <img src="/figures/redrawn/tflm-conflict-graph.svg" alt="Original conflict graph showing output E first, followed by D, C, B, and A in reverse breadth-first placement priority." loading="lazy" decoding="async" />
   </a>
-  <figcaption>Figure 2. Original conflict graph from the capstone report. Labels mark the output-to-input allocation priority (E → D/C → B → A).</figcaption>
+  <figcaption>Figure 2. Recreated conflict graph and output-first traversal order from the source report.</figcaption>
 </figure>
 
 
@@ -88,11 +88,11 @@ The conflict-aware version checks whether the already placed buffer is an output
 
 The report shows this distinction directly in the candidate-offset diagram: when an input/output relation is safe, the planner may consider a position within the previously occupied extent instead of always moving beyond the full buffer.
 
-<figure className="project-source-figure">
-  <a href="/figures/original/tflm-bfs-order-original.webp" target="_blank" rel="noopener noreferrer" aria-label="Open original figure full size">
-    <img src="/figures/original/tflm-bfs-order-original.webp" alt="Original candidate-offset illustration showing buffer D and E placement, overlap length L4, and next-entry versus candidate offset." loading="lazy" decoding="async" />
+<figure className="project-concept-figure">
+  <a href="/figures/redrawn/tflm-offset.svg" target="_blank" rel="noopener noreferrer" aria-label="Open original figure full size">
+    <img src="/figures/redrawn/tflm-offset.svg" alt="Original candidate-offset illustration showing buffer D and E placement, overlap length L4, and next-entry versus candidate offset." loading="lazy" decoding="async" />
   </a>
-  <figcaption>Figure 3. Original placement figure: the conflict-aware candidate offset differs from the non-overlapping next-entry offset.</figcaption>
+  <figcaption>Figure 3. Recreated candidate-offset concept. Distances are not to scale.</figcaption>
 </figure>
 
 

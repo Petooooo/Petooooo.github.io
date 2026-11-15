@@ -1,0 +1,57 @@
+---
+title: "Stateful Storage Recovery with Longhorn and MinIO"
+description: "Persistent-volume attach, replica repair, object storage and the practical gap between Pod rescheduling and application recovery."
+date: "2026-11-15"
+draft: false
+reviewed: true
+sensitivity: sanitized
+category: "Systems Engineering"
+area: "Storage & Reliability"
+tags: ["K3s", "Longhorn", "MinIO", "PVC", "S3", "Recovery"]
+type: "implementation-note"
+role: "Persistent storage administration, recovery investigation and reliability analysis"
+period: "Jul 2025–Present"
+status: "active"
+techStack: ["K3s", "Longhorn", "MinIO", "PVC", "S3", "Recovery"]
+---
+
+> **ROKAF engineering record · sanitized.** This write-up focuses on the technology decisions and failure semantics I encountered. It omits volume identities, node placement, snapshots, internal data, and actionable production recovery instructions.
+
+<figure className="project-concept-figure">
+  <a href="/figures/k3s-recovery-layers.svg" target="_blank" rel="noopener noreferrer" aria-label="Open conceptual diagram">
+    <img src="/figures/k3s-recovery-layers.svg" alt="Layered recovery: scheduling, volume attachment, data service recovery, and client-facing readiness." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>An abstract view of the recovery chain, not the actual storage or node configuration.</figcaption>
+</figure>
+
+## Why an available Pod is not an available service
+
+Kubernetes can schedule a replacement Pod before its data is usable. With persistent workloads I learned to distinguish **scheduler recovery**, **storage recovery**, **database/application recovery**, and **actual client readiness**. That distinction matters when people discuss high availability or assume a replica count guarantees zero downtime.
+
+| Layer | What I needed to distinguish |
+| --- | --- |
+| Scheduler | Was a suitable node found for the workload? |
+| Persistent volume | Did the volume detach, attach, and become usable? |
+| Replica state | Was distributed volume health sufficient to serve consistent data? |
+| Application | Did the database or service reopen state and finish its recovery process? |
+| Client | Could the intended operations actually complete? |
+
+## Longhorn: convenience has a cost
+
+Longhorn made persistent storage manageable across container hosts, but volume replica placement and recovery created additional operational states. My investigations included **attachment delays, rebuild processes, read-only symptoms, storage headroom, and the distinction between healthy controller objects and usable data**.
+
+A particular pitfall is treating replication as spare capacity. Replica repair consumes I/O and free space; under disk pressure, the recovery mechanism itself may become constrained. I learned to consider both the capacity required by running workloads and the capacity required to restore a degraded replica set.
+
+The right storage class also depends on workload behavior. A database already providing application-level replication may benefit from **locally attached volumes** rather than layering another replicated storage path indiscriminately. That is an architectural trade-off, not a blanket rule.
+
+## MinIO and the object layer
+
+I worked with MinIO as an S3-compatible layer, including object lifecycle and internal service dependencies. Unlike block volumes, object storage encourages different choices about naming, retention, API access, and deletion policies. The important question is which application owns a piece of data and whether the object's lifetime matches the application's recovery needs.
+
+## Reasoning about RTO and RPO
+
+**RTO** should describe the whole observed outage, not merely the time it takes Kubernetes to create a Pod. **RPO** depends on the state that is durably replicated or restorable at the relevant layer. A volume rebuild and a database leader election answer different questions; neither automatically confirms application correctness.
+
+These lessons are why I became interested in the layers below Kubernetes: **filesystem persistence, write ordering, block I/O and failure recovery**. The public article does not claim experimentally measured RTO/RPO figures that I did not preserve.
+
+[Back to the ROKAF platform overview](/projects/independent-on-premises-k3s-platform-engineering/).

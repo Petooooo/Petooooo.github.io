@@ -1,0 +1,44 @@
+---
+title: "Embedded Linux and Driver Programming Foundations"
+description: "ARM/Raspberry Pi course material on kernel modules, IRQ, GPIO/SPI interfaces and asynchronous driver work."
+date: "2026-11-15"
+draft: false
+reviewed: true
+sensitivity: public
+category: "Technical Training"
+area: "Embedded Linux"
+tags: ["Raspberry Pi", "Linux Kernel", "ARM", "GPIO", "SPI", "Device Drivers"]
+type: "implementation-note"
+role: "K-Digital Training · Linux Systems and Kernel Expert Course (2nd cohort)"
+period: "Oct 2023–Mar 2024"
+status: "archived"
+techStack: ["Raspberry Pi", "Linux Kernel", "ARM", "GPIO", "SPI", "Device Drivers"]
+---
+
+> **Course-material record (2023–2024).** The official KDT syllabus and archived training notes describe embedded Linux driver exercises. This page records the covered architecture and the design questions I learned; it does not invent a completed personal driver repository or test measurement.
+
+## Why the device driver is a distinct boundary
+
+Applications interact with hardware through kernel interfaces and drivers. A device driver must account for **discovery/configuration**, **data transfer**, **interrupt handling**, and the lifetime of device resources. Unlike user-space code, it may execute in contexts where blocking or heavy work is prohibited.
+
+The curriculum covered ARM and Raspberry Pi environments, kernel configuration and cross-compilation, as well as character/platform driver concepts.
+
+| Topic | Role in the design |
+| --- | --- |
+| Boot process and device tree | Describing hardware and associating devices with drivers |
+| Character and platform drivers | Exposing hardware operations through kernel frameworks |
+| GPIO / SPI / PWM | Communicating with peripherals at different abstraction levels |
+| IRQ and threaded IRQ | Responding to events while respecting interrupt-context constraints |
+| Workqueues and timers | Moving slower work out of time-critical execution contexts |
+
+## What I took away
+
+The most valuable lesson was learning to reason about **execution context**. Code suitable for a normal process may not be safe in a hard interrupt handler. Deferring work, protecting shared state and handling errors are essential parts of a driver design rather than optional polish.
+
+This also helped connect my prior electronic-engineering projects with later Linux systems work: hardware details affect the behavior of software abstractions at every layer.
+
+## Record scope
+
+The training materials include detailed proposed exercises, but a curriculum is not proof that every student independently implemented and validated all of them. The site uses this page as a **training topic record**, with no unsupported claim of original driver authorship.
+
+[Back to the full KDT training record](/projects/kdt-linux-system-kernel-expert-course/).

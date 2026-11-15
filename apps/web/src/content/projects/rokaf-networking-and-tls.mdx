@@ -1,0 +1,48 @@
+---
+title: "Service Networking and TLS in a Private K3s Environment"
+description: "Reasoning across Kubernetes Services, Traefik, load balancing and certificate trust when external networking assumptions do not hold."
+date: "2026-11-15"
+draft: false
+reviewed: true
+sensitivity: sanitized
+category: "Systems Engineering"
+area: "Networking & TLS"
+tags: ["K3s", "Traefik", "MetalLB", "TLS", "DNS", "Networking"]
+type: "implementation-note"
+role: "Ingress, service exposure and internal certificate troubleshooting"
+period: "Jul 2025–Present"
+status: "active"
+techStack: ["K3s", "Traefik", "MetalLB", "TLS", "DNS", "Networking"]
+---
+
+> **ROKAF engineering record · sanitized.** The focus is protocol and platform behavior. Internal domains, IPs, network diagrams and exposed service configurations are excluded.
+
+## The request path spans multiple layers
+
+An application can be healthy yet unreachable. Kubernetes endpoints, proxy routing, load-balancer advertisement, DNS, transport ports and TLS certificate selection are separate stages.
+
+| Stage | What I checked |
+| --- | --- |
+| Workload and Service | Whether endpoints existed and the intended service port targeted the right Pods |
+| Traefik routing | Ingress/IngressRoute rules, entry points, TCP or HTTP routing, and proxy behavior |
+| Exposure mechanism | Service and load-balancer behavior, including NodePort and MetalLB-related symptoms |
+| Trust | HTTPS certificates, CA trust chains, and correct endpoint identity |
+| Client behavior | Whether the client actually negotiated the intended transport and protocol |
+
+My operational investigations included Traefik CRD behavior, NodePort/hostPort trade-offs, TLS certificate selection and whether a routing symptom originated in the proxy or the layer beneath it.
+
+## Certificates are evaluated before HTTP routes
+
+One subtle error class arises when the **HTTP route works** but the client still sees an unexpected certificate. Certificate selection happens during TLS handshake, before the server can interpret HTTP headers or application paths. Changing an HTTP Ingress rule alone therefore may not fix the identity presented to the client.
+
+For a private registry, I also needed to understand **internal CA installation, certificate trust, subject alternative names (SAN), and the differences among Docker, Kaniko and runtime clients**.
+
+## Load balancing is not always simply an IP address
+
+MetalLB/service exposure and node placement must be considered together. A stable-looking frontend address says little about health at the backend. Conversely, a failure to reach one address might reflect advertisement, host policy, endpoint selection or certificate validation.
+
+I learned to separate **network reachability**, **service selection**, and **application readiness**, rather than treating them as the same diagnostic.
+
+Related sanitized engineering notes: [Traefik and MetalLB](/notes/k3s-traefik-nodeport-metallb-vip/), [private registry TLS](/notes/nexus3-https-registry-root-ca-ip-san-docker/).
+
+[Back to the ROKAF platform overview](/projects/independent-on-premises-k3s-platform-engineering/).

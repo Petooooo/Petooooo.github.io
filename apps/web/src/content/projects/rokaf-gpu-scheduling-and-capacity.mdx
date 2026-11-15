@@ -1,0 +1,49 @@
+---
+title: "GPU Placement, Sharing and Failure Capacity for AI Services"
+description: "Comparing whole-GPU allocation, device-plugin time-slicing, placement constraints and degraded-capacity recovery."
+date: "2026-11-15"
+draft: false
+reviewed: true
+sensitivity: sanitized
+category: "Systems Engineering"
+area: "AI Infrastructure"
+tags: ["Kubernetes", "GPU", "NVIDIA", "Scheduling", "MIG", "Reliability"]
+type: "implementation-note"
+role: "GPU workload placement and resource-sharing evaluation"
+period: "Jul 2025–Present"
+status: "active"
+techStack: ["Kubernetes", "GPU", "NVIDIA", "Scheduling", "MIG", "Reliability"]
+---
+
+> **ROKAF engineering record · sanitized.** This write-up records engineering evaluation and scheduling concerns, not a claim that every sharing feature below was deployed or that the hardware inventory is public.
+
+## Why a GPU request is a scheduling contract
+
+Kubernetes schedules using resources advertised by the node and its device plugins. The scheduler does not inherently understand every accelerator's physical sharing constraints. This matters when a model needs a full accelerator, a particular memory capacity or predictable performance.
+
+I considered several ways to balance utilization against workload isolation.
+
+| Approach | Benefit | Limitation to evaluate |
+| --- | --- | --- |
+| Whole-device placement | Simple resource ownership and predictable isolation | Reduced packing flexibility and higher idle capacity |
+| Device-plugin time-slicing | More logical slots for compatible workloads | Does not itself provide independent physical GPU memory or fault isolation |
+| MIG, where supported | Stronger hardware partitioning model | Device and workload compatibility requirements |
+| Replica placement and rerouting | Service may survive node loss | Lower remaining capacity and possible queueing or latency increases |
+
+The decision is workload-specific. A memory-intensive inference process may be unsuitable for aggressive sharing even if the GPU device plugin can advertise additional logical resources.
+
+## Failure planning: availability versus capacity
+
+I evaluated the distinction between **a service remaining reachable** and **a service retaining full performance after an accelerator or node fails**. For some deployments, a smaller surviving serving pool may be a more credible objective than a claim of seamless full-capacity failover.
+
+Operational questions included: Can the workload be placed on a compatible node? Does the device plugin advertise the expected resource? Is the workload constrained by device memory? Do replicas contend for shared storage or network resources during restart?
+
+## Debugging starts with what the node advertises
+
+GPU scheduling errors can originate at the hardware discovery, node labeling, plugin, scheduler or application layer. I investigated device-plugin and node-feature-discovery behavior as well as placement constraints, without assuming that the presence of GPU hardware guarantees the expected allocatable Kubernetes resource.
+
+## Why it matters
+
+This is another connection between high-level orchestration and the layers beneath it: **memory capacity, device sharing, scheduling and runtime isolation** ultimately define whether a GPU service behaves predictably.
+
+[Back to the ROKAF platform overview](/projects/independent-on-premises-k3s-platform-engineering/).

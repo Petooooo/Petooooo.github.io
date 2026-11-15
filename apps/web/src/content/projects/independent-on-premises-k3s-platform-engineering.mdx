@@ -1,205 +1,69 @@
 ---
 title: "Independent On-Premises K3s Platform Engineering"
-description: "Independently building and operating a closed-network K3s platform: RBAC and identity, private CI, HA databases, storage, GPU services, and recovery."
+description: "My ROKAF engineering record: independently building and operating an on-premises K3s platform, with detailed case studies on delivery, storage, databases, access and GPU operations."
 date: "2026-11-15"
 draft: false
 reviewed: true
-sensitivity: "sanitized"
+sensitivity: sanitized
 featured: true
 category: "Systems Engineering"
 area: "Infrastructure & Reliability"
-tags: ["Linux", "K3s", "Kubernetes", "RBAC", "Longhorn", "MinIO", "Nexus", "Database HA", "Reliability"]
+tags: ["Linux", "K3s", "Kubernetes", "Longhorn", "MinIO", "Nexus3", "Reliability"]
 type: "implementation-note"
-role: "Independent platform design, implementation, operations, and troubleshooting"
+role: "Independent design, implementation, operations and incident troubleshooting"
 period: "Jul 2025–Present"
 status: "active"
-techStack: ["Linux", "K3s", "Containerd", "Longhorn", "MinIO", "Nexus3", "Traefik", "MetalLB", "CI/CD"]
+techStack: ["Linux", "K3s", "Longhorn", "Nexus3", "Traefik", "MinIO"]
 ---
 
-> **Role and scope:** Since my unit assignment in July 2025, I have been responsible for independently building, operating, and troubleshooting an on-premises K3s platform for AI systems in the Republic of Korea Air Force (ROKAF). I received the **ROKAF Chief of Staff Award in July 2026** in recognition of my work. This is an account of **engineering decisions and lessons learned**, not a publication of the unit's system design, physical topology, security configuration, or internal procedures.
+> **ROKAF engineering portfolio · sanitized.** After my unit assignment in July 2025, I independently built and operated a closed-network, on-premises K3s platform supporting AI systems. I also received an award from the **ROKAF Chief of Staff** in recognition of this work. This page is the index to detailed technical records, not a diagram of internal military infrastructure.
 
 <div className="grid gap-4 border-y border-white/10 py-5 sm:grid-cols-3">
-  <div><p className="text-lg font-semibold text-white">Sole platform owner</p><p className="mt-1 text-xs text-slate-400">Design, deployment, operations, recovery</p></div>
-  <div><p className="text-lg font-semibold text-white">Jul 2025–Present</p><p className="mt-1 text-xs text-slate-400">ROKAF · AI systems infrastructure</p></div>
-  <div><p className="text-lg font-semibold text-white">Chief of Staff Award</p><p className="mt-1 text-xs text-slate-400">ROKAF · Jul 2026</p></div>
+  <div><p className="text-xl font-semibold text-white">Platform ownership</p><p className="mt-1 text-xs text-slate-400">Design, deployment, operation and troubleshooting</p></div>
+  <div><p className="text-xl font-semibold text-white">Closed-network</p><p className="mt-1 text-xs text-slate-400">On-premises service, data and CI dependencies</p></div>
+  <div><p className="text-xl font-semibold text-white">ROKAF recognition</p><p className="mt-1 text-xs text-slate-400">Chief of Staff Award · 2026</p></div>
 </div>
 
-## Starting point: turn isolated services into a platform
+## The engineering challenge
 
-The environment was an **on-premises, restricted-network infrastructure** serving AI-related systems. Individual Docker-hosted services were useful, but they made each deployment, recovery, and resource decision dependent on the service's particular host and operating procedure.
+My responsibility was to move from isolated service operations toward an environment where **deployment, availability and recovery** could be reasoned about as a coherent platform.
 
-I wanted a more consistent answer to a few recurring questions:
-
-- Where should a workload run, and what happens when its node becomes unavailable?
-- How are images and packages delivered when external registries are not available?
-- How can a stateful service recover when its persistent volume is tied to storage elsewhere?
-- How do operational changes stay reproducible without managed cloud services?
-- How do shared GPU resources fit into an infrastructure that also runs databases and internal services?
-
-I chose **K3s** as the orchestration layer and gradually moved suitable workloads toward a common operating model. The objective was not Kubernetes for its own sake: it was to reduce one-off recovery paths and make service behavior easier to understand.
-
-## What I owned across the platform
-
-I was responsible for more than the initial K3s installation. The work encompassed Linux host operation, workload migration, deployment tooling, permissions, data services, and hands-on incident response. The technologies below describe **capabilities and technical concerns**, not a published inventory of the military's internal systems.
-
-| Area | Technical responsibility and decisions |
-| --- | --- |
-| **Linux / K3s** | Independently established and maintained the orchestration environment, moved suitable Docker-hosted services into managed workloads, and diagnosed node, DNS, scheduling, and service failures. |
-| **Identity and access** | Worked with Kubernetes ServiceAccounts and RBAC permission boundaries; integrated or evaluated OAuth/OIDC and relationship-based authorization approaches at the application layer. |
-| **Closed-network CI** | Used private registry/package distribution, GitLab Runner/Kaniko build paths, artifact trust, and deployment configuration under restricted network conditions. |
-| **Data and storage** | Managed Longhorn volumes and MinIO; worked on MongoDB and PostgreSQL high availability, ClickHouse/Keeper behavior, and datastore migrations. |
-| **Networking / TLS** | Coordinated service routing, Traefik, load-balancer exposure, certificate trust, and endpoint diagnostics. |
-| **GPU and AI services** | Investigated device-plugin configuration, placement and time-slicing versus full-GPU allocation, and realistic degraded-capacity operation. |
-| **Reliability** | Followed actual failure symptoms through control-plane, persistent storage, application, and service readiness layers rather than assuming a restarted Pod meant recovery. |
+K3s provided a common orchestration layer, but the difficult questions were below and around it: where images came from, whether a private CA was trusted, how stateful services recovered, which identities had permission to operate them, and how GPU workloads shared constrained hardware.
 
 <figure className="project-concept-figure">
-  <a href="/figures/k3s-capabilities.svg" target="_blank" rel="noopener noreferrer" aria-label="Open conceptual diagram full size">
-    <img src="/figures/k3s-capabilities.svg" alt="Conceptual K3s capability map: artifact supply chain, service networking, data reliability, and identity/observability surrounding orchestration." loading="lazy" decoding="async" />
+  <a href="/figures/k3s-capabilities.svg" target="_blank" rel="noopener noreferrer" aria-label="Open capability diagram full size">
+    <img src="/figures/k3s-capabilities.svg" alt="Abstract capability boundaries for K3s orchestration, private artifacts, service networking, data reliability, and access management." loading="lazy" decoding="async" />
   </a>
-  <figcaption>Figure 1. Public, technology-level view of my areas of responsibility. This is intentionally not an internal cluster, network, or node diagram.</figcaption>
+  <figcaption>Conceptual responsibilities only. This figure does not represent the actual network or cluster topology.</figcaption>
 </figure>
 
-## Identity and authorization: different layers need different controls
+## Engineering journal
 
-A significant design problem was **who is calling which API, and which action that caller should be allowed to perform?** Authentication (establishing identity) and authorization (granting access) are separate, and a Kubernetes API role is not automatically an application user's role.
+The sections below are individual engineering records. Each explains a specific problem space, my role, the relevant mechanisms, trade-offs, and what could be verified without disclosing private operational details.
 
-### Kubernetes ServiceAccounts and RBAC
-
-Kubernetes uses a **ServiceAccount identity** when a Pod, CI process, or authenticated client talks to the API. Roles, ClusterRoles, and bindings then determine what resources and verbs it may use.
-
-I worked through the distinction between **read-only observation**, **developer/operations access**, and **administrative recovery**. In particular, reading Pod status and logs is not equivalent to reading Secrets, opening an exec session, or modifying cluster-scoped resources. Giving every tool broad `cluster-admin` privileges would make debugging easy in the short term but unnecessarily expand the blast radius.
-
-My design and troubleshooting work therefore focused on explicit role boundaries, scope, API identity, and the ability to check intended permissions with `kubectl auth can-i`. This is an account of **access-control engineering**, not a publication of actual roles, credentials, or permission manifests.
-
-### GitLab OAuth2, Keycloak and OpenFGA
-
-For selected internal applications I used **GitLab OAuth2 sign-in** to provide a practical shared login experience. I also worked on authentication and authorization architecture involving **Keycloak** and **OpenFGA**—considering centralized identity/OIDC and fine-grained, relationship-based permissions.
-
-Those solve different problems:
-
-| Technology | Question it answers | Scope of the work |
-| --- | --- | --- |
-| **Kubernetes RBAC** | May this Kubernetes identity read, create, or modify this API resource? | ServiceAccount/API access, role design and troubleshooting |
-| **GitLab OAuth2** | How does a user sign in to selected internal applications? | Configured application authentication |
-| **Keycloak / OIDC** | Where should centralized application identity and token issuance live? | Identity integration and architectural evaluation |
-| **OpenFGA / ReBAC** | Does this user have the right relationship to this organization, project, or object? | Fine-grained application authorization model and integration work |
-
-I do **not** present all applications as fully migrated to Keycloak/OpenFGA or suggest that OpenFGA replaces Kubernetes-native RBAC. The public evidence supports the design and integration work, but not a complete inventory of production rollout status.
-
-<figure className="project-concept-figure">
-  <a href="/figures/k3s-auth-boundaries.svg" target="_blank" rel="noopener noreferrer" aria-label="Open conceptual diagram full size">
-    <img src="/figures/k3s-auth-boundaries.svg" alt="Three identity domains: Kubernetes ServiceAccount/RBAC, GitLab OAuth application sign-in, and Keycloak/OpenFGA policy integration." loading="lazy" decoding="async" />
-  </a>
-  <figcaption>Figure 2. Authorization boundaries, separated by responsibility and maturity. Kubernetes API permissions, application sign-in, and domain-object relationships are distinct.</figcaption>
-</figure>
-
-## Closed-network CI and the artifact bootstrap problem
-
-In a network where public container registries and package repositories are not reliably accessible, **image and package delivery become platform dependencies**. I operated and troubleshot a private supply chain involving **Nexus3, GitLab Runner, Kaniko**, internal package mirrors, and container image distribution.
-
-Several seemingly unrelated errors have to be debugged at different layers:
-
-| Symptom | Layer I investigated | Engineering lesson |
-| --- | --- | --- |
-| A build executor is missing | Runner/image packaging | Verify the build image's real entry point and included tools rather than trusting its label. |
-| A registry push returns 401 | Credentials and Nexus repository roles | Authentication and authorization must both match the target repository and operation. |
-| An image push or pull fails on TLS trust | Internal CA/certificate chain | Trust anchors and certificate identity must be consistent across clients and containers. |
-| Builds work on one node but not another | Node connectivity and placement | Scheduling and network policy can turn a shared pipeline into a node-specific failure. |
-| An internal dependency cannot be installed | Package mirror contents and compatibility | Reachability is not proof that a matching wheel or package exists. |
-
-A less obvious failure is **registry self-dependency**: if the registry itself must pull its image from the registry that has just failed, its recovery path has a circular prerequisite. I investigated how a small independent bootstrap supply, image caching, and a documented dependency order could break that cycle. The safer recovery sequence restores the **minimum artifact source** before workloads that depend on it.
-
-This analysis is explained in more detail in my [registry bootstrap note](/notes/k3s-registry-bootstrap-nexus-self-dependency/). It describes a general reliability pattern; the internal recovery runbook is not published here.
-
-## Stateful services: HA is a chain, not a replica count
-
-A key lesson from operating persistent services is that **rescheduling a Pod, regaining storage, recovering the database, and becoming ready for traffic are four different events**.
-
-<figure className="project-concept-figure">
-  <a href="/figures/k3s-recovery-layers.svg" target="_blank" rel="noopener noreferrer" aria-label="Open conceptual diagram full size">
-    <img src="/figures/k3s-recovery-layers.svg" alt="Four recovery layers: scheduler, storage attachment and replica health, database recovery, then application readiness and client checks." loading="lazy" decoding="async" />
-  </a>
-  <figcaption>Figure 3. Generalized stateful-recovery stages. Availability and RTO/RPO have to be evaluated across the entire chain.</figcaption>
-</figure>
-
-### Longhorn, MinIO, and storage trade-offs
-
-I worked with **Longhorn persistent volumes**, replica rebuilds, detach/attach behavior, snapshot and recovery considerations, as well as **MinIO** for object storage and lifecycle management. Incident analysis included storage read-only symptoms, replica state, and rebuild/capacity constraints.
-
-The storage choice also matters. A replicated network volume can simplify workload movement and recovery, but introduces its own availability and latency trade-offs. For some database workloads, **locally attached persistent volumes plus application-level replication** can be more appropriate than assuming a network volume is the answer to every failure mode. The point is to choose which layer owns data redundancy and understand the failure and restore prerequisites.
-
-### Database HA and migration work
-
-The platform work was not limited to object storage or a single database. I worked with several persistence models and their different failover semantics:
-
-| System | What the engineering work involved |
+| Area | Detailed record |
 | --- | --- |
-| **MongoDB** | Replication/high-availability operation and stateful service considerations. |
-| **PostgreSQL / Pgpool / repmgr** | Database replication, connection routing, failover roles, and the distinction between connection availability and durable recovery. |
-| **ClickHouse / Keeper** | Replicated analytics storage, coordination metadata, leader/quorum behavior, and recovery from read-only or stalled migration states. |
-| **MinIO and Valkey** | Object and cache/state services that must be considered as dependencies during application upgrades. |
+| **Build and delivery** | [Private Artifact Delivery and CI in a Closed Network](/projects/rokaf-private-artifacts-and-ci/) — Nexus3, Kaniko, GitLab Runner, internal CA and bootstrap dependencies |
+| **Persistent data** | [Stateful Storage Recovery with Longhorn and MinIO](/projects/rokaf-stateful-storage-and-recovery/) — attachment, replica repair, object storage and recovery semantics |
+| **Database HA** | [Database High Availability and Stateful Application Migrations](/projects/rokaf-database-ha-and-langfuse-migrations/) — MongoDB, PostgreSQL/Pgpool, ClickHouse/Keeper and Langfuse |
+| **Authorization** | [Identity and Authorization Across Cluster and Applications](/projects/rokaf-identity-rbac-and-policy/) — ServiceAccount RBAC, OAuth2, Keycloak and OpenFGA boundaries |
+| **Networking** | [Service Networking and TLS in a Private K3s Environment](/projects/rokaf-networking-and-tls/) — Traefik, service exposure, trust and load-balancer diagnosis |
+| **AI infrastructure** | [GPU Placement, Sharing and Failure Capacity for AI Services](/projects/rokaf-gpu-scheduling-and-capacity/) — device plugins, full-GPU scheduling, sharing and degraded operation |
 
-One concrete example was upgrading a multi-component **Langfuse** installation while its underlying data systems also changed. I worked through **background migrations, data rewrite operations, ClickHouse/Keeper coordination, and storage-capacity constraints**. A migration could appear to fail due to timeout while the recorded phase and completed work indicated a different state; another issue involved Keeper metadata or read-only behavior. Those are exactly the cases where inspecting **actual persisted migration state** matters more than trusting one status label.
+## The thread connecting those problems
 
-I do not equate a replicated service with proven zero downtime. Restart behavior, replication consistency, application migrations, storage headroom, and client-visible checks all determine the practical result.
+What appeared to be an application-level failure often depended on a deeper prerequisite:
 
-## Networking: routing is a dependency graph too
+- A registry cannot recover if all its recovery inputs depend on the same failed registry.
+- A restarted Pod is not usable when its volume or database is not recovered.
+- A successful OAuth login does not mean a user is allowed to modify the relevant resources.
+- A GPU-backed service can stay reachable after node loss while serving at lower capacity.
+- A migration status or timeout should be checked against **actual persisted progress and data state**, not interpreted in isolation.
 
-Internal service exposure required coordinating multiple layers, each with its own failure modes:
+This work gave me practical responsibility for keeping systems running, but it also revealed what I wanted to understand more deeply: **Linux kernel mechanisms, filesystem behavior, storage persistence, memory and I/O paths**. Those are the questions I plan to study at KAIST.
 
-| Concern | Practical question |
-| --- | --- |
-| **K3s Service** | Which healthy endpoints are selected for a workload? |
-| **Traefik** | Which ingress entry point and route lead to that Service? |
-| **Load balancing** | Which externally reachable endpoint presents the service? |
-| **TLS** | Is the certificate trusted and does its SAN match the requested endpoint? |
-| **Client** | Does the client actually reach the intended protocol and port? |
+## Public documentation boundary
 
-An error on one layer can look like a problem in another. For example, an HTTP route can work after TLS negotiation while the browser still sees the default certificate because **TLS certificate selection happens before HTTP routing**.
+I intentionally omit internal hostnames and addresses, node counts or placement, actual network/security controls, credentials, exact cluster configurations, and reproducible operational recovery runbooks. Some authorization and GPU-sharing subjects describe **investigations and design trade-offs**, not a claim that every alternative was rolled out in production.
 
-I recorded public, sanitized explanations in the [Traefik/MetalLB networking note](/notes/k3s-traefik-nodeport-metallb-vip/) and the [private registry TLS note](/notes/nexus3-https-registry-root-ca-ip-san-docker/). These are engineering explanations, not a disclosure of actual endpoints.
-
-## Operational engineering and incident response
-
-The work continued after installation: **new services, changed image versions, broken workloads, resource contention, and storage migrations** all required decisions and verification.
-
-| Phase | What I focused on |
-| --- | --- |
-| **Preparation** | Review dependencies, workload placement, image availability, storage class, and required permissions. |
-| **Delivery** | Build or mirror artifacts, verify internal registry access, then apply controlled workload configuration. |
-| **Observation** | Check Pods, events, storage states, application logs, DNS/routing, and downstream dependencies rather than one generic health indicator. |
-| **Recovery** | Separate the first failing layer from its downstream symptoms; restore prerequisites before retrying dependent workloads. |
-| **Documentation** | Record the cause, the verification performed, trade-offs, and what would make a similar failure easier to reproduce and prevent. |
-
-Concrete investigations across my operation included **control-plane/etcd instability**, **CoreDNS availability**, **load-balancer endpoint behavior**, **storage replica rebuilds and attachments**, and **application migration failures**. Resource pressure added another class of problem: a workload that fits on paper may still contend with other processes for memory, storage I/O, or GPU capacity.
-
-### GPU placement is a systems problem too
-
-For AI workloads I compared practical placement approaches such as **whole-GPU scheduling, device-plugin time-slicing/MIG options, node placement, and degraded-capacity service**. The main question is not simply whether a Pod starts but whether a shared accelerator setup offers acceptable isolation, predictable resource use, and a credible failure path.
-
-### Why this work led me toward OS and storage research
-
-The common theme across registry bootstrap, database recovery, volumes, and GPU-serving is that **the platform can only be as reliable as the layers beneath it**: OS scheduling, memory pressure, filesystem behavior, write ordering, and data movement. Those are the systems questions I want to study more deeply in graduate research.
-
-## What I would design differently with more time
-
-Several decisions deserve explicit attention in future iterations:
-
-1. **Recovery dependencies first.** A service cannot depend exclusively on itself to retrieve the files needed to boot.
-2. **Separately measure availability layers.** Control-plane health, storage recovery, application readiness, and user-visible availability should not be collapsed into a single 'HA' label.
-3. **Treat storage capacity as part of reliability.** Replication does not remove disk-capacity limits; recovery and rebuild operations need headroom.
-4. **Make restoration paths testable.** Backups, snapshots, and rollback procedures are only useful if their prerequisites and actual behavior are understood.
-5. **Publish only safe technical abstractions.** Architecture knowledge can be shared without publishing an organization's internal deployment layout.
-
-## Why this matters to my next work
-
-This role made operating systems and storage feel much less abstract. A distributed platform eventually runs into questions about **filesystems, memory, I/O latency, failure ordering, and persistent data recovery**. Those questions are a major reason I want to study systems software, storage, and memory more deeply at KAIST.
-
-**Documentation boundary:** This public write-up intentionally omits the physical node count and placement, private addresses, network/security controls, credentials, exact cluster configuration, and operational recovery procedures. The diagrams are conceptual and are not to scale.
-
-## Related technical notes
-
-- [Breaking the K3s/Nexus registry bootstrap dependency](/notes/k3s-registry-bootstrap-nexus-self-dependency/)
-- [Traefik, MetalLB, and service-exposure behavior](/notes/k3s-traefik-nodeport-metallb-vip/)
-- [Root CA and certificate trust for a private registry](/notes/nexus3-https-registry-root-ca-ip-san-docker/)
-- [K3s kubeconfig and multi-cluster access concepts](/notes/k3s-kubeconfig-kubectl-k9s/)
+For technical learning notes that are not specific to this role, see my [technical notebook](/notes/).

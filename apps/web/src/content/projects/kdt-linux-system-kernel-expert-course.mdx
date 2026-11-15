@@ -1,0 +1,56 @@
+---
+title: "Linux Systems and Kernel Expert Course — Training Record"
+description: "Structured record of the K-Digital Training course, from POSIX programming to kernel internals, drivers, storage and diagnostics."
+date: "2026-11-15"
+draft: false
+reviewed: true
+sensitivity: public
+category: "Technical Training"
+area: "Systems Foundations"
+tags: ["Linux", "C++", "POSIX", "Kernel", "ftrace", "Docker"]
+type: "implementation-note"
+role: "K-Digital Training · Linux Systems and Kernel Expert Course (2nd cohort)"
+period: "Oct 2023–Mar 2024"
+status: "archived"
+techStack: ["Linux", "C++", "POSIX", "Kernel", "ftrace", "Docker"]
+---
+
+> **Training record, not a claim of original research.** I completed the K-Digital Training *Linux Systems and Kernel Expert Course*, second cohort, in March 2024. The course began in October 2023. This summary is based on the **official course outline** and my archived, week-by-week training notes, covering roughly 600 recorded sessions. A listed exercise or course project is **not automatically evidence that I independently completed that project**.
+
+## A systems-level curriculum
+
+The course connected user-space development, operating-system behavior, and lower-level debugging rather than treating each tool as a standalone skill.
+
+| Track | Subjects recorded in the syllabus and study notes |
+| --- | --- |
+| **Programming** | C++ basics, pointers, memory ownership, data structures, algorithms, building/debugging |
+| **Linux operations** | Shell, files, permissions, users and groups, services, networking and package management |
+| **System programming** | Processes/threads, signals, timers, POSIX shared memory, message queues, mmap, sockets |
+| **Kernel internals** | Interrupts, scheduling, runqueues, synchronization, VM, page tables, VFS and filesystem behavior |
+| **Hardware interface** | Raspberry Pi, ARM concepts, kernel modules, GPIO/SPI/PWM and device-driver foundations |
+| **Container systems** | Docker, Compose, registries, cloud/edge-service concepts |
+| **Observability** | ftrace, KernelShark, eBPF/BCC, GDB, crash dumps, Trace32, metrics/logging stacks |
+
+The training progressed from C++ and everyday Linux tools through system calls and user/kernel boundaries, then toward scheduling, virtual memory, storage, drivers and diagnostic workflows.
+
+## What mattered to me
+
+I initially approached systems as someone with both computer-science and electronic-engineering coursework. The course helped me build a conceptual bridge between **C/C++ programs**, the **Linux kernel interfaces they rely on**, and **device/operating-system behavior**.
+
+Of particular interest were **process and thread lifecycles**, **virtual address translation**, **VFS and filesystem metadata**, and **kernel-level tracing**. Later, when I worked on K3s infrastructure, those concepts helped distinguish application behavior from host OS, storage and networking failures.
+
+## How this record is organized
+
+Rather than mixing an entire five-month curriculum into the CV, I separate several learning threads:
+
+- [POSIX programming, IPC and sockets](/projects/kdt-posix-system-programming/)
+- [Kernel tracing, virtual memory and VFS](/projects/kdt-kernel-tracing-vfs-memory/)
+- [Embedded Linux and driver foundations](/projects/kdt-embedded-linux-drivers/)
+
+These pages summarize **topics covered and conceptual takeaways**. Where I no longer have a verified lab artifact or measurement, I avoid publishing reconstructed code or implying that it was executed during the course.
+
+## Source and boundaries
+
+Primary references were the *KDT 리눅스 시스템 및 커널 전문가 과정 2기 전체 과정 요약* syllabus and my *TalkFile_education.md* consolidated notes. Those sources describe course material, not a graded, individual completion record for every exercise.
+
+This training contributed to my decision to pursue deeper study of **Linux, filesystems, storage and memory systems** at KAIST.

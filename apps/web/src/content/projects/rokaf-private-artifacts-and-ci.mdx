@@ -1,0 +1,52 @@
+---
+title: "Private Artifact Delivery and CI in a Closed Network"
+description: "Reproducible image builds, registry access, certificate trust, and bootstrap dependencies without public artifact services."
+date: "2026-11-15"
+draft: false
+reviewed: true
+sensitivity: sanitized
+category: "Systems Engineering"
+area: "Supply Chain & CI"
+tags: ["K3s", "Nexus3", "GitLab Runner", "Kaniko", "TLS", "CI/CD"]
+type: "implementation-note"
+role: "Private registry, CI pipeline integration, build and delivery troubleshooting"
+period: "Jul 2025–Present"
+status: "active"
+techStack: ["K3s", "Nexus3", "GitLab Runner", "Kaniko", "TLS", "CI/CD"]
+---
+
+> **ROKAF engineering record · sanitized.** This article describes my work with a private artifact supply chain in an on-premises restricted network. Actual registries, repositories, addresses, credentials, network policies, and recovery procedures are intentionally not shown.
+
+## The problem
+
+Container delivery assumes that images, package metadata, and build dependencies are available. In a disconnected environment that assumption fails: both **build time** and **runtime** depend on services that must themselves remain operational. I had to make application deployment reproducible without treating the public internet as a fallback.
+
+| Dependency | Operational responsibility |
+| --- | --- |
+| Container image supply | Private registry and image mirroring; correct repository paths and credentials |
+| Build execution | GitLab Runner and Kaniko-based container builds |
+| Trust | Internal CA certificates, HTTPS endpoints, SAN matching and client trust configuration |
+| Packages | Internal artifact distribution and compatibility of available dependencies |
+| Deployment | Image pull behavior and controlled rollout on K3s |
+
+## Build and registry failure modes
+
+Three failure categories repeatedly required separating their causes.
+
+**1. A build image is not the build tool.** A container labeled for a build workflow may not contain the expected executor binary or may have a conflicting entry point. I investigated the actual container filesystem, executor path, and entry-point behavior rather than assuming the image was correct.
+
+**2. Authentication differs from authorization.** Registry errors such as `401` may depend on both credentials passed to the builder and repository-specific permissions in Nexus. A valid username does not mean it has a push grant to every path. I worked through Kaniko's registry configuration, Nexus role assignments, and appropriate handling of private certificates.
+
+**3. Network availability is node-dependent.** A shared workload can pass when scheduled on one host and fail on another if the underlying connectivity or firewall policy differs. Placement constraints were useful for isolating symptoms, but the longer-term question was how to make the supply chain resilient to that asymmetry.
+
+## Avoiding a bootstrap deadlock
+
+If a private registry runs inside the cluster and **depends on its own service to retrieve the image required to restart**, a normal recovery operation may fail. I separated this from an ordinary image-pull error: it is a **dependency-cycle problem**.
+
+A durable design needs a minimal, independently retrievable bootstrap set or another verified recovery path for essential components. Simply mirroring more images into the same failing service does not resolve the cycle. I documented the design concern in a separate [bootstrap dependency note](/notes/k3s-registry-bootstrap-nexus-self-dependency/).
+
+## What I learned
+
+The most useful design question was not “Can this pipeline build an image?” but **“Which upstream services must still be available for it to build, push, pull, or recover?”** The answer crosses Linux networking, certificate trust, namespace permissions, scheduling, and registry operations. No universal deployment success rate is claimed here; this is a description of real integration and troubleshooting work.
+
+[Back to the ROKAF platform overview](/projects/independent-on-premises-k3s-platform-engineering/).

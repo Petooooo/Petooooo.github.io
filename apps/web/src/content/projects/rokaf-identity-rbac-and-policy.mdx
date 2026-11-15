@@ -1,0 +1,63 @@
+---
+title: "Identity and Authorization Across Cluster and Applications"
+description: "Kubernetes ServiceAccount RBAC, OAuth sign-in, Keycloak and OpenFGA: design boundaries and limits of application-level identity."
+date: "2026-11-15"
+draft: false
+reviewed: true
+sensitivity: sanitized
+category: "Systems Engineering"
+area: "Identity & Access"
+tags: ["Kubernetes", "RBAC", "ServiceAccount", "GitLab OAuth2", "Keycloak", "OpenFGA"]
+type: "implementation-note"
+role: "Kubernetes API permission design, application authentication and policy integration investigation"
+period: "Jul 2025–Present"
+status: "active"
+techStack: ["Kubernetes", "RBAC", "ServiceAccount", "GitLab OAuth2", "Keycloak", "OpenFGA"]
+---
+
+> **ROKAF engineering record · sanitized.** This article separates the access-control mechanisms I worked with from the maturity of their rollout. It does not reproduce actual access policies or tokens.
+
+<figure className="project-concept-figure">
+  <a href="/figures/k3s-auth-boundaries.svg" target="_blank" rel="noopener noreferrer" aria-label="Open conceptual diagram">
+    <img src="/figures/k3s-auth-boundaries.svg" alt="Conceptual diagram separating Kubernetes ServiceAccount RBAC, application OAuth login, and Keycloak/OpenFGA relationship authorization." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Architecture concept: platform permissions, user sign-in and domain authorization have different scopes.</figcaption>
+</figure>
+
+## The critical distinction
+
+The most useful question in identity engineering is not just **“Who is this?”** but **“Which operation is this identity entitled to perform on which resource?”** Kubernetes access and user-facing application authorization answer different versions of that question.
+
+| Layer | Identity | Authorization boundary |
+| --- | --- | --- |
+| Kubernetes API | User or ServiceAccount | API group, resource, namespace, verb and RBAC binding |
+| Application login | OAuth/OIDC user | Authentication and session establishment |
+| Product object | User / organization / project relation | Domain permissions and relationship-based rules |
+
+## ServiceAccount and Kubernetes RBAC
+
+I worked with ServiceAccounts for clients and workloads accessing the Kubernetes API and investigated permission tiers for **observation, development, and administration**.
+
+A sensible observer can usually inspect workload status, events, and logs without receiving write permissions or access to Secrets. A developer may need namespaced workload operations, but `exec`, Pod creation and Secret access carry privilege-escalation risks. An administrator's cluster-scoped authority must be a deliberate exception rather than a convenient default.
+
+The validation workflow I considered used explicit API scope and `kubectl auth can-i` checks, not the assumption that having a working kubeconfig implies correct least-privilege separation. **Design work and discussion of policy tiers do not by themselves prove that every tier was deployed unchanged.**
+
+## GitLab OAuth2, Keycloak and OpenFGA
+
+I worked with GitLab OAuth2 for sign-in to selected applications and explored central identity and fine-grained authorization through **Keycloak/OIDC** and **OpenFGA/ReBAC**.
+
+These approaches are complementary rather than interchangeable:
+
+- **GitLab OAuth2** is useful when an internal service can reuse a familiar identity provider for login.
+- **Keycloak** provides a potential centralized identity, client and token-issuance model.
+- **OpenFGA** expresses relationships such as whether a user is a member of a team, owner of a project, or viewer of a resource.
+
+The interesting design trade-off is where to put policy decisions. Kubernetes-native RBAC protects the cluster API; an application's own data objects may need policy that Kubernetes has no knowledge of. I studied and worked on those integration boundaries, but do **not** claim that all applications were migrated to a single IdP or that every OpenFGA model reached production.
+
+## Practical lessons
+
+A successful login is not evidence of appropriate authorization. ServiceAccounts, human identities and service-to-service credentials should have separate lifecycles and auditing requirements. Role review should include dangerous combinations, not only the individual rule names.
+
+This work changed how I thought about infrastructure security: **authorization is part of system architecture**, not a last-minute dashboard setting.
+
+[Back to the ROKAF platform overview](/projects/independent-on-premises-k3s-platform-engineering/).
