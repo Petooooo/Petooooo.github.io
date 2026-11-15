@@ -44,30 +44,27 @@ The team investigated two related training mechanisms:
 
 These techniques are not inventions of this project. Our contribution was to use them in the project's quantized model and hardware-aware inference design.
 
-```text
-Training / model preparation
-    FP32 network and weights
-              |
-    Power-of-two quantization
-      (INQ and STE methods)
-              |
-    INT8 activations / INT4 weights
-              |
-    Shift-oriented inference datapath
-```
+<figure className="project-source-figure">
+  <a href="/figures/original/cnn-quantization-original.webp" target="_blank" rel="noopener noreferrer" aria-label="Open original figure full size">
+    <img src="/figures/original/cnn-quantization-original.webp" alt="Original team-poster diagram of power-of-two quantization, straight-through estimator forward and backward passes." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Figure 1. Original training/quantization diagram from the 2024 graduation poster: quantized weights and STE gradient treatment.</figcaption>
+</figure>
+
 
 ## 2. Divide convolution and supporting operations across PS and PL
 
 The project used a **Zynq processing system (PS) + programmable logic (PL)** design.
 
-<figure>
-  <a href="/figures/cnn-zynq-pipeline.svg" target="_blank" rel="noopener noreferrer">
-    <img src="/figures/cnn-zynq-pipeline.svg" alt="Redrawn Zynq HW/SW design: model quantization, PS-side IM2COL, ReLU and max pooling, AXI4-Lite interface, PL BRAM controller, and shift-based systolic PE array." loading="lazy" />
+<figure className="project-source-figure">
+  <a href="/figures/original/cnn-zynq-original.webp" target="_blank" rel="noopener noreferrer" aria-label="Open original figure full size">
+    <img src="/figures/original/cnn-zynq-original.webp" alt="Original Zynq PS/PL architecture: IM2COL, ReLU, max pooling, AXI4-Lite links, input/output BRAM banks, controller FSM and IS/WS PE arrays." loading="lazy" decoding="async" />
   </a>
-  <figcaption>Figure 1. A readable reconstruction of the original graduation poster's system architecture. It retains the component responsibilities but does not reproduce internal timings or source code.</figcaption>
+  <figcaption>Figure 2. Original complete PS/PL architecture from the team poster, including the actual BRAM banks, FSM, and two PE-array dataflows.</figcaption>
 </figure>
 
-The system diagram assigns several supporting CNN operations to software on the **PS**, including **IM2COL**, **ReLU**, and **max pooling**. A memory/interconnect path links that software work to the PL accelerator. The poster labels the PS/PL interfaces **AXI4-Lite**.
+
+The system diagram assignsThe system diagram assigns several supporting CNN operations to software on the **PS**, including **IM2COL**, **ReLU**, and **max pooling**. A memory/interconnect path links that software work to the PL accelerator. The poster labels the PS/PL interfaces **AXI4-Lite**.
 
 On the **PL**, the documented modules are:
 
@@ -78,60 +75,33 @@ On the **PL**, the documented modules are:
 
 The poster's architecture figure shows **16 input BRAM banks and 16 output BRAM banks**, alongside two PE-array arrangements labeled **1 × 16 input-stationary (IS)** and **4 × 16 weight-stationary (WS)**. These are the arrangements presented in the source; the single poster does not provide a complete cycle-accurate explanation of how each mode is selected or scheduled.
 
-```text
-          Zynq Processing System (PS)
-    +------------------------------------+
-    | IM2COL  | ReLU  | Max Pooling       |
-    | Software control / communication   |
-    +------------------+-----------------+
-                       |
-               AXI4-Lite (poster)
-                       |
-          Programmable Logic (PL)
-    +------------------+-----------------+
-    | Input BRAM banks                  |
-    |          |                        |
-    |   BRAM controller / FSM           |
-    |          |                        |
-    |   Shift-based PE array            |
-    |          |                        |
-    | Output BRAM banks                 |
-    +-----------------------------------+
-```
+This block diagram is the **original design**, not a generic architecture sketch. It shows the division between host-side software and programmable-logic datapaths, including the interaction between BRAM banking, the controller and parallel processing elements.
 
 This division matters because accelerating a CNN involves more than replacing the multiplier. The PS still has to arrange convolution inputs and handle other layers; the PL must be fed and controlled efficiently enough for the accelerator to help overall execution time.
-
-## Training-to-inference pipeline
-
-```mermaid
-flowchart LR
-  Train["Full-precision CNN training"] --> Quant["INQ + STE / power-of-two weights"]
-  Quant --> Prep["PS software: IM2COL and control"]
-  Prep --> Transfer["PS/PL data transfer"]
-  Transfer --> PE["PL: shift-based systolic PE array"]
-  PE --> Return["PS: post-processing and result"]
-
-  classDef stage fill:#183846,stroke:#69c7dc,color:#ecfbff
-  class Train,Quant,Prep,Transfer,PE,Return stage
-```
 
 ## 3. Arrange convolution as a dataflow problem
 
 The poster includes an **IM2COL** illustration: convolution input patches and filters are reshaped into a form suitable for regular dot products and parallel matrix-style processing.
 
+<figure className="project-source-figure">
+  <a href="/figures/original/cnn-dataflow-original.webp" target="_blank" rel="noopener noreferrer" aria-label="Open original figure full size">
+    <img src="/figures/original/cnn-dataflow-original.webp" alt="Original systolic-array dataflow diagram showing convolution layers, PE array tiles, datapath outputs and 16 output BRAM banks." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Figure 3. Original convolution dataflow and PE/BRAM arrangement from the final team poster.</figcaption>
+</figure>
+
+
 It also compares **weight-stationary (WS)** and **input-stationary (IS)** systolic-array structures. Both aim to reduce avoidable data movement by retaining one kind of operand while other values flow through the array.
 
 Within one PE, the documented computation is deliberately simple:
 
-```text
-Activation -----------+
-                      |  Shift / sign
-Quantized weight -----+        |
-                               v
-                         Accumulate
-                               |
-                           Partial sum
-```
+<figure className="project-source-figure project-source-figure--narrow">
+  <a href="/figures/original/cnn-pe-original.webp" target="_blank" rel="noopener noreferrer" aria-label="Open original figure full size">
+    <img src="/figures/original/cnn-pe-original.webp" alt="Original single processing element diagram with shift operation and partial-sum accumulation." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Figure 4. Original bit-shift processing element. Multiplication is replaced by a shift/sign operation; accumulation remains.</figcaption>
+</figure>
+
 
 A datapath optimized for shifts is useful only when paired with a memory and scheduling structure that supplies the right activation values, quantized weights, and partial sums. The controller, BRAM organization, and PS-side transformations therefore belong to the **architecture**, not merely to its supporting code.
 
@@ -167,6 +137,15 @@ The poster reports a **36.5% area decrease**. The resource table supports this m
 
 ### Model accuracy
 
+<figure className="project-source-figure">
+  <a href="/figures/original/cnn-accuracy-original.webp" target="_blank" rel="noopener noreferrer" aria-label="Open original figure full size">
+    <img src="/figures/original/cnn-accuracy-original.webp" alt="Original top-1 accuracy comparison chart for the team's quantized CNN and reference models." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Figure 5. Original poster's model accuracy chart; comparisons here are limited to the recorded evaluation.</figcaption>
+</figure>
+
+
+
 The chart compares the project's quantized model with a traditional model:
 
 | Model | Top-1 accuracy in poster |
@@ -177,6 +156,15 @@ The chart compares the project's quantized model with a traditional model:
 That is a **0.6 percentage-point difference** in the presented experiment. The poster does not give enough detail about the dataset and evaluation protocol to generalize this accuracy figure to unrelated models or tasks.
 
 ### End-to-end processing time
+
+<figure className="project-source-figure">
+  <a href="/figures/original/cnn-latency-original.webp" target="_blank" rel="noopener noreferrer" aria-label="Open original figure full size">
+    <img src="/figures/original/cnn-latency-original.webp" alt="Original benchmark table showing 15.9 ms PS-only processing and 8.83 ms PS plus PL processing on the Cortex-A9 evaluation setup." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Figure 6. Original runtime comparison from the graduation poster; PS-only versus PS+PL is distinct from the LUT comparison.</figcaption>
+</figure>
+
+
 
 | Execution | Average runtime |
 | --- | ---: |

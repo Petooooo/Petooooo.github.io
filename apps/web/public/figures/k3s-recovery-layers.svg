@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1040 393" role="img" aria-labelledby="title desc">
+<title id="title">Layered recovery in stateful Kubernetes workloads</title>
+<desc id="desc">Conceptual recovery path from workload scheduling, through storage reconciliation, database process recovery, to user-visible readiness validation.</desc>
+<rect width="1040" height="393" rx="18" fill="#101924"/>
+<style>text{font-family:Inter,Arial,sans-serif;fill:#ebf5fd}.head{font-size:27px;font-weight:700}.sub{font-size:17px;fill:#a8c0d1}.card{fill:#1a3548;stroke:#69b8d2;stroke-width:1.7}.title{font-size:19px;font-weight:650;text-anchor:middle}.desc{font-size:15px;fill:#c1d0df;text-anchor:middle}.arrow{fill:none;stroke:#86c7da;stroke-width:3;marker-end:url(#a)}</style>
+<defs><marker id="a" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto"><path d="M1 1L9 5L1 9" fill="none" stroke="#86c7da" stroke-width="2"/></marker></defs>
+<text class="head" x="34" y="51">A Pod restart is not end-to-end recovery</text><text class="sub" x="34" y="83">Scheduling, persistent data, application state, and service readiness must each recover</text>
+<rect class="card" x="36" y="136" width="218" height="130" rx="12"/><text class="title" x="145" y="172">01 · Scheduling</text><text class="desc" x="145" y="207">Pod placement</text><text class="desc" x="145" y="232">Node health</text>
+<path class="arrow" d="M258 201H281"/>
+<rect class="card" x="288" y="136" width="218" height="130" rx="12"/><text class="title" x="397" y="172">02 · Storage</text><text class="desc" x="397" y="207">Attach and replica</text><text class="desc" x="397" y="232">reconciliation</text>
+<path class="arrow" d="M510 201H533"/>
+<rect class="card" x="541" y="136" width="218" height="130" rx="12"/><text class="title" x="650" y="172">03 · Application</text><text class="desc" x="650" y="207">Database / queue</text><text class="desc" x="650" y="232">recovery</text>
+<path class="arrow" d="M763 201H785"/>
+<rect class="card" x="792" y="136" width="216" height="130" rx="12"/><text class="title" x="900" y="172">04 · Readiness</text><text class="desc" x="900" y="207">Health probes</text><text class="desc" x="900" y="232">Client validation</text>
+<text class="sub" x="36" y="325">RTO/RPO and observed downtime belong to the complete chain, not just scheduler success.</text>
+</svg>

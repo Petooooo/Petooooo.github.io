@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1120 515" role="img" aria-labelledby="title desc">
+<title id="title">Authentication and authorization boundary comparison</title>
+<desc id="desc">Distinguishes Kubernetes ServiceAccount/RBAC roles, existing application GitLab OAuth sign-in, and work on Keycloak/OpenFGA identity and policy integration; no cluster deployment topology is shown.</desc>
+<rect width="1120" height="515" rx="18" fill="#101924"/>
+<style>text{font-family:Inter,Arial,sans-serif;fill:#ecf4fc}.heading{font-size:26px;font-weight:700}.sub{font-size:17px;fill:#b1c5d6}.card{fill:#192e3f;stroke:#679fbf;stroke-width:2}.eval{fill:#2d2a35;stroke:#b3a0d7;stroke-width:2;stroke-dasharray:8 6}.label{font-size:19px;font-weight:700;text-anchor:middle}.small{font-size:16px;fill:#c3d3e0;text-anchor:middle}.status{font-size:15px;font-weight:650;text-anchor:middle}.line{stroke:#98bcd0;stroke-width:2.5;fill:none;marker-end:url(#arr)}</style>
+<defs><marker id="arr" markerWidth="9" markerHeight="9" refX="8" refY="4" orient="auto"><path d="M1 1L8 4L1 7" fill="none" stroke="#98bcd0" stroke-width="2"/></marker></defs>
+<text class="heading" x="33" y="52">Identity is not the same as authorization</text><text class="sub" x="33" y="83">Three boundaries, with applied experience separated from architecture evaluation</text>
+<rect class="card" x="36" y="124" width="329" height="284" rx="13"/>
+<text class="label" x="200" y="161">Kubernetes API</text><text class="status" x="200" y="191" fill="#88e0bd">OPERATED / DESIGNED</text>
+<rect x="71" y="216" width="260" height="62" rx="7" fill="#2d5671"/><text class="small" x="201" y="240">ServiceAccount identity</text><text class="small" x="201" y="260">Pods · CI · API clients</text>
+<path class="line" d="M201 284V312"/>
+<rect x="71" y="319" width="260" height="63" rx="7" fill="#326757"/><text class="small" x="201" y="345">Role / ClusterRole</text><text class="small" x="201" y="365">RBAC binding and scope</text>
+<rect class="card" x="395" y="124" width="329" height="284" rx="13"/>
+<text class="label" x="559" y="161">Application sign-in</text><text class="status" x="559" y="191" fill="#88e0bd">USED FOR SELECTED APPS</text>
+<rect x="430" y="216" width="260" height="62" rx="7" fill="#2d5671"/><text class="small" x="560" y="240">GitLab OAuth2</text><text class="small" x="560" y="260">User authentication</text>
+<path class="line" d="M560 284V312"/>
+<rect x="430" y="319" width="260" height="63" rx="7" fill="#326757"/><text class="small" x="560" y="345">Application sessions</text><text class="small" x="560" y="365">Service-specific permissions</text>
+<rect class="eval" x="754" y="124" width="329" height="284" rx="13"/>
+<text class="label" x="918" y="161">Identity &amp; domain policy</text><text class="status" x="918" y="191" fill="#d8c2ff">INTEGRATION / POLICY DESIGN</text>
+<rect x="789" y="216" width="260" height="62" rx="7" fill="#50435f"/><text class="small" x="919" y="242">Keycloak · OIDC</text><text class="small" x="919" y="261">Centralized identity option</text>
+<path class="line" d="M919 284V312"/>
+<rect x="789" y="319" width="260" height="63" rx="7" fill="#50435f"/><text class="small" x="919" y="345">OpenFGA · ReBAC</text><text class="small" x="919" y="365">Fine-grained relationship policy</text>
+<text class="sub" x="36" y="463">Kubernetes API permissions, login sessions, and domain-level policies answer different questions.</text>
+</svg>

@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1040 510" role="img" aria-labelledby="title desc">
+<title id="title">Conceptual capabilities of a closed-network K3s platform</title>
+<desc id="desc">An abstract capability map linking K3s orchestration to artifact supply, application delivery, storage reliability, and monitoring. This is not a deployment topology.</desc>
+<rect width="1040" height="510" rx="18" fill="#101924"/>
+<style>text{font-family:Inter,Arial,sans-serif;fill:#eaf4fa}.heading{font-size:26px;font-weight:700}.small{font-size:17px;fill:#aac0d0}.node{fill:#19354a;stroke:#64bdd7;stroke-width:2}.node2{fill:#1b302f;stroke:#79baa3;stroke-width:1.8}.major{font-size:20px;font-weight:650;text-anchor:middle}.sub{font-size:15px;fill:#b8cbd7;text-anchor:middle}.conn{stroke:#85adc1;stroke-width:2.5;fill:none}</style>
+<text class="heading" x="37" y="51">Platform capability boundaries</text><text class="small" x="37" y="82">Abstract engineering responsibilities — not a military network or node topology</text>
+<path class="conn" d="M520 246V179H262V200"/><path class="conn" d="M520 246V179H780V200"/><path class="conn" d="M520 314V363H262V336"/><path class="conn" d="M520 314V363H780V336"/>
+<rect class="node" x="375" y="240" width="290" height="84" rx="12"/><text class="major" x="520" y="277">K3s orchestration</text><text class="sub" x="520" y="305">Deployment · Scheduling · Recovery</text>
+<rect class="node2" x="50" y="194" width="350" height="97" rx="11"/><text class="major" x="225" y="233">Private supply chain</text><text class="sub" x="225" y="259">Nexus · Kaniko · Internal CA</text>
+<rect class="node2" x="642" y="194" width="348" height="97" rx="11"/><text class="major" x="816" y="233">Service networking</text><text class="sub" x="816" y="259">Traefik · Service routing · TLS</text>
+<rect class="node2" x="50" y="333" width="350" height="97" rx="11"/><text class="major" x="225" y="372">Data reliability</text><text class="sub" x="225" y="398">Longhorn · MinIO · Database HA</text>
+<rect class="node2" x="642" y="333" width="348" height="97" rx="11"/><text class="major" x="816" y="372">Access and observability</text><text class="sub" x="816" y="398">RBAC · Identity · Incident analysis</text>
+<text class="small" x="37" y="477">Every layer has separate failure modes and recovery dependencies.</text>
+</svg>

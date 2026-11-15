@@ -267,3 +267,69 @@ a {
   font-size: 0.88rem;
   line-height: 1.6;
 }
+
+/* Original capstone figures: keep the technical artwork intact while
+   giving light-background diagrams a consistent dark-mode presentation. */
+.prose-platform .project-source-figure,
+.prose-platform .project-concept-figure {
+  margin: 2.1rem 0;
+  padding: 0.85rem;
+  border: 1px solid rgba(149, 180, 205, 0.2);
+  border-radius: 0.85rem;
+  background: #101720;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.14);
+}
+
+.prose-platform .project-source-figure > a,
+.prose-platform .project-concept-figure > a {
+  display: block;
+  padding: clamp(0.45rem, 2vw, 1.2rem);
+  background: #f8fafc;
+  border-radius: 0.45rem;
+  text-decoration: none;
+  transition: box-shadow 150ms ease, transform 150ms ease;
+}
+
+.prose-platform .project-concept-figure > a {
+  background: #101a25;
+}
+
+.prose-platform .project-source-figure > a:hover,
+.prose-platform .project-concept-figure > a:hover {
+  box-shadow: 0 0 0 2px rgba(102, 227, 255, 0.6);
+}
+
+.prose-platform .project-source-figure img,
+.prose-platform .project-concept-figure img {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-width: 100%;
+  margin: 0 auto;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  object-fit: contain;
+}
+
+.prose-platform .project-source-figure--narrow {
+  max-width: 590px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.prose-platform .project-source-figure figcaption,
+.prose-platform .project-concept-figure figcaption {
+  margin: 0.85rem 0.3rem 0.1rem;
+  color: #aabbd0;
+  font-size: 0.85rem;
+  line-height: 1.65;
+}
+
+@media (max-width: 640px) {
+  .prose-platform .project-source-figure,
+  .prose-platform .project-concept-figure {
+    padding: 0.5rem;
+  }
+}

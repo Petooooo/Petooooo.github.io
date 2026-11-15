@@ -50,23 +50,15 @@ The key design input was **Conflict Data**, which records the input/output relat
 
 For an input buffer `A` and an output buffer `B`, the original report represents the relation as `{ A, B, -L }`. `L` captures a constraint on their relative placement, derived from the portion of input data that has already been consumed. The other boundary can be inferred from the input tensor's size, so it does not need to be stored separately.
 
-The resulting idea is:
+The original report illustrates how input and output lifetimes overlap along both the **operator-execution axis** and **memory-address axis**. The marked length `L` describes the allowable overlap under the specific operator's access order.
 
-```text
-Input tensor A:
-[ already consumed | still needed for the operation ]
-  ^ potentially reusable       ^ must stay intact
-
-Output tensor B:
-[ may be placed in an allowed overlap region ]
-```
-
-<figure>
-  <a href="/figures/tflm-lifecycle-reuse.svg" target="_blank" rel="noopener noreferrer">
-    <img src="/figures/tflm-lifecycle-reuse.svg" alt="Input tensor A divided into consumed and still-required bytes, with output B placed only inside the safe-to-reuse region." loading="lazy" />
+<figure className="project-source-figure">
+  <a href="/figures/original/tflm-lifetime-original.webp" target="_blank" rel="noopener noreferrer" aria-label="Open original figure full size">
+    <img src="/figures/original/tflm-lifetime-original.webp" alt="Original tensor lifetime diagram from 2024 report showing operator timing, input tensor A, output tensor B, and overlap length L." loading="lazy" decoding="async" />
   </a>
-  <figcaption>Figure 1. The allowable-overlap concept, redrawn for readability from the submitted capstone report's input/output conflict diagrams. Select to view larger.</figcaption>
+  <figcaption>Figure 1. Original capstone figure: tensor A/B lifetimes and the overlap distance L. Extracted directly from the report, with source colors and labels preserved.</figcaption>
 </figure>
+
 
 This is **not a claim that every convolution can overwrite its input**. The legal overlap is operator- and execution-order-dependent. The allocator is only allowed to reuse a region if the supplied Conflict Data says that placement is safe.
 
@@ -78,12 +70,13 @@ The project kept the greedy planner's overall placement framework but divided te
 
 **Buffers with Conflict Data** are ordered using a reverse, output-to-input graph traversal. For example, given relations `A → B`, `B → C`, `C → E`, and `D → E`, the terminal output `E` becomes the traversal root. A breadth-first traversal (BFS) places outputs before their inputs; when candidates have the same depth, larger buffers take priority.
 
-<figure>
-  <a href="/figures/tflm-conflict-bfs.svg" target="_blank" rel="noopener noreferrer">
-    <img src="/figures/tflm-conflict-bfs.svg" alt="Conflict-free buffers sorted by size and conflict-connected buffers allocated using reverse BFS, starting with output E." loading="lazy" />
+<figure className="project-source-figure project-source-figure--narrow">
+  <a href="/figures/original/tflm-conflict-graph-original.webp" target="_blank" rel="noopener noreferrer" aria-label="Open original figure full size">
+    <img src="/figures/original/tflm-conflict-graph-original.webp" alt="Original conflict graph showing output E first, followed by D, C, B, and A in reverse breadth-first placement priority." loading="lazy" decoding="async" />
   </a>
-  <figcaption>Figure 2. Output-first, BFS-based buffer ordering, redrawn from the report's conflict graph; this is an allocation heuristic, not a proof of optimality.</figcaption>
+  <figcaption>Figure 2. Original conflict graph from the capstone report. Labels mark the output-to-input allocation priority (E → D/C → B → A).</figcaption>
 </figure>
+
 
 Why reverse the order? The planner searches from low memory offsets. If the output is already near the beginning of the arena, the subsequent input can be positioned relative to that output while respecting its allowed-overlap boundary.
 
@@ -93,18 +86,15 @@ The second change was to the buffer placement step. In the baseline, a simultane
 
 The conflict-aware version checks whether the already placed buffer is an output tensor with a valid relation to the input currently being placed. When such a relation exists, it advances the candidate by the recorded conflict boundary rather than always adding the full output-buffer size.
 
-Conceptually:
+The report shows this distinction directly in the candidate-offset diagram: when an input/output relation is safe, the planner may consider a position within the previously occupied extent instead of always moving beyond the full buffer.
 
-```text
-Baseline:
-  candidate offset = existing offset + existing buffer size
+<figure className="project-source-figure">
+  <a href="/figures/original/tflm-bfs-order-original.webp" target="_blank" rel="noopener noreferrer" aria-label="Open original figure full size">
+    <img src="/figures/original/tflm-bfs-order-original.webp" alt="Original candidate-offset illustration showing buffer D and E placement, overlap length L4, and next-entry versus candidate offset." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Figure 3. Original placement figure: the conflict-aware candidate offset differs from the non-overlapping next-entry offset.</figcaption>
+</figure>
 
-Conflict-aware pair:
-  candidate offset = existing output offset + allowed conflict distance L
-
-For unrelated or unsafe pairs:
-  use the original non-overlapping placement rule
-```
 
 This is an **explanatory outline**, not copied production source code. The actual implementation still needs to check simultaneous lifetimes, neighboring allocations, available gaps, and the complete set of placement constraints.
 
@@ -116,20 +106,9 @@ I then adapted the planner and interpreter initialization so that a caller could
 
 Importantly, the reported experiments used **manually calculated Conflict Data**, with that manual data preparation carried out by another team member. My primary work was analyzing the original planner, designing and implementing the conflict-aware ordering/placement logic in C++, integrating the modified planner into TFLM, and evaluating its peak-memory usage. Generating Conflict Data automatically through compiler profiling was a potential future extension, not a completed automatic pipeline.
 
-## End-to-end planner workflow
+## Integration flow
 
-```mermaid
-flowchart LR
-  Lifetimes["Tensor sizes and lifetimes"] --> Baseline["Baseline Greedy Planner analysis"]
-  Conflict["Manually prepared input/output Conflict Data"] --> Sort["Non-conflict size sort + conflict BFS"]
-  Baseline --> Sort
-  Sort --> Candidate["Conflict-aware candidate offsets"]
-  Candidate --> Integration["TFLM interpreter / planner integration"]
-  Integration --> Evaluate["Person Detect and Tiny U-Net evaluation"]
-
-  classDef step fill:#183546,stroke:#75cde4,color:#ecfaff
-  class Lifetimes,Baseline,Conflict,Sort,Candidate,Integration,Evaluate step
-```
+The modified implementation combines **baseline lifetime/size information** with **manually prepared Conflict Data**. It first determines a placement order, then evaluates legal candidate offsets, integrates the allocation plan into the TFLM interpreter, and finally compares peak arena usage on test buffers and two models. Each of these stages is described above; the original figures show the actual constraints rather than an illustrative ASCII diagram.
 
 ## Evaluation
 
