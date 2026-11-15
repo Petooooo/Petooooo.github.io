@@ -1,6 +1,6 @@
 ---
-title: "Identity and Authorization Across Cluster and Applications"
-description: "Kubernetes ServiceAccount RBAC, OAuth sign-in, Keycloak and OpenFGA: design boundaries and limits of application-level identity."
+title: "Identity and Authorization: From ServiceAccounts to Object-Level Policy"
+description: "How I reasoned about least privilege, Kubernetes RBAC, GitLab OAuth, Keycloak and OpenFGA when cluster permissions and application permissions diverged."
 date: "2026-11-15"
 draft: false
 reviewed: true
@@ -15,49 +15,62 @@ status: "active"
 techStack: ["Kubernetes", "RBAC", "ServiceAccount", "GitLab OAuth2", "Keycloak", "OpenFGA"]
 ---
 
-> **ROKAF engineering record · sanitized.** This article separates the access-control mechanisms I worked with from the maturity of their rollout. It does not reproduce actual access policies or tokens.
+At first, the question looked like ordinary access control: *who should be able to operate which service?* As more applications and automation entered the platform, I found that there were actually **three different identity problems**. A CI job needs permission to call Kubernetes; a person needs to authenticate to an application; and a project member may have permission to read one object's data but not another's.
+
+The mistake would have been to answer all three with a single “admin/user” switch. I approached each boundary separately, because **successful authentication is not proof that a particular action is authorized**.
 
 <figure className="project-concept-figure">
-  <a href="/figures/k3s-auth-boundaries.svg" target="_blank" rel="noopener noreferrer" aria-label="Open conceptual diagram">
-    <img src="/figures/k3s-auth-boundaries.svg" alt="Conceptual diagram separating Kubernetes ServiceAccount RBAC, application OAuth login, and Keycloak/OpenFGA relationship authorization." loading="lazy" decoding="async" />
+  <a href="/figures/journals/identity-policy-boundaries.svg" target="_blank" rel="noopener noreferrer" aria-label="Open technical diagram">
+    <img src="/figures/journals/identity-policy-boundaries.svg" alt="The authorization model separates Kubernetes resource verbs, application user sign-in and fine-grained object relationships." loading="lazy" decoding="async" />
   </a>
-  <figcaption>Architecture concept: platform permissions, user sign-in and domain authorization have different scopes.</figcaption>
+  <figcaption>The authorization model separates Kubernetes resource verbs, application user sign-in and fine-grained object relationships. Conceptual model; no internal access policy, topology or resource inventory is shown.</figcaption>
 </figure>
 
-## The critical distinction
+## 1. Kubernetes API access: a ServiceAccount is an identity, not a permission
 
-The most useful question in identity engineering is not just **“Who is this?”** but **“Which operation is this identity entitled to perform on which resource?”** Kubernetes access and user-facing application authorization answer different versions of that question.
+I worked with **ServiceAccounts** and the Role/ClusterRole and binding model. A ServiceAccount answers *which workload identity is calling?* A Role answers *which API resources and verbs should that identity access?* Bindings join the two at an appropriate scope.
 
-| Layer | Identity | Authorization boundary |
+The first practical design question was how to separate observability from mutation:
+
+| Persona / use case | Needed capability | What I tried to avoid assuming |
 | --- | --- | --- |
-| Kubernetes API | User or ServiceAccount | API group, resource, namespace, verb and RBAC binding |
-| Application login | OAuth/OIDC user | Authentication and session establishment |
-| Product object | User / organization / project relation | Domain permissions and relationship-based rules |
+| Operations observer | View service health, selected events and logs | That every observer should read Secrets or exec into Pods |
+| CI/deployer | Update a defined set of workloads | That building an image requires unrestricted cluster administration |
+| Application workload | Access only the API resources it needs | That the default ServiceAccount is suitable for every service |
+| Recovery operator | Perform unusual maintenance operations | That elevated credentials should be permanent in ordinary automation |
 
-## ServiceAccount and Kubernetes RBAC
+I considered **`kubectl auth can-i`** a useful validation tool, but only when interpreted with correct identity, namespace, resource and verb. A permission set can appear minimal and still contain dangerous combinations: creating Pods with attached service accounts, reading Secrets, and interactive `exec` deserve special scrutiny.
 
-I worked with ServiceAccounts for clients and workloads accessing the Kubernetes API and investigated permission tiers for **observation, development, and administration**.
+## 2. Why scope mattered more than the number of Roles
 
-A sensible observer can usually inspect workload status, events, and logs without receiving write permissions or access to Secrets. A developer may need namespaced workload operations, but `exec`, Pod creation and Secret access carry privilege-escalation risks. An administrator's cluster-scoped authority must be a deliberate exception rather than a convenient default.
+At the beginning it is easy to think a smaller YAML file is a simpler security policy. In reality, a few broad wildcard rules may grant far more access than many narrow rules. I preferred to reason from actual operations and build an explicit boundary.
 
-The validation workflow I considered used explicit API scope and `kubectl auth can-i` checks, not the assumption that having a working kubeconfig implies correct least-privilege separation. **Design work and discussion of policy tiers do not by themselves prove that every tier was deployed unchanged.**
+The tension was real: an operator trying to restore a broken service needs enough access to act quickly, while a regularly running build job should not inherit that emergency authority. The separation between **day-to-day identities** and **exceptional recovery access** became an architectural concern, not merely a naming convention.
 
-## GitLab OAuth2, Keycloak and OpenFGA
+## 3. Application login does not solve business authorization
 
-I worked with GitLab OAuth2 for sign-in to selected applications and explored central identity and fine-grained authorization through **Keycloak/OIDC** and **OpenFGA/ReBAC**.
+For selected internal tools I worked with **GitLab OAuth2** for sign-in. That addressed the problem of maintaining yet another password database and offered a familiar authentication path, but did not automatically solve application-specific access rules.
 
-These approaches are complementary rather than interchangeable:
+Consider a user who is authenticated and belongs to a team. The remaining questions are: can they view every team's projects? Who may invite other members? Are read-only relationships transitive? Who owns the lifecycle of the permission? These are not Kubernetes RBAC questions because Kubernetes has no knowledge of the application's domain objects.
 
-- **GitLab OAuth2** is useful when an internal service can reuse a familiar identity provider for login.
-- **Keycloak** provides a potential centralized identity, client and token-issuance model.
-- **OpenFGA** expresses relationships such as whether a user is a member of a team, owner of a project, or viewer of a resource.
+## 4. Keycloak and OpenFGA: useful, but for different layers
 
-The interesting design trade-off is where to put policy decisions. Kubernetes-native RBAC protects the cluster API; an application's own data objects may need policy that Kubernetes has no knowledge of. I studied and worked on those integration boundaries, but do **not** claim that all applications were migrated to a single IdP or that every OpenFGA model reached production.
+I explored **Keycloak/OIDC** as a way to centralize identity and token issuance, and **OpenFGA** as a relationship-based authorization layer. I treated them as complementary.
 
-## Practical lessons
+- **Keycloak** can provide identity, clients, authentication flows and tokens. It does not on its own define every object's domain authorization.
+- **OpenFGA** can express subject–object relationships such as `owner`, `editor`, or `viewer`, with inheritance through teams or organizations.
+- **Kubernetes RBAC** still protects the Kubernetes API, independent of those application relationships.
 
-A successful login is not evidence of appropriate authorization. ServiceAccounts, human identities and service-to-service credentials should have separate lifecycles and auditing requirements. Role review should include dangerous combinations, not only the individual rule names.
+The interesting design problem was *where to ask each policy question*. If each application invents its own role strings, the definitions drift; if every request relies on a shared policy engine without considering failure and latency, centralization can become a new dependency. I considered both consistency and availability when evaluating this direction.
 
-This work changed how I thought about infrastructure security: **authorization is part of system architecture**, not a last-minute dashboard setting.
+## 5. What worked, and what remained design work
 
-[Back to the ROKAF platform overview](/projects/independent-on-premises-k3s-platform-engineering/).
+I had concrete Kubernetes API/RBAC and OAuth integration experience. For the wider Keycloak/OpenFGA approach, my records include **modeling and integration work**, but not a complete, independently verified cutover of all applications. I am intentionally keeping that distinction in the history rather than describing a fully uniform identity platform.
+
+I also still wanted a systematic method to **audit effective permissions** across CI, human operators and applications—not just verify that each service could log in.
+
+## Takeaway
+
+The most important insight was that **the privilege boundary should match the resource boundary**. A cluster administrator, a logged-in user, and an owner of one application object are not interchangeable identities.
+
+**Related:** [private CI delivery](/projects/rokaf-private-artifacts-and-ci/) · [overall K3s platform](/projects/independent-on-premises-k3s-platform-engineering/).

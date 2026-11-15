@@ -1,6 +1,6 @@
 ---
-title: "Linux Systems and Kernel Expert Course — Training Record"
-description: "Structured record of the K-Digital Training course, from POSIX programming to kernel internals, drivers, storage and diagnostics."
+title: "Linux System & Kernel Expert Course: Learning the Whole Stack"
+description: "My KDT second-cohort learning journey, connecting C++ programs, POSIX calls, scheduler behavior, filesystem internals, drivers and tracing."
 date: "2026-11-15"
 draft: false
 reviewed: true
@@ -15,42 +15,69 @@ status: "archived"
 techStack: ["Linux", "C++", "POSIX", "Kernel", "ftrace", "Docker"]
 ---
 
-> **Training record, not a claim of original research.** I completed the K-Digital Training *Linux Systems and Kernel Expert Course*, second cohort, in March 2024. The course began in October 2023. This summary is based on the **official course outline** and my archived, week-by-week training notes, covering roughly 600 recorded sessions. A listed exercise or course project is **not automatically evidence that I independently completed that project**.
+Before the course, I had used Linux and written software, but I wanted to understand **what happened beneath the program I had written**. I could compile an executable, open a file and start a server; I wanted to follow those actions further down into the kernel, memory management and hardware.
 
-## A systems-level curriculum
+From October 2023 into early 2024 I attended the second cohort of the **Linux System & Kernel Expert Course**, a K-Digital Training program. Its strongest feature for me was the progression: one week I was dealing with pointers and file descriptors, and later I was learning why virtual memory, interrupt context and the VFS make those interfaces possible.
 
-The course connected user-space development, operating-system behavior, and lower-level debugging rather than treating each tool as a standalone skill.
+<figure className="project-concept-figure">
+  <a href="/figures/journals/kdt-learning-map.svg" target="_blank" rel="noopener noreferrer" aria-label="Open course diagram">
+    <img src="/figures/journals/kdt-learning-map.svg" alt="My study path links C/C++ programs and POSIX interfaces with scheduling, memory, file systems, drivers, containers and observability." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>My study path links C/C++ programs and POSIX interfaces with scheduling, memory, file systems, drivers, containers and observability. A conceptual study diagram based on the mechanisms covered during the course.</figcaption>
+</figure>
 
-| Track | Subjects recorded in the syllabus and study notes |
+## 1. Starting in user space
+
+The early part of the course covered C++ fundamentals, dynamic memory, pointers/references, Makefiles and debugging. These were not isolated syntax exercises to me. Understanding how values and addresses behave made later topics—process address spaces, shared memory, mapping and page faults—much easier to approach.
+
+We also worked through Linux command-line administration: file permissions, users and groups, services, shell pipelines, packages, process tools and network configuration. What felt like ordinary terminal usage turned into questions about **which process owns a resource**, **what a file descriptor refers to**, and **why privilege boundaries exist**.
+
+## 2. From C++ functions to kernel interfaces
+
+System programming made that connection tangible. Instead of treating a file operation as a library call with a return value, I began asking what the process must request from the kernel and what could block or fail.
+
+The course moved across process/thread APIs, signals, timers, synchronization, pipes/FIFOs, POSIX and System V IPC, shared-memory mapping, and sockets. In concurrent examples the difficult part was no longer writing one correct function; it was reasoning about **lifetime, blocking, cleanup and coordination among independently scheduled execution units**.
+
+[Read more: POSIX programming, IPC and sockets](/projects/kdt-posix-system-programming/).
+
+## 3. Understanding the kernel from the inside
+
+The kernel classes connected **scheduler state, runqueues, interrupt handling, system calls, virtual memory and filesystem interfaces**. I studied how a running process becomes blocked or runnable, why interrupt context imposes restrictions, and how paging separates a process's virtual address from physical memory.
+
+I found **scheduler tracing** especially useful because it attached actual events and timestamps to concepts that diagrams had previously presented abstractly. With **ftrace and KernelShark**, I could observe the sequence of kernel events instead of relying only on a textbook description of a context switch.
+
+Later topics included VFS, inode/superblock concepts, file access flows, journaling, flash-aware filesystems and storage devices. I began seeing the I/O path not as a single `read()` or `write()` call but as a chain of abstractions with different performance and persistence properties.
+
+[Read more: kernel tracing, virtual memory and VFS](/projects/kdt-kernel-tracing-vfs-memory/).
+
+## 4. Where hardware met the OS
+
+My electronic-engineering coursework made the embedded part of KDT particularly interesting. On the Linux side, the class dealt with Raspberry Pi development, ARM exception/context concepts, boot configuration, modules, character/platform drivers, GPIO, SPI, interrupts, timers and workqueues.
+
+The important change was learning to ask **which execution context is this code running in?** A delayed or blocking operation that is fine in user space may be inappropriate in an interrupt handler. I started thinking of a device driver as a boundary between physical events and kernel-managed software behavior.
+
+[Read more: embedded Linux and driver foundations](/projects/kdt-embedded-linux-drivers/).
+
+I also kept separate study records for areas that deserve more practice: [kernel crash dumps and postmortem analysis](/projects/kdt-crash-dump-analysis-progress/) and [eBPF/BCC with system monitoring](/projects/kdt-ebpf-observability-progress/). These are useful to revisit because collecting evidence and drawing a correct conclusion are different skills.
+
+## 5. Deployment and observation complete the picture
+
+Docker, multi-container services, registries, monitoring and eBPF/BCC showed how OS concepts appear in operational systems. Containers share a host kernel; the kernel still schedules their processes and accounts for resources. Metrics and logs explain aggregate symptoms, while traces and dumps can answer questions that application logs leave unanswered.
+
+Our curriculum also brought together example projects around **edge computing, monitoring, Docker management and troubleshooting tools**. Those project themes helped connect what we learned from shell commands to application design and runtime diagnostics.
+
+## The thread I carried forward
+
+My main takeaway was the relationship among layers:
+
+| What I see | What I now ask underneath |
 | --- | --- |
-| **Programming** | C++ basics, pointers, memory ownership, data structures, algorithms, building/debugging |
-| **Linux operations** | Shell, files, permissions, users and groups, services, networking and package management |
-| **System programming** | Processes/threads, signals, timers, POSIX shared memory, message queues, mmap, sockets |
-| **Kernel internals** | Interrupts, scheduling, runqueues, synchronization, VM, page tables, VFS and filesystem behavior |
-| **Hardware interface** | Raspberry Pi, ARM concepts, kernel modules, GPIO/SPI/PWM and device-driver foundations |
-| **Container systems** | Docker, Compose, registries, cloud/edge-service concepts |
-| **Observability** | ftrace, KernelShark, eBPF/BCC, GDB, crash dumps, Trace32, metrics/logging stacks |
+| A process stalls | Is it blocked on I/O, waiting on a lock, or not receiving CPU time? |
+| Memory grows | Is it process allocation, a mapping, page cache or a kernel allocation? |
+| A file operation is slow | Is the bottleneck in VFS, filesystem, writeback or the storage device? |
+| A container fails | Is it the application, resource policy, runtime, or host OS? |
+| A system crashes | What do logs, traces, stack traces and dumps say about the final state? |
 
-The training progressed from C++ and everyday Linux tools through system calls and user/kernel boundaries, then toward scheduling, virtual memory, storage, drivers and diagnostic workflows.
+I later ran into many of these questions in my K3s work. That experience also exposed the limits of my understanding of **kernel, filesystem and storage mechanisms**, which is part of why I decided to study systems software more deeply at KAIST.
 
-## What mattered to me
-
-I initially approached systems as someone with both computer-science and electronic-engineering coursework. The course helped me build a conceptual bridge between **C/C++ programs**, the **Linux kernel interfaces they rely on**, and **device/operating-system behavior**.
-
-Of particular interest were **process and thread lifecycles**, **virtual address translation**, **VFS and filesystem metadata**, and **kernel-level tracing**. Later, when I worked on K3s infrastructure, those concepts helped distinguish application behavior from host OS, storage and networking failures.
-
-## How this record is organized
-
-Rather than mixing an entire five-month curriculum into the CV, I separate several learning threads:
-
-- [POSIX programming, IPC and sockets](/projects/kdt-posix-system-programming/)
-- [Kernel tracing, virtual memory and VFS](/projects/kdt-kernel-tracing-vfs-memory/)
-- [Embedded Linux and driver foundations](/projects/kdt-embedded-linux-drivers/)
-
-These pages summarize **topics covered and conceptual takeaways**. Where I no longer have a verified lab artifact or measurement, I avoid publishing reconstructed code or implying that it was executed during the course.
-
-## Source and boundaries
-
-Primary references were the *KDT 리눅스 시스템 및 커널 전문가 과정 2기 전체 과정 요약* syllabus and my *TalkFile_education.md* consolidated notes. Those sources describe course material, not a graded, individual completion record for every exercise.
-
-This training contributed to my decision to pursue deeper study of **Linux, filesystems, storage and memory systems** at KAIST.
+The linked topic articles are my more detailed study notes from the course. I plan to keep building on them when I reproduce the concepts in small experiments.

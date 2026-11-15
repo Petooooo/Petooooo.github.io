@@ -1,0 +1,62 @@
+---
+title: "Crash Dump Analysis: Reading a Frozen Kernel State"
+description: "The kernel-dump troubleshooting path I studied in KDT and the experiments I want to reproduce with crash, vmcore and tracing."
+date: "2026-11-15"
+draft: false
+reviewed: true
+sensitivity: public
+category: "Technical Training"
+area: "Kernel Diagnostics"
+tags: ["Linux Kernel", "crash", "vmcore", "Trace32", "ftrace"]
+type: "project-log"
+role: "K-Digital Training · Linux System & Kernel Expert Course (2nd cohort)"
+period: "Oct 2023–Mar 2024"
+status: "building"
+techStack: ["Linux Kernel", "crash", "vmcore", "Trace32", "ftrace"]
+---
+
+In the earlier tracing lectures, I had learned to watch kernel events while the system was running. Kernel dump analysis introduced a different question: **what can I learn after the machine has already stopped?** I studied this part of the KDT curriculum alongside Trace32, crash utility, task structures and memory-management topics.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/kdt-crash-analysis.svg" target="_blank" rel="noopener noreferrer" aria-label="Open study diagram">
+    <img src="/figures/journals/kdt-crash-analysis.svg" alt="A kernel crash investigation moves from failure context and captured memory to task state, stack traces, memory evidence and a tested explanation." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>A kernel crash investigation moves from failure context and captured memory to task state, stack traces, memory evidence and a tested explanation. A learning model, not an archived screenshot of a personal benchmark.</figcaption>
+</figure>
+
+## What made dump analysis difficult
+
+A running-system trace contains time-ordered activity, but a memory dump is primarily a **snapshot**. It can preserve task state, kernel stack information, memory metadata and register/context details; it cannot automatically tell the complete sequence that caused the failure.
+
+That difference changes how I approach the evidence. I need to ask:
+
+- Is this the **first fault**, or an error triggered while handling an earlier failure?
+- Which process or CPU context is reflected in the available stack?
+- Could the suspicious pointer, allocation or lock state be a **consequence**, not a cause?
+- Does the dump correspond to the **kernel build and debug symbols** I think it does?
+
+## What I worked through in the course
+
+The curriculum covered intentionally generated kernel faults, vmcore/RAM dump acquisition, the `crash` utility and Trace32-based inspection. I learned how a debugger can expose task structures, lists, memory information and call stacks even when the system cannot continue.
+
+The most interesting part was connecting structures from other lessons—`task_struct`, runqueues, memory allocation and interrupt context—to a frozen execution state.
+
+| Evidence | Useful question |
+| --- | --- |
+| Kernel build and symbols | Am I interpreting the memory layout correctly? |
+| Backtrace | Which call path was active at the time of capture? |
+| Task state | Which process/thread context does the dump show? |
+| Slab and allocation metadata | Is there evidence consistent with corruption or resource exhaustion? |
+| Previous logs / traces | What happened before this final state? |
+
+## Where my progress stopped
+
+I do not have a public, reproducible dump artifact from that training that I can attach to this article. Rather than manufacture a terminal transcript, I want this page to capture the **analysis model and the questions I learned to ask**.
+
+My next step is to build a disposable test environment, induce a controlled fault, and work with the matching unstripped kernel symbols. Only then will I add observed outputs, stack traces and a concrete diagnosis.
+
+## Connection to later experience
+
+While operating K3s, I also encountered node/disk and control-plane incidents for which a restart was easier than explaining the cause. Kernel dump and trace analysis helped me recognize what was missing: **evidence from the layer where the original failure occurred**.
+
+[Kernel tracing and VFS study](/projects/kdt-kernel-tracing-vfs-memory/) · [KDT overview](/projects/kdt-linux-system-kernel-expert-course/).

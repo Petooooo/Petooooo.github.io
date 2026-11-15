@@ -1,6 +1,6 @@
 ---
-title: "Private Artifact Delivery and CI in a Closed Network"
-description: "Reproducible image builds, registry access, certificate trust, and bootstrap dependencies without public artifact services."
+title: "From Offline Images to a Reproducible CI Pipeline"
+description: "The build executor, registry authentication, internal CA and bootstrap decisions behind running Kaniko and Nexus3 without public network access."
 date: "2026-11-15"
 draft: false
 reviewed: true
@@ -15,38 +15,64 @@ status: "active"
 techStack: ["K3s", "Nexus3", "GitLab Runner", "Kaniko", "TLS", "CI/CD"]
 ---
 
-> **ROKAF engineering record · sanitized.** This article describes my work with a private artifact supply chain in an on-premises restricted network. Actual registries, repositories, addresses, credentials, network policies, and recovery procedures are intentionally not shown.
+I wanted a pipeline in which a change could move from Git to an image in our private registry and finally into an internal service **without relying on a successful call to the public internet**. This sounds like ordinary CI/CD until the environment cannot simply fetch a missing base image, package, certificate chain, or build tool.
 
-## The problem
+The platform had a GitLab Runner, an internal Nexus3 service and K3s workloads. I was responsible for making their interactions actually work. My first concern was **reproducibility**: an image that built yesterday must not fail tomorrow merely because an upstream `latest` tag moved or a public package repository disappeared.
 
-Container delivery assumes that images, package metadata, and build dependencies are available. In a disconnected environment that assumption fails: both **build time** and **runtime** depend on services that must themselves remain operational. I had to make application deployment reproducible without treating the public internet as a fallback.
+<figure className="project-concept-figure">
+  <a href="/figures/journals/ci-dependency-map.svg" target="_blank" rel="noopener noreferrer" aria-label="Open diagram full size">
+    <img src="/figures/journals/ci-dependency-map.svg" alt="The closed-network build depends on an executor, verified base images, private package sources, registry permissions and a functioning deployment target." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>The closed-network build depends on an executor, verified base images, private package sources, registry permissions and a functioning deployment target. This is a conceptual illustration, not an internal deployment diagram.</figcaption>
+</figure>
 
-| Dependency | Operational responsibility |
+## 1. Why the usual build recipe was not enough
+
+In a connected environment, a Dockerfile can fetch its base image and the package manager can resolve dependencies as needed. In a restricted network, every dependency becomes an explicit **supply-chain input**. I therefore approached image building in separate stages: prepare compatible source images in a connected setting, transfer them through an approved path, mirror them internally, and build against fixed image references.
+
+I preferred **fixed tags or digests** over `latest` for the parts that would otherwise be difficult to reproduce. A build's success depends not only on the Dockerfile but on the builder image, CA trust, package mirror content and destination registry privileges.
+
+| Component | The question I asked |
 | --- | --- |
-| Container image supply | Private registry and image mirroring; correct repository paths and credentials |
-| Build execution | GitLab Runner and Kaniko-based container builds |
-| Trust | Internal CA certificates, HTTPS endpoints, SAN matching and client trust configuration |
-| Packages | Internal artifact distribution and compatibility of available dependencies |
-| Deployment | Image pull behavior and controlled rollout on K3s |
+| Runner | Which Kubernetes executor and job image actually starts the work? |
+| Kaniko | Is `/kaniko/executor` present, executable and compatible with the job entry point? |
+| Base images | Is every stage reachable from an internal source? |
+| Package manager | Does the internal mirror contain the precise packages the lockfile requires? |
+| Nexus3 | Can the job authenticate **and** push to the intended hosted repository path? |
+| Runtime | Can K3s nodes verify certificates and pull the final image? |
 
-## Build and registry failure modes
+## 2. The build environment that looked correct but was not
 
-Three failure categories repeatedly required separating their causes.
+At one stage I encountered a job image that appeared suitable for Kaniko but did not expose the expected `/kaniko/executor` at runtime. It was easy to assume that the pipeline syntax or the runner itself was wrong. Instead, the immediate diagnostic question was much smaller: **what binary and entry point were actually present in the container?**
 
-**1. A build image is not the build tool.** A container labeled for a build workflow may not contain the expected executor binary or may have a conflicting entry point. I investigated the actual container filesystem, executor path, and entry-point behavior rather than assuming the image was correct.
+I inspected the packaged executor path and image behavior, then adjusted the build image packaging and entry-point handling before focusing on registry pushes. This was a useful reminder that an orchestration error may originate **inside the image**, before any infrastructure-level permission is involved.
 
-**2. Authentication differs from authorization.** Registry errors such as `401` may depend on both credentials passed to the builder and repository-specific permissions in Nexus. A valid username does not mean it has a push grant to every path. I worked through Kaniko's registry configuration, Nexus role assignments, and appropriate handling of private certificates.
+A related dependency problem appeared with a frontend build: a workspace-based Storybook image failed with errors such as `storybook: not found` and `spawn ENOENT`. The first useful distinction was between an unavailable network mirror and dependencies that had simply **not been installed into the image's effective workspace**. Those require different fixes; retrying the registry would not restore a missing local CLI.
 
-**3. Network availability is node-dependent.** A shared workload can pass when scheduled on one host and fail on another if the underlying connectivity or firewall policy differs. Placement constraints were useful for isolating symptoms, but the longer-term question was how to make the supply chain resilient to that asymmetry.
+## 3. A 401 response was not necessarily a bad password
 
-## Avoiding a bootstrap deadlock
+Later, one repository pushed images while another failed with a **401**, despite similar CI configuration. Because the transport reached the registry, I treated that as different from a TLS handshake failure.
 
-If a private registry runs inside the cluster and **depends on its own service to retrieve the image required to restart**, a normal recovery operation may fail. I separated this from an ordinary image-pull error: it is a **dependency-cycle problem**.
+I compared the successful and failing contexts across **destination path, job variables, builder Docker configuration and repository permissions**. Nexus3 has separate concepts of identity, Docker registry token exchange, and repository-scoped grants. A credential can be valid but lack the correct push action for one image path.
 
-A durable design needs a minimal, independently retrievable bootstrap set or another verified recovery path for essential components. Simply mirroring more images into the same failing service does not resolve the cycle. I documented the design concern in a separate [bootstrap dependency note](/notes/k3s-registry-bootstrap-nexus-self-dependency/).
+That distinction was especially important when the target image name included nested repository components. Instead of immediately granting broad administrative rights to make the error disappear, I considered which token, path and repository permission were actually being exercised. The investigation also taught me to avoid printing secrets while checking which variable was effective in a job.
 
-## What I learned
+## 4. TLS and node placement were separate failure planes
 
-The most useful design question was not “Can this pipeline build an image?” but **“Which upstream services must still be available for it to build, push, pull, or recover?”** The answer crosses Linux networking, certificate trust, namespace permissions, scheduling, and registry operations. No universal deployment success rate is claimed here; this is a description of real integration and troubleshooting work.
+Internal HTTPS required the clients involved in build and deployment to recognize the private CA and the identity on the certificate. The builder, container runtime and developer workstation can have different trust stores. An image push failing on certificate verification is not the same problem as a registry authorization error.
 
-[Back to the ROKAF platform overview](/projects/independent-on-premises-k3s-platform-engineering/).
+I also observed that a pipeline could behave differently depending on **which worker node received the job**. Connectivity and policy at the host layer mattered even though the YAML was unchanged. Node placement was useful to isolate a failing environment; it was not a substitute for understanding the connectivity asymmetry.
+
+## 5. The bootstrap problem that made me rethink recovery
+
+A registry hosted by the same platform it supplies can become a circular dependency: the registry service needs an image to recover, but the only image source is the unavailable registry. I investigated separating a **minimal bootstrap source** from the general artifact supply so essential services would not depend exclusively on themselves.
+
+The design decision is subtle: more replication of a single dependency is not the same as removing that dependency from the **recovery path**. This led me to think about what must already exist before the first job, first container pull or first rebuild can succeed.
+
+## What changed in my approach
+
+I stopped treating an image-push failure as one generic CI problem and instead classified **packaging, package availability, authentication, authorization, TLS trust, node connectivity and bootstrap availability**. That made the diagnostic sequence more disciplined and made the overall delivery process easier to reason about.
+
+The public record does not include internal endpoints or production credentials. A few repository-specific 401 cases were still being narrowed down when I recorded them; where I had a confirmed fix I distinguish it from cases where I had only isolated the likely layer.
+
+**Related records:** [networking and certificate trust](/projects/rokaf-networking-and-tls/) · [ROKAF platform overview](/projects/independent-on-premises-k3s-platform-engineering/).

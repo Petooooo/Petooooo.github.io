@@ -1,6 +1,6 @@
 ---
-title: "Database High Availability and Stateful Application Migrations"
-description: "MongoDB replication, PostgreSQL/Pgpool, ClickHouse/Keeper and staged Langfuse upgrades under capacity and consistency constraints."
+title: "Database HA and the Real State of an Incomplete Migration"
+description: "Operating MongoDB, PostgreSQL/Pgpool, ClickHouse/Keeper and navigating Langfuse upgrades where logs, state and storage headroom disagreed."
 date: "2026-11-15"
 draft: false
 reviewed: true
@@ -15,40 +15,66 @@ status: "active"
 techStack: ["MongoDB", "PostgreSQL", "Pgpool", "ClickHouse", "Keeper", "Langfuse"]
 ---
 
-> **ROKAF engineering record · sanitized.** This describes my operation and troubleshooting experience across database-dependent services. It is not a guide to the military's database topology, credentials, replica placement, or backup procedures.
+Running a database inside Kubernetes is easy to describe as “replicated” or “highly available.” Operating it made me more careful with those words. The database process can be running while its coordinator is unhealthy; a migration can display a timeout while its recorded work is complete; and a replay can fail simply because a destination volume is out of space.
 
-## Multiple databases, multiple meanings of HA
+My work crossed **MongoDB, PostgreSQL/Pgpool, ClickHouse/Keeper and Langfuse**, each with a different idea of leadership, replication and readiness.
 
-A cluster that operates analytics, relational, document and cache systems has no single universal failover sequence. I worked with **MongoDB replication, PostgreSQL/Pgpool, ClickHouse with Keeper coordination, and stateful application dependencies**. Each adds separate conditions for healthy service.
+<figure className="project-concept-figure">
+  <a href="/figures/journals/db-migration-state.svg" target="_blank" rel="noopener noreferrer" aria-label="Open diagram full size">
+    <img src="/figures/journals/db-migration-state.svg" alt="A stateful migration depends on application schema, database replication/coordination, persistent storage headroom and verified progress, not only a UI status label." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>A stateful migration depends on application schema, database replication/coordination, persistent storage headroom and verified progress, not only a UI status label. This is a conceptual illustration, not an internal deployment diagram.</figcaption>
+</figure>
 
-| Component | Failure/recovery concern |
-| --- | --- |
-| MongoDB replica set | Member health and election state versus application read/write availability |
-| PostgreSQL / Pgpool | Backend health, client routing, database role, and session impact |
-| ClickHouse / Keeper | Replication metadata, leader/quorum behavior, read-only state, and disk availability |
-| Application migration | Schema/data rewrite progress, retry behavior, and compatibility across dependent services |
+## 1. Why HA needs more than replicas
 
-## Why orchestration alone cannot solve database failover
+I first separated **process redundancy**, **data redundancy**, **election or routing**, and **application compatibility**. These are different properties:
 
-The scheduler manages processes; it does not understand whether the data those processes serve is consistent. A database process being `Running` cannot establish that reads are current, writes are durable, migrations are complete, or dependent applications can use the new schema.
+| System | Availability mechanism | Operational concern |
+| --- | --- | --- |
+| MongoDB | Replica-set membership and primary election | Can the client still read/write with the desired consistency? |
+| PostgreSQL / Pgpool | Replication and connection routing | Does the router target a valid writable backend? |
+| ClickHouse / Keeper | Replicated data and coordination metadata | Can the replica access the coordinator and accept writes? |
+| Langfuse | Application and background migration logic | Does code expect data structures that have not finished migrating? |
 
-For MongoDB and PostgreSQL I separated **database-level replication/failover** from **persistent-volume movement**. For ClickHouse I also had to account for Keeper and replication status, not just Pod health.
+The presence of multiple Pods guarantees none of these by itself. In particular, **a Kubernetes leader and a database leader are not the same role**.
 
-## Langfuse as a cross-component migration problem
+## 2. MongoDB and PostgreSQL: data state versus routing
 
-During a Langfuse upgrade I worked through changes spanning application containers, PostgreSQL migrations, ClickHouse storage/coordination, and operational dependencies. Several symptoms revealed why a migration should be treated as a **persisted state machine** rather than a single green/red UI badge:
+With MongoDB, the important distinction was between a **healthy individual process** and a replica set that could elect and serve a primary. A service endpoint may still exist while the application cannot complete writes. I considered how member state, quorum and client retry behavior would affect continuity.
 
-- A reported **timeout** did not necessarily mean that the background migration's recorded phase was incomplete. I checked migration state and completed/failed work units independently.
-- A **read-only analytics state** required investigation of coordination and replica status, not merely restarting a writer.
-- A **space constraint** could interrupt data movement despite other application components reporting healthy.
-- Rewriting and materializing data can require long-running operations whose progress must be verified across separate components.
+With PostgreSQL and Pgpool, routing adds another component that can be healthy as a process while routing to a backend with the wrong role or no usable data. A pooler can preserve a stable client endpoint without itself preserving database durability. I separated backend failure, pooler state and application session behavior when reasoning about HA.
 
-These are generalized failure classes from my work, not an assertion that every observed symptom had the same root cause.
+## 3. The Langfuse upgrade was a data migration, not just a Helm upgrade
 
-## Lessons for system design
+The more demanding problems appeared while moving Langfuse across major application and analytics changes. A container image and a Helm chart can be deployed quickly; historical traces, observations and analytics tables may need **rewrites, materialization and coordination changes**.
 
-My biggest takeaway was **cross-component observability**: migrations, object storage, volume capacity, and coordinator state may all be required for one user-facing feature to recover. If those dimensions are not monitored separately, failure analysis becomes guesswork.
+My migration path included an earlier v3 upgrade before the v4 transition. The important change in mindset was to treat the rollout as a sequence of independently verifiable stages:
 
-I deliberately do not publish version-by-version production commands, internal schemas, or sensitive database configuration here. The published lesson is about **replication, consistency, and recovery prerequisites**.
+1. **Application/schema state** — what version of the code and schema is active?
+2. **PostgreSQL migration record** — what does the persisted migration table say?
+3. **ClickHouse data and coordinator** — do replicated tables and Keeper agree?
+4. **Capacity** — is there sufficient storage headroom for insert/rewrite work?
+5. **Functional checks** — can the application actually read and write the expected data?
 
-[Back to the ROKAF platform overview](/projects/independent-on-premises-k3s-platform-engineering/).
+## 4. When a migration said “Timeout error”
+
+One particularly instructive step reported **`Timeout error.`**, yet the persisted migration state showed **`phase = completed`**, with **nine completed chunks and zero failed chunks**. Those observations are not equivalent to a blanket declaration of success, but they directly contradict the simplistic conclusion that every chunk must have failed.
+
+I treated the UI/worker timeout as one observation and the recorded migration progress as another. Before rerunning an expensive operation, the question became: *Did the background work continue and finish despite the caller timing out?* This avoided confusing the lifespan of a client request with the lifespan of the underlying data migration.
+
+## 5. Capacity, read-only states and Keeper
+
+Other work exposed a different class of issue: **remote inserts could fail with insufficient space**. No scheduler setting can compensate for genuinely unavailable storage capacity. I had to think about target storage size, temporary space needed for rewrites, and the consequences of retrying after a partial write.
+
+A ClickHouse replica could also enter a read-only state. In those cases I checked the Keeper coordination layer and leader/quorum behavior instead of attributing all failures to the application. The recovery path depended on understanding whether the replica could safely participate in metadata and writes.
+
+During the v4 transition I also saw a background migration step involving a **JSON date/state conversion error**. The publicly useful lesson was not the internal date value: it was that application-side migration logic can fail on persisted state serialization even after earlier storage coordination problems are resolved.
+
+## 6. What I still wanted to verify
+
+Some migration stages had reached a consistent recorded state while others were still being investigated. The remaining questions were about **end-to-end correctness after data rewriting**: did the application query the correct dataset, did writes work, were background jobs complete, and was the new state internally consistent?
+
+I would rather keep an accurate record of a stalled or partially verified migration than publish a clean “all successful” upgrade story that hides the uncertainty. The goal is to explain *which layer provided each piece of evidence*.
+
+**Related records:** [stateful storage recovery](/projects/rokaf-stateful-storage-and-recovery/) · [ROKAF platform overview](/projects/independent-on-premises-k3s-platform-engineering/).

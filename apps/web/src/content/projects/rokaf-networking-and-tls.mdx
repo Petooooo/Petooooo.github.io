@@ -1,6 +1,6 @@
 ---
-title: "Service Networking and TLS in a Private K3s Environment"
-description: "Reasoning across Kubernetes Services, Traefik, load balancing and certificate trust when external networking assumptions do not hold."
+title: "Tracing a Request Through Traefik, MetalLB and Private TLS"
+description: "The debugging choices behind separating DNS, service endpoints, load balancer behavior, ingress routing and certificate selection."
 date: "2026-11-15"
 draft: false
 reviewed: true
@@ -15,34 +15,60 @@ status: "active"
 techStack: ["K3s", "Traefik", "MetalLB", "TLS", "DNS", "Networking"]
 ---
 
-> **ROKAF engineering record · sanitized.** The focus is protocol and platform behavior. Internal domains, IPs, network diagrams and exposed service configurations are excluded.
+When an internal application fails to open in a browser, the symptom is deceptively simple: **“the service is down.”** In practice, I had to learn how many different components could produce an identical-looking failure. The request might never resolve in DNS, reach the wrong IP, be redirected by a load balancer, negotiate the wrong certificate, or arrive at an Ingress rule with no usable endpoints.
 
-## The request path spans multiple layers
+On our on-premises K3s platform I worked with **Traefik, Kubernetes Services, NodePort/hostPort, MetalLB and internal certificate trust**. My goal was not to add layers for their own sake; it was to make service exposure more consistent and debuggable.
 
-An application can be healthy yet unreachable. Kubernetes endpoints, proxy routing, load-balancer advertisement, DNS, transport ports and TLS certificate selection are separate stages.
+<figure className="project-concept-figure">
+  <a href="/figures/journals/network-request-path.svg" target="_blank" rel="noopener noreferrer" aria-label="Open technical diagram">
+    <img src="/figures/journals/network-request-path.svg" alt="A client request passes through name resolution, service exposure, TLS negotiation, ingress routing, Kubernetes endpoints and application readiness." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>A client request passes through name resolution, service exposure, TLS negotiation, ingress routing, Kubernetes endpoints and application readiness. Conceptual model; no internal access policy, topology or resource inventory is shown.</figcaption>
+</figure>
 
-| Stage | What I checked |
-| --- | --- |
-| Workload and Service | Whether endpoints existed and the intended service port targeted the right Pods |
-| Traefik routing | Ingress/IngressRoute rules, entry points, TCP or HTTP routing, and proxy behavior |
-| Exposure mechanism | Service and load-balancer behavior, including NodePort and MetalLB-related symptoms |
-| Trust | HTTPS certificates, CA trust chains, and correct endpoint identity |
-| Client behavior | Whether the client actually negotiated the intended transport and protocol |
+## 1. A single HTTP failure can originate in six places
 
-My operational investigations included Traefik CRD behavior, NodePort/hostPort trade-offs, TLS certificate selection and whether a routing symptom originated in the proxy or the layer beneath it.
+I started separating the request path, because changing configuration at the wrong layer frequently made an incident longer.
 
-## Certificates are evaluated before HTTP routes
+| Stage | What it can tell me | Typical misleading symptom |
+| --- | --- | --- |
+| DNS | Does the name resolve to the intended destination? | “Ingress is broken,” when the name points elsewhere |
+| VIP or node endpoint | Is the destination being advertised and reachable? | Browser timeout with healthy Pods |
+| TCP/TLS | Is the handshake successful and certificate trusted? | Certificate warning despite apparently correct HTTP routing |
+| Traefik | Does the selected entry point and router match the request? | Unexpected backend response |
+| Kubernetes Service | Are the ports and endpoints correct? | 502/503 while application processes are running |
+| Application | Is it ready and serving its intended protocol? | Pod is `Running` but request fails |
 
-One subtle error class arises when the **HTTP route works** but the client still sees an unexpected certificate. Certificate selection happens during TLS handshake, before the server can interpret HTTP headers or application paths. Changing an HTTP Ingress rule alone therefore may not fix the identity presented to the client.
+The table was not just a checklist: it changed the order in which I investigated a problem. For instance, if a TLS handshake returns the default certificate, editing an HTTP path rule is often irrelevant.
 
-For a private registry, I also needed to understand **internal CA installation, certificate trust, subject alternative names (SAN), and the differences among Docker, Kaniko and runtime clients**.
+## 2. The TLS detail I wish I had recognized sooner
 
-## Load balancing is not always simply an IP address
+An HTTP router only receives a request **after TLS negotiation**. The server must choose and present its certificate before an application sees the HTTP `Host` header or URL path. This is why an IngressRoute may route correctly after a warning while the certificate remains unexpected.
 
-MetalLB/service exposure and node placement must be considered together. A stable-looking frontend address says little about health at the backend. Conversely, a failure to reach one address might reflect advertisement, host policy, endpoint selection or certificate validation.
+I worked through Traefik entry-point configuration, private trust chains, HTTPS configuration and certificate-name matching. For private registries, the relevant clients also included **image builders and container runtimes**, which do not necessarily share the same certificate store as a browser.
 
-I learned to separate **network reachability**, **service selection**, and **application readiness**, rather than treating them as the same diagnostic.
+I came to ask two separate questions: **Does the client trust the issuer?** and **Does the presented certificate identify the endpoint the client requested?** Solving the first without the second still leaves a failure.
 
-Related sanitized engineering notes: [Traefik and MetalLB](/notes/k3s-traefik-nodeport-metallb-vip/), [private registry TLS](/notes/nexus3-https-registry-root-ca-ip-san-docker/).
+## 3. MetalLB and the problem of a moving frontend
 
-[Back to the ROKAF platform overview](/projects/independent-on-premises-k3s-platform-engineering/).
+Load-balancer VIP behavior introduced another layer of ambiguity. An intermittent endpoint could be caused by advertisement behavior, network asymmetry, node readiness, or the service behind the endpoint. I investigated possible **VIP instability** and related symptoms, but I did not always have enough evidence to assign one final root cause.
+
+This made me distinguish between what was observable—**a reachability change**—and what was only a hypothesis—such as address advertisement shifting unexpectedly. I wanted to correlate service endpoint health, node-level reachability and load-balancer state before proposing a permanent fix.
+
+## 4. CoreDNS is infrastructure, not an invisible utility
+
+I also encountered a reliability question around **CoreDNS availability**. DNS failures can make otherwise healthy services appear broken, especially when service discovery is embedded in application startup, database dependencies or background job execution.
+
+One concern was **reliance on too little DNS redundancy**. The relevant decision is not simply to increase replicas blindly, but to check placement, node fault domains, resource pressure, upstream resolution and whether the affected applications actually use cluster DNS as expected.
+
+## 5. Why I compared NodePort and hostPort
+
+NodePort, hostPort and load-balancer Services change **which component owns the listening port and how the request reaches the Pod**. I studied their trade-offs when deciding where Traefik or other entry points should terminate incoming traffic.
+
+The operational pain is that every extra path increases the number of things that can be misconfigured. The better design is the one whose **packet path and failure modes I can explain**, not necessarily the one with the shortest manifest.
+
+## What I kept in my notebook
+
+I kept unresolved questions about VIP behavior and DNS as open investigations instead of writing a misleading “fixed MetalLB” headline. The things I could verify were which layer was behaving differently and which hypotheses were still plausible.
+
+**Related:** [networking/DNS incident notebook](/projects/rokaf-dns-vip-open-investigations/) · [private artifact CI](/projects/rokaf-private-artifacts-and-ci/) · [K3s platform overview](/projects/independent-on-premises-k3s-platform-engineering/).

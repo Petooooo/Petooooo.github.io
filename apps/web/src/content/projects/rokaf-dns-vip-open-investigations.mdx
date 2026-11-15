@@ -1,0 +1,61 @@
+---
+title: "DNS and Load-Balancer VIP: An Investigation Still in Progress"
+description: "Field notes on intermittent DNS and service reachability, with confirmed symptoms separated from unverified VIP and resolver hypotheses."
+date: "2026-11-15"
+draft: false
+reviewed: true
+sensitivity: sanitized
+category: "Engineering Investigation"
+area: "Networking & Reliability"
+tags: ["K3s", "CoreDNS", "MetalLB", "DNS", "Traefik"]
+type: "troubleshooting"
+role: "ROKAF infrastructure troubleshooting and engineering investigation"
+period: "Jul 2025–Present"
+status: "building"
+techStack: ["K3s", "CoreDNS", "MetalLB", "DNS", "Traefik"]
+---
+
+The symptom I wanted to understand was not a spectacular cluster-wide crash. It was more frustrating: **service reachability appeared inconsistent**, and several layers could plausibly explain the same client-facing failure. An internal DNS issue, a load-balancer advertisement change, a mismatched Service endpoint or a non-ready application can all look like “sometimes the URL works.”
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/dns-vip-investigation.svg" target="_blank" rel="noopener noreferrer" aria-label="Open investigation diagram">
+    <img src="/figures/journals/dns-vip-investigation.svg" alt="The same timeout could result from DNS resolution, VIP advertisement, service endpoints, Traefik routing or backend readiness; evidence must discriminate them." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>The same timeout could result from DNS resolution, VIP advertisement, service endpoints, Traefik routing or backend readiness; evidence must discriminate them. Generalized hypothesis map; it does not disclose the internal infrastructure topology.</figcaption>
+</figure>
+
+## What I observed
+
+My earlier infrastructure notes and discussions included **CoreDNS availability concerns** and suspected **MetalLB VIP instability**. These observations made me uneasy about treating Kubernetes Service exposure as automatically reliable just because each individual component's Pod was marked running.
+
+The first confirmed point was architectural: in a K3s cluster, both DNS resolution and load-balancer exposure are **shared dependencies**. Failure in either can affect numerous unrelated applications, making the incident appear larger than the original failing component.
+
+## Hypotheses I considered
+
+| Hypothesis | Why it fits the symptom | What would falsify it |
+| --- | --- | --- |
+| DNS availability or resolver delay | Connections by service name fail before reaching the application | A consistent resolution result during the incident |
+| MetalLB advertisement change | The client intermittently cannot reach an otherwise healthy frontend VIP | Stable L2/BGP advertisement and packet reachability throughout |
+| Endpoints or readiness | The VIP is reachable but no usable backend responds | Healthy matched endpoints and successful direct Service traffic |
+| Traefik route or TLS behavior | Connection succeeds but routing/handshake fails | Successful matching transport, certificate and backend route |
+| Host/node network asymmetry | Same request behaves differently by network path | Equivalent connectivity from each relevant path |
+
+## Why I didn't want to fix it by guessing
+
+Restarting a load balancer or DNS Pod can temporarily change timing and appear to resolve an issue. But unless I captured what changed, it might destroy the strongest evidence. Similarly, adding DNS replicas or changing a Service type could mask an unrelated endpoint failure.
+
+I preferred to investigate the request path in stages: resolve name, reach target, negotiate transport, select Service endpoints, then test application readiness. Each step narrows the next one without requiring the public disclosure of internal addresses.
+
+## Where the investigation stands
+
+**Confirmed:** these shared layers warrant separate health checks; some reachability behavior was inconsistent; DNS redundancy and VIP behavior deserved investigation.
+
+**Still open:** I have not documented a definitive proof that MetalLB advertisement alone caused every intermittent failure, or that one DNS replica count explains all observations. I also do not have a published timeline correlating each symptom with a packet capture, node event and client request.
+
+## Next verification I would perform
+
+I would use an isolated or sanitized test setup to correlate **resolver responses, advertisement state, application endpoints and client-visible status** at the same timestamps. That would help separate a plausible explanation from a demonstrated cause.
+
+The engineering value of this incomplete case is learning to **preserve uncertainty without giving up diagnostic structure**.
+
+[Networking design record](/projects/rokaf-networking-and-tls/) · [ROKAF overview](/projects/independent-on-premises-k3s-platform-engineering/).

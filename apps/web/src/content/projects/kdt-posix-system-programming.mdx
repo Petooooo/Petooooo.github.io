@@ -1,6 +1,6 @@
 ---
-title: "POSIX System Programming — Processes, IPC and Networking"
-description: "What I learned about C/C++ system programming, process boundaries, synchronization, file descriptors and socket services."
+title: "Inside POSIX: Processes, IPC, Synchronization and Sockets"
+description: "How system programming exercises changed my understanding of process lifetime, file descriptors, concurrent execution and network servers."
 date: "2026-11-15"
 draft: false
 reviewed: true
@@ -15,38 +15,74 @@ status: "archived"
 techStack: ["C++", "Linux", "POSIX", "IPC", "Sockets", "GDB"]
 ---
 
-> **KDT curriculum study record (2023–2024).** Based on the training notes and official syllabus. The examples discussed here are course concepts; no benchmarks or runnable lab outputs are claimed without preserved artifacts.
+At the beginning of system programming, I was comfortable thinking in terms of **functions and objects**. The course forced me to think in terms of **processes, kernel-managed resources and events that may occur at inconvenient moments**.
 
-## From a single program to cooperating processes
+I started asking questions like: if a program creates two workers, who closes their file descriptors? If a thread is waiting on a mutex, why might the program appear idle? If one side of a socket connection disappears, which operation notices first?
 
-A conventional C++ exercise often runs as one program with ordinary function calls. System programming introduces **separate address spaces, process lifetimes, blocking system calls, shared resources and failure boundaries**.
+<figure className="project-concept-figure">
+  <a href="/figures/journals/kdt-posix-boundaries.svg" target="_blank" rel="noopener noreferrer" aria-label="Open course diagram">
+    <img src="/figures/journals/kdt-posix-boundaries.svg" alt="POSIX programming crosses process address spaces, kernel-managed file descriptors, IPC channels and network transport." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>POSIX programming crosses process address spaces, kernel-managed file descriptors, IPC channels and network transport. A conceptual study diagram based on the mechanisms covered during the course.</figcaption>
+</figure>
 
-The course developed these subjects from build tools and debugging toward multi-process and networked programming:
+## 1. A process is more than its code
 
-| Mechanism | Question it addresses |
-| --- | --- |
-| Process creation and exit | Who owns the process state, file descriptors and exit status? |
-| Threads and locks | Which memory is shared, and what prevents races? |
-| Signals and timers | How are asynchronous events reported and handled? |
-| Message queues | How can processes exchange discrete messages? |
-| Shared memory / mmap | How is data shared or mapped with explicit lifetime rules? |
-| TCP / UDP sockets | How do processes communicate across host/network boundaries? |
-| File descriptors and I/O | What does the kernel track when a process opens, reads and closes a resource? |
+I learned to distinguish an executable file from a running **process with its own address space and open resources**. Process creation, execution and exit create lifetimes that the program must manage.
 
-## Why file descriptors matter
+The course moved from memory layout and GDB/Makefile work toward process creation, signals and timers. One lesson I carried away was that code which behaves in a single execution path can fail once a signal, child process or timeout enters the system.
 
-The file-descriptor abstraction unifies far more than ordinary files. It is central to sockets, pipes and event-oriented APIs. Understanding descriptor ownership, blocking behavior and cleanup gives a better way to reason about missing data, leaked resources and unavailable servers.
+It also changed how I interpret error handling. A system call can fail because of a permission boundary, a missing resource, a transient condition or an interrupted operation. A robust program must decide **which errors are retryable, which should be reported, and which require cleanup**.
 
-The curriculum included server/client patterns and I/O multiplexing. The important learning outcome for me was the distinction between **application protocol correctness**, **kernel syscall behavior**, and **transport-level delivery**.
+## 2. Threads: sharing makes coordination harder
 
-## Synchronization and the memory model
+Threads can share address space and process resources. That makes them convenient for cooperating work, but shared state creates races. We studied locking, mutual exclusion, critical sections and synchronization in a way that made the trade-off clear:
 
-Threads share an address space, while processes normally do not. The course discussed mutexes, critical sections, shared memory and the practical challenge of coordinating concurrent operations. These ideas connect directly to how operating systems schedule tasks and protect mutable kernel data structures.
+- **Too little synchronization:** operations see inconsistent or partially updated state.
+- **Too much synchronization:** threads serialize unnecessarily or may wait indefinitely.
+- **Wrong lock ordering:** a program can deadlock even if every individual data structure is protected.
+- **Unclear ownership:** threads may access state that has already been freed or closed.
 
-## My takeaway
+What mattered to me was not memorizing pthread function names; it was developing a habit of identifying the **shared invariant** before choosing the lock.
 
-This material was a foundation, not a capstone performance claim. It gave me a systematic vocabulary for understanding why a service can deadlock, block indefinitely, leak file descriptors, or behave differently under concurrent load.
+## 3. IPC: a channel is an agreement
 
-In my later infrastructure work, the same concepts reappeared in worker queues, health probes, database connections and the distinction between container startup and application readiness.
+I worked through the concepts behind pipes, FIFOs, POSIX message queues, semaphores, shared memory and System V IPC. These mechanisms differ in their data model, visibility and lifetime.
 
-[Back to the full KDT training record](/projects/kdt-linux-system-kernel-expert-course/).
+| Mechanism | Useful mental model | Design trap |
+| --- | --- | --- |
+| Pipe/FIFO | Ordered byte stream between cooperating processes | Framing and EOF depend on reader/writer ownership |
+| Message queue | Discrete messages with queue limits | A full queue can block or fail a sender |
+| Shared memory | Both sides can address the same data | Data visibility needs synchronization |
+| Semaphore/mutex | Ordering and mutual exclusion | Correct ordering does not repair an incorrect protocol |
+| `mmap` | A mapped region with specific lifetime/protection | Mapping lifetime and backing object still matter |
+
+This made it easier to understand that **data transfer** and **coordination** are separate concerns. Shared memory may avoid copying data, but it does not make two processes agree when a record is complete.
+
+## 4. File descriptors are the common boundary
+
+One concept kept reappearing: the file descriptor. Files, pipes and sockets all use it as a process-visible handle to kernel-managed objects. Descriptor allocation, blocking behavior and cleanup determine much of the program's behavior under failure.
+
+I learned to think carefully about what happens after a fork, which process keeps which endpoint open, and why forgetting to close one unused descriptor can stop the other side from observing EOF.
+
+The course also introduced alternative I/O models such as **epoll**. The value of event-driven I/O becomes clearer when a server must handle many connections without keeping a thread blocked on every client operation.
+
+## 5. TCP and UDP: different contracts
+
+In the network programming portion, we studied C/Python client/server examples, sockets and I/O multiplexing. I distinguished **TCP's ordered byte stream** from **UDP's datagram model** and learned why message boundaries must be designed at the application layer for TCP.
+
+A simple file server or chat service illustrates the design choices: framing messages, handling partial reads/writes, disconnect detection, timeout behavior and deciding what to do when clients are slow.
+
+My strongest takeaway was that **a socket server is a concurrent state machine**, not merely a loop that calls `recv()`.
+
+## 6. Debugging what the program actually owns
+
+When a program behaves strangely, I find it useful to separate process state, kernel-visible handles, synchronization and network state. Logs from the application are only one perspective. A debugger, process/file-descriptor view and system-call trace each answer different questions.
+
+The course gave me this mindset before I worked with asynchronous internal services and containerized applications. Later, queue workers and database connection pools made the same lessons relevant again: **timeouts, ownership and retries must be part of the design rather than last-minute fixes**.
+
+## What I want to revisit
+
+I want to reproduce these mechanisms as small, instrumented programs: a short-lived multi-process server, a shared-memory queue with explicit synchronization, and an epoll-based socket example. Those would belong in my separate [study repository](https://github.com/Petooooo/systems-notes), with reproducible build commands and actual test output.
+
+[Linux Systems & Kernel Expert Course overview](/projects/kdt-linux-system-kernel-expert-course/).

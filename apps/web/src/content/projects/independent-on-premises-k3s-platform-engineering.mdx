@@ -39,16 +39,28 @@ K3s provided a common orchestration layer, but the difficult questions were belo
 
 ## Engineering journal
 
-The sections below are individual engineering records. Each explains a specific problem space, my role, the relevant mechanisms, trade-offs, and what could be verified without disclosing private operational details.
+I recorded the work by problem, rather than hiding every decision inside a single general K3s description. These are the areas I spent the most time reasoning about.
 
 | Area | Detailed record |
 | --- | --- |
-| **Build and delivery** | [Private Artifact Delivery and CI in a Closed Network](/projects/rokaf-private-artifacts-and-ci/) — Nexus3, Kaniko, GitLab Runner, internal CA and bootstrap dependencies |
-| **Persistent data** | [Stateful Storage Recovery with Longhorn and MinIO](/projects/rokaf-stateful-storage-and-recovery/) — attachment, replica repair, object storage and recovery semantics |
-| **Database HA** | [Database High Availability and Stateful Application Migrations](/projects/rokaf-database-ha-and-langfuse-migrations/) — MongoDB, PostgreSQL/Pgpool, ClickHouse/Keeper and Langfuse |
-| **Authorization** | [Identity and Authorization Across Cluster and Applications](/projects/rokaf-identity-rbac-and-policy/) — ServiceAccount RBAC, OAuth2, Keycloak and OpenFGA boundaries |
-| **Networking** | [Service Networking and TLS in a Private K3s Environment](/projects/rokaf-networking-and-tls/) — Traefik, service exposure, trust and load-balancer diagnosis |
-| **AI infrastructure** | [GPU Placement, Sharing and Failure Capacity for AI Services](/projects/rokaf-gpu-scheduling-and-capacity/) — device plugins, full-GPU scheduling, sharing and degraded operation |
+| **Private delivery** | [Offline images, Kaniko and Nexus3](/projects/rokaf-private-artifacts-and-ci/) — how packaging, registry permissions, TLS and bootstrap dependencies differed |
+| **Stateful recovery** | [Longhorn and MinIO](/projects/rokaf-stateful-storage-and-recovery/) — why a new Pod was not equivalent to recovered data |
+| **Database HA** | [MongoDB, PostgreSQL/Pgpool and ClickHouse/Keeper](/projects/rokaf-database-ha-and-langfuse-migrations/) — replication, migrations, and independent sources of state |
+| **Identity and policy** | [ServiceAccounts, RBAC, OAuth, Keycloak and OpenFGA](/projects/rokaf-identity-rbac-and-policy/) — different authorization layers and scopes |
+| **Networking** | [Traefik, MetalLB and private TLS](/projects/rokaf-networking-and-tls/) — following a request through DNS, certificates and endpoints |
+| **GPU systems** | [GPU placement and capacity](/projects/rokaf-gpu-scheduling-and-capacity/) — the difference between utilization, isolation and failover |
+| **Asynchronous processing** | [RabbitMQ, retries and idempotency](/projects/rokaf-async-workers-and-idempotency/) — when a message can repeat but its effect must not |
+
+## Field notes: questions I had not completely closed
+
+Not every difficult incident ended with a verified single root cause. Keeping those records matters because the **sequence of observations and decisions** remains useful.
+
+| Investigation | What I had established |
+| --- | --- |
+| [Langfuse v4 migration](/projects/rokaf-langfuse-v4-migration-field-notes/) | A timeout conflicted with a persisted completed phase and nine completed chunks; later errors came from other layers |
+| [DNS and VIP reachability](/projects/rokaf-dns-vip-open-investigations/) | Intermittent symptoms with multiple plausible network, resolver and backend hypotheses |
+| [GPU discovery and labels](/projects/rokaf-gpu-discovery-open-investigation/) | Resource/label discovery did not behave as expected; full cause needed further evidence |
+| [Control-plane and disk incidents](/projects/rokaf-control-plane-incident-log/) | etcd and read-only disk symptoms required separating recovery from host-level root-cause proof |
 
 ## The thread connecting those problems
 

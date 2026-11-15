@@ -1,6 +1,6 @@
 ---
-title: "Stateful Storage Recovery with Longhorn and MinIO"
-description: "Persistent-volume attach, replica repair, object storage and the practical gap between Pod rescheduling and application recovery."
+title: "When a Pod Recovers but Its Data Does Not"
+description: "Operational decisions around Longhorn, MinIO, volume attachment, replica rebuilds and the recovery budget of persistent applications."
 date: "2026-11-15"
 draft: false
 reviewed: true
@@ -15,43 +15,69 @@ status: "active"
 techStack: ["K3s", "Longhorn", "MinIO", "PVC", "S3", "Recovery"]
 ---
 
-> **ROKAF engineering record · sanitized.** This write-up focuses on the technology decisions and failure semantics I encountered. It omits volume identities, node placement, snapshots, internal data, and actionable production recovery instructions.
+A stateless Pod can often be recreated somewhere else and become useful quickly. The first time I began operating persistent services, I realized that this mental model hides the hardest part: **the replacement process may start long before its data is available and consistent**.
+
+In my K3s environment I worked with Longhorn persistent volumes and MinIO object storage. The recurring engineering decision was not simply “How many replicas?” but **which component owns persistence, what state must be restored, and what failure is actually being tolerated?**
 
 <figure className="project-concept-figure">
-  <a href="/figures/k3s-recovery-layers.svg" target="_blank" rel="noopener noreferrer" aria-label="Open conceptual diagram">
-    <img src="/figures/k3s-recovery-layers.svg" alt="Layered recovery: scheduling, volume attachment, data service recovery, and client-facing readiness." loading="lazy" decoding="async" />
+  <a href="/figures/journals/stateful-recovery-layers.svg" target="_blank" rel="noopener noreferrer" aria-label="Open diagram full size">
+    <img src="/figures/journals/stateful-recovery-layers.svg" alt="The recovery timeline distinguishes rescheduling, volume availability, database state, and client-visible readiness rather than declaring success at the first restarted Pod." loading="lazy" decoding="async" />
   </a>
-  <figcaption>An abstract view of the recovery chain, not the actual storage or node configuration.</figcaption>
+  <figcaption>The recovery timeline distinguishes rescheduling, volume availability, database state, and client-visible readiness rather than declaring success at the first restarted Pod. This is a conceptual illustration, not an internal deployment diagram.</figcaption>
 </figure>
 
-## Why an available Pod is not an available service
+## 1. Separating the four recovery clocks
 
-Kubernetes can schedule a replacement Pod before its data is usable. With persistent workloads I learned to distinguish **scheduler recovery**, **storage recovery**, **database/application recovery**, and **actual client readiness**. That distinction matters when people discuss high availability or assume a replica count guarantees zero downtime.
+A node or workload failure can set several different clocks running.
 
-| Layer | What I needed to distinguish |
+| Clock | Event I needed to observe | What it does *not* prove |
+| --- | --- | --- |
+| **Scheduling** | A new Pod is placed | The underlying volume is attached |
+| **Storage** | Volume attachment and replica state reconcile | The application has recovered its on-disk state |
+| **Application** | Database/service process becomes internally ready | External clients can use the intended operation |
+| **User-visible** | A representative request succeeds | Every consistency or durability guarantee has been validated |
+
+This distinction changed the way I thought about availability objectives. **RTO** should cover the outage visible to the consumer; **RPO** depends on which data was actually durable or replicated. A healthy Kubernetes object alone answers neither.
+
+## 2. Longhorn made storage transitions visible
+
+Longhorn provided a way to manage replicated volumes without manually managing all storage placement. It also introduced states that matter during a failure: attachment/detachment, replica repair, volume health, actual disk space, and rebuilding after a degraded condition.
+
+During troubleshooting I encountered **read-only storage symptoms**, attachment behavior and replica rebuild concerns. Some failures initially appeared to be application problems because that was where the error surfaced. The more useful approach was to inspect which layer had changed first: was the process blocked because of storage, was a volume waiting to move, or had the application failed independently?
+
+I also learned that **replicas consume capacity during normal operation and repair**. A cluster near its disk limit may have insufficient headroom to rebuild its redundancy, even when the logical amount of user data appears manageable. Replication is not free backup space.
+
+## 3. One storage class should not be used for every stateful application
+
+At first it is tempting to put every database onto a replicated network volume. But a system such as ClickHouse already has database-level replication and recovery logic. Adding an extra network block-replication layer can introduce latency and complicated failure interactions.
+
+I evaluated when **application-managed replicas on local storage** might be better than automatically applying Longhorn to every service. This was not a claim that local disks are universally safer. It is a question of **where durability and failover should be implemented**, and how the layers interact when one fails.
+
+| Workload characteristic | Design question |
 | --- | --- |
-| Scheduler | Was a suitable node found for the workload? |
-| Persistent volume | Did the volume detach, attach, and become usable? |
-| Replica state | Was distributed volume health sufficient to serve consistent data? |
-| Application | Did the database or service reopen state and finish its recovery process? |
-| Client | Could the intended operations actually complete? |
+| One mutable database instance | Is volume movement part of the expected recovery plan? |
+| Application-level replicated database | Are replicas independent enough, and does extra block replication help? |
+| Analytics engine with heavy writes | Does rebuild traffic or remote I/O affect write latency and capacity? |
+| Small internal stateful service | Is operational simplicity more valuable than another replication mechanism? |
 
-## Longhorn: convenience has a cost
+## 4. MinIO and lifecycle decisions
 
-Longhorn made persistent storage manageable across container hosts, but volume replica placement and recovery created additional operational states. My investigations included **attachment delays, rebuild processes, read-only symptoms, storage headroom, and the distinction between healthy controller objects and usable data**.
+Object storage required a different mindset from block storage. Applications may store durable records, temporary uploads, retained artifacts or large generated objects under the same API. With MinIO I considered **S3 compatibility, access permissions, migration dependencies, retention and lifecycle policies**.
 
-A particular pitfall is treating replication as spare capacity. Replica repair consumes I/O and free space; under disk pressure, the recovery mechanism itself may become constrained. I learned to consider both the capacity required by running workloads and the capacity required to restore a degraded replica set.
+A lifecycle rule is not just housekeeping. Deleting objects early may save disk space but break replay or recovery assumptions; keeping everything indefinitely can exhaust capacity. The correct retention period depends on who owns the data and how long an application may still reference it.
 
-The right storage class also depends on workload behavior. A database already providing application-level replication may benefit from **locally attached volumes** rather than layering another replicated storage path indiscriminately. That is an architectural trade-off, not a blanket rule.
+## 5. An incomplete failure analysis is still useful
 
-## MinIO and the object layer
+I kept several cases in the form of symptoms, hypotheses and checks rather than forcing a neat root cause. For example, **read-only volume behavior** may result from more than one layer; repeated restarts could erase evidence without answering the question.
 
-I worked with MinIO as an S3-compatible layer, including object lifecycle and internal service dependencies. Unlike block volumes, object storage encourages different choices about naming, retention, API access, and deletion policies. The important question is which application owns a piece of data and whether the object's lifetime matches the application's recovery needs.
+My preferred order became:
 
-## Reasoning about RTO and RPO
+1. Record the application-visible symptom and the point at which it began.
+2. Check Pod scheduling independently from PVC/volume health.
+3. Inspect whether the database or service sees an I/O error, missing data, or a recoverable restart.
+4. Distinguish a temporary workaround from evidence of the actual cause.
+5. Record what is still unverified instead of making the incident sound fully resolved.
 
-**RTO** should describe the whole observed outage, not merely the time it takes Kubernetes to create a Pod. **RPO** depends on the state that is durably replicated or restorable at the relevant layer. A volume rebuild and a database leader election answer different questions; neither automatically confirms application correctness.
+This way of reasoning is what eventually pushed my interests toward filesystems, block I/O, persistent state and failure ordering.
 
-These lessons are why I became interested in the layers below Kubernetes: **filesystem persistence, write ordering, block I/O and failure recovery**. The public article does not claim experimentally measured RTO/RPO figures that I did not preserve.
-
-[Back to the ROKAF platform overview](/projects/independent-on-premises-k3s-platform-engineering/).
+**Related records:** [database HA and migrations](/projects/rokaf-database-ha-and-langfuse-migrations/) · [overall platform](/projects/independent-on-premises-k3s-platform-engineering/).

@@ -1,0 +1,62 @@
+---
+title: "GPU Resources Not Advertised: Separating Node Labels from Device Allocation"
+description: "A partly resolved GPU Operator and Node Feature Discovery investigation, focusing on visibility, labels and scheduling evidence."
+date: "2026-11-15"
+draft: false
+reviewed: true
+sensitivity: sanitized
+category: "Engineering Investigation"
+area: "AI Infrastructure"
+tags: ["GPU Operator", "NFD", "Kubernetes", "GPU", "Scheduling"]
+type: "troubleshooting"
+role: "ROKAF infrastructure troubleshooting and engineering investigation"
+period: "Jul 2025–Present"
+status: "building"
+techStack: ["GPU Operator", "NFD", "Kubernetes", "GPU", "Scheduling"]
+---
+
+The question sounded simple: **there is GPU hardware on a machine, so why can't the scheduler use it as expected?** The experience reminded me that a Kubernetes resource request depends on an entire chain of discovery and registration before a model container starts.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/gpu-discovery-investigation.svg" target="_blank" rel="noopener noreferrer" aria-label="Open investigation diagram">
+    <img src="/figures/journals/gpu-discovery-investigation.svg" alt="An accelerator becomes schedulable only after hardware/driver recognition, feature discovery, device-plugin advertisement and compatible workload placement." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>An accelerator becomes schedulable only after hardware/driver recognition, feature discovery, device-plugin advertisement and compatible workload placement. Generalized hypothesis map; it does not disclose the internal infrastructure topology.</figcaption>
+</figure>
+
+## What I encountered
+
+During GPU node setup and troubleshooting, **expected GPU Operator / Node Feature Discovery labels were not showing up** in the way I anticipated. It was tempting to treat this as an application deployment problem, but the missing metadata made a lower-level resource-discovery issue plausible.
+
+## The layers I separated
+
+| Layer | Question to answer |
+| --- | --- |
+| Physical device and driver | Is the GPU available to the host OS? |
+| Driver/runtime interface | Does the expected device interface work for containers? |
+| Feature discovery | Are NFD and related components labeling this node as expected? |
+| Device plugin | Does Kubernetes report the GPU as an allocatable extended resource? |
+| Scheduler | Does the Pod's request/selector/affinity match any node? |
+| Application | Does the model load and remain within accelerator memory constraints? |
+
+A missing **label** is not necessarily a missing **allocatable resource**, and the reverse can also happen depending on configuration. I learned to avoid conflating the two.
+
+## Why the first workaround could be misleading
+
+A node selector can make a Pod run in one familiar location, but that does not prove GPU discovery is healthy or that other compatible nodes are schedulable. Likewise, a running device plugin Pod is not by itself proof that every node's resources are advertised correctly.
+
+I considered time-slicing and, for compatible hardware, MIG as separate capacity policies—not fixes for discovery or registration failures.
+
+## Current state
+
+**Observed:** GPU-related labels/features were not appearing as expected during investigation.
+
+**Not established:** a single confirmed cause across all nodes, a complete production rollout of every sharing configuration, or benchmarked performance gains from changing the scheduling model.
+
+## Next investigation
+
+The next sensible check is to correlate host visibility, operator/device-plugin health, discovered labels and the scheduler's actual allocatable resource view in the same environment. After that, I would test workload placement and memory pressure using a non-sensitive representative workload.
+
+This case made me more interested in the difference between **a hardware capability** and **a reliable resource abstraction that applications can actually request**.
+
+[GPU scheduling decisions](/projects/rokaf-gpu-scheduling-and-capacity/) · [ROKAF overview](/projects/independent-on-premises-k3s-platform-engineering/).

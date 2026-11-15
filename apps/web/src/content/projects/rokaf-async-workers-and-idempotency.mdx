@@ -1,0 +1,71 @@
+---
+title: "Asynchronous Workflows with RabbitMQ: Retrying Without Repeating Effects"
+description: "How I approached queue-backed workers, delivery acknowledgement, failure/retry paths and idempotent processing for internal services."
+date: "2026-11-15"
+draft: false
+reviewed: true
+sensitivity: sanitized
+category: "Engineering Investigation"
+area: "Messaging & Reliability"
+tags: ["RabbitMQ", "Messaging", "Idempotency", "Retry", "Distributed Systems"]
+type: "implementation-note"
+role: "ROKAF infrastructure engineering and operational analysis"
+period: "Jul 2025–Present"
+status: "active"
+techStack: ["RabbitMQ", "Messaging", "Idempotency", "Retry", "Distributed Systems"]
+---
+
+As an internal system grows, not every request should do all of its work synchronously. Some operations take longer than a user-facing request budget, depend on an external service, or need to survive the caller disconnecting. I worked on **queue-backed asynchronous processing with RabbitMQ** and had to think beyond “publish a message and let a worker handle it.”
+
+The central question became: **What if the worker performs the action, then crashes before acknowledging the message?** The broker may deliver the same work again. A reliable design must handle that possibility explicitly.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/rabbitmq-idempotency.svg" target="_blank" rel="noopener noreferrer" aria-label="Open diagram full size">
+    <img src="/figures/journals/rabbitmq-idempotency.svg" alt="A producer publishes work to a queue, a worker processes it, and acknowledgement/retry behavior is kept separate from durable idempotency checks." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>A producer publishes work to a queue, a worker processes it, and acknowledgement/retry behavior is kept separate from durable idempotency checks. Abstract engineering view rather than a description of internal systems.</figcaption>
+</figure>
+
+## 1. What made the queue attractive
+
+I wanted an API to accept and track work without holding the original request open for every downstream operation. A queue provides a useful separation between **request admission** and **work execution**, and allows consumers to scale or retry independently.
+
+But this also introduces questions that do not exist in a fully synchronous function call: what happens to work when the consumer dies, who owns its progress, and what does the user see when a retry happens?
+
+## 2. Acknowledgement is not the same as correctness
+
+A worker can successfully write an output and then fail before sending its acknowledgement. Depending on broker and consumer settings, the job may be redelivered. If the handler blindly repeats a state-changing action, a harmless retry can become a duplicate effect.
+
+I thought in terms of a small state machine:
+
+| Stage | Risk | Design response |
+| --- | --- | --- |
+| Publish | Caller repeats a request | Stable logical work identity |
+| Consume | Worker takes a job | Controlled concurrency and visibility of in-progress state |
+| Apply | Side effect partially succeeds | Make the operation safe to retry, or explicitly reconcile state |
+| Acknowledge | Worker fails after side effect | Idempotency check on redelivery |
+| Retry | Fault persists | Bounded retry/backoff and a way to inspect failed work |
+
+The important distinction is **at-least-once delivery is compatible with exactly-once *effect* only when the application owns deduplication and transaction boundaries**. Messaging middleware alone does not remove the need to design those boundaries.
+
+## 3. Where I put the idempotency concept
+
+The design question is what uniquely identifies the *logical operation*: not merely a random delivery attempt, but the piece of work the system intends to do once. A stable key can help a worker decide whether to create, resume, verify or skip an effect.
+
+That choice depends on whether the operation is database-only, creates files/objects, or calls another service. A database transaction may atomically record one kind of result, while an object store and a queue may not share the same atomic transaction boundary.
+
+The work led me to consider state transitions such as **pending → processing → completed/failed**, with repeat attempts checking stored progress rather than assuming a new delivery means new work.
+
+## 4. Operational trade-offs
+
+A queue introduces new failure modes: backlog, slow consumers, poison messages, broker unavailability, and messages that are processed but never acknowledged. I wanted visibility into **queue depth, consumer health, processing age, retries and final outcome**, not just whether RabbitMQ was running.
+
+Back-pressure also matters. Adding workers when the database is already overloaded may make the system less reliable instead of faster.
+
+## What I learned
+
+The useful abstraction is not just a queue: it is a **workflow with durable identity, observable state and explicit retry semantics**. That lesson connects strongly to database migrations and any other background operation whose caller may time out while work continues.
+
+My records support the queue-based/idempotency design work, but I have not retained a public set of load-test metrics. I therefore focus on the decisions and the failure cases I reasoned about rather than inventing throughput improvements.
+
+[Database migration lessons](/projects/rokaf-database-ha-and-langfuse-migrations/) · [ROKAF overview](/projects/independent-on-premises-k3s-platform-engineering/).

@@ -15,17 +15,29 @@ const rokafOrder = [
   "rokaf-database-ha-and-langfuse-migrations",
   "rokaf-identity-rbac-and-policy",
   "rokaf-networking-and-tls",
-  "rokaf-gpu-scheduling-and-capacity"
+  "rokaf-gpu-scheduling-and-capacity",
+  "rokaf-async-workers-and-idempotency"
+];
+const investigationOrder = [
+  "rokaf-langfuse-v4-migration-field-notes",
+  "rokaf-dns-vip-open-investigations",
+  "rokaf-gpu-discovery-open-investigation",
+  "rokaf-control-plane-incident-log"
 ];
 const trainingOrder = [
   "kdt-linux-system-kernel-expert-course",
   "kdt-posix-system-programming",
   "kdt-kernel-tracing-vfs-memory",
-  "kdt-embedded-linux-drivers"
+  "kdt-embedded-linux-drivers",
+  "kdt-crash-dump-analysis-progress",
+  "kdt-ebpf-observability-progress"
 ];
 const journal = projects
   .filter((p) => rokafOrder.includes(p.slug))
   .sort((a, b) => rokafOrder.indexOf(a.slug) - rokafOrder.indexOf(b.slug));
+const openInvestigations = projects
+  .filter((p) => investigationOrder.includes(p.slug))
+  .sort((a, b) => investigationOrder.indexOf(a.slug) - investigationOrder.indexOf(b.slug));
 const trainingRecords = projects
   .filter((p) => trainingOrder.includes(p.slug))
   .sort((a, b) => trainingOrder.indexOf(a.slug) - trainingOrder.indexOf(b.slug));
@@ -83,14 +95,21 @@ const highlights = [
   </section>
 
   <section class="border-t border-white/10 py-12 md:py-16">
-    <SectionHeader eyebrow="ROKAF · Engineering journal" title="Systems engineering records" description="Six focused accounts of actual platform design, operations, and troubleshooting. The main K3s project above is the overview." />
+    <SectionHeader eyebrow="ROKAF · Engineering journal" title="Systems engineering records" description="Seven detailed accounts of the engineering choices, failed assumptions and reliability trade-offs behind the platform." />
     <div class="grid gap-4 md:grid-cols-2">
       {journal.map((project) => <ProjectCard project={project} />)}
     </div>
   </section>
 
   <section class="border-t border-white/10 py-12 md:py-16">
-    <SectionHeader eyebrow="K-Digital Training · 2023–2024" title="Linux systems foundations" description="A course overview and three topic records, grounded in the original syllabus and archived study notes. These are training records, not claimed original research projects." />
+    <SectionHeader eyebrow="Ongoing investigations" title="Field notes & open questions" description="Progress records from real troubleshooting, including issues whose final root cause or full verification remained open." />
+    <div class="grid gap-4 md:grid-cols-2">
+      {openInvestigations.map((project) => <ProjectCard project={project} />)}
+    </div>
+  </section>
+
+  <section class="border-t border-white/10 py-12 md:py-16">
+    <SectionHeader eyebrow="K-Digital Training · 2023–2024" title="Linux systems foundations" description="My learning journey from C++ and POSIX through Linux internals, drivers, storage and system tracing." />
     <div class="grid gap-4 md:grid-cols-2">
       {trainingRecords.map((project) => <ProjectCard project={project} />)}
     </div>

@@ -1,0 +1,66 @@
+---
+title: "Control-Plane Incidents: etcd, Disk State and the Limits of a Quick Fix"
+description: "A field journal of control-plane instability, read-only disk symptoms and the distinction between restoration and verified root-cause analysis."
+date: "2026-11-15"
+draft: false
+reviewed: true
+sensitivity: sanitized
+category: "Engineering Investigation"
+area: "Control Plane & Reliability"
+tags: ["K3s", "etcd", "Disk I/O", "CoreDNS", "Recovery"]
+type: "troubleshooting"
+role: "ROKAF infrastructure engineering and operational analysis"
+period: "Jul 2025–Present"
+status: "building"
+techStack: ["K3s", "etcd", "Disk I/O", "CoreDNS", "Recovery"]
+---
+
+An infrastructure incident is easiest to describe after it has been solved. But the events that taught me the most were often the ones in which **service was restored before I could fully explain what initiated the failure**. I want to keep that distinction in this notebook.
+
+I worked on K3s control-plane incidents involving **etcd corruption or instability, disk read-only behavior, and cluster availability**. These symptoms occurred at different layers; they should not be compressed into a single claim that all had one root cause.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/control-plane-incident-evidence.svg" target="_blank" rel="noopener noreferrer" aria-label="Open diagram full size">
+    <img src="/figures/journals/control-plane-incident-evidence.svg" alt="Control-plane recovery is analyzed through disk I/O health, etcd consistency, API-server behavior, kubelet state and application readiness." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Control-plane recovery is analyzed through disk I/O health, etcd consistency, API-server behavior, kubelet state and application readiness. Abstract engineering view rather than a description of internal systems.</figcaption>
+</figure>
+
+## The frustrating symptom: components fail together
+
+A control-plane problem can surface as an unresponsive API, delayed scheduling, unhealthy controllers and unrelated application errors. When multiple services appear broken, it is tempting to restart several components. I learned that doing so can make it harder to tell **which component failed first**.
+
+The first question should be temporal: what changed before the API became unavailable? Was it an etcd process failure, a storage write problem, a node connectivity issue, or a downstream component reacting to an unavailable API?
+
+## What I separated during investigation
+
+| Observation | Possible interpretation | Evidence I would need |
+| --- | --- | --- |
+| etcd fails a health check | A member is unavailable or unable to participate | Member status and local process/disk observations |
+| Node disk becomes read-only | Host filesystem or device behavior changed | Kernel/I/O messages and filesystem/device health |
+| API server is unreachable | Control plane or network path is impaired | Independent component and transport checks |
+| Pods are not being replaced | Controller/scheduler unable to act | Control-plane state, not merely Pod events |
+| DNS names stop resolving | CoreDNS or an upstream dependency is affected | DNS-specific observation and Pod/network health |
+
+**Read-only disk** is particularly important because it can be both a cause of other failures and a symptom of a deeper host filesystem/device condition. Restarting a database or K3s service without understanding the disk state risks making matters worse.
+
+## Restoring availability versus proving a root cause
+
+Some operational actions restored usable service, but I did not always preserve enough evidence to demonstrate precisely why the original state occurred. I now consider these distinct milestones:
+
+1. **Containment:** prevent new state changes or repeated failures where possible.
+2. **Recovery:** restore a service using a supported, verified path.
+3. **Consistency checks:** verify that the recovered state is meaningful and safe for dependent applications.
+4. **Root-cause evidence:** explain the initiating mechanism, or document what still cannot be proven.
+
+I would not count a working dashboard after restart as proof that a disk-level fault was fixed.
+
+## What remains open
+
+I have records of **etcd instability/corruption and read-only behavior** and the fact that I investigated and restored availability in some incidents. What I do not have in this public record is a safely shareable, time-correlated host-I/O and member-state trace that proves one unifying cause.
+
+The investigation points me toward the kernel's storage path: filesystem remount behavior, write errors, durable metadata and the way databases respond to delayed or failed storage operations.
+
+This is one of the clearest connections between my operational background and the OS/storage work I want to study.
+
+[Stateful recovery record](/projects/rokaf-stateful-storage-and-recovery/) · [ROKAF overview](/projects/independent-on-premises-k3s-platform-engineering/).

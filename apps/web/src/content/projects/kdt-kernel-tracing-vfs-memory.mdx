@@ -1,6 +1,6 @@
 ---
-title: "Kernel Tracing, Virtual Memory and File-System Foundations"
-description: "How the KDT course connected scheduler traces, page tables, VFS and storage semantics to practical Linux debugging."
+title: "Following the Kernel: Scheduler Traces, Memory and VFS"
+description: "What I learned using ftrace/KernelShark and studying runqueues, page faults, virtual memory, VFS and filesystem consistency."
 date: "2026-11-15"
 draft: false
 reviewed: true
@@ -15,39 +15,81 @@ status: "archived"
 techStack: ["Linux Kernel", "ftrace", "KernelShark", "Memory", "VFS", "EXT4"]
 ---
 
-> **KDT learning record.** This page summarizes subjects covered in the documented training sessions and what I took away from them. It does not claim independent kernel patch submissions, a completed debugger implementation, or a specific trace measurement that I cannot verify.
+One of the moments I remember from learning Linux internals was moving from a **static explanation of scheduling** to looking at an **event timeline**. A diagram can show how a process changes state; a trace gives that transition a timestamp and context.
 
-## Connecting symptoms to kernel subsystems
+During KDT I used **ftrace and KernelShark** to observe kernel events and think about process execution over time. The exact event options I selected at the time are not the important part of this record; the lesson was learning how a trace becomes evidence for a specific question about the kernel.
 
-System bugs often appear at the top of the stack: a slow request, a blocked thread, a stalled write. The course introduced tools and kernel abstractions for finding which subsystem may be involved.
+<figure className="project-concept-figure">
+  <a href="/figures/journals/kdt-kernel-observation.svg" target="_blank" rel="noopener noreferrer" aria-label="Open system diagram">
+    <img src="/figures/journals/kdt-kernel-observation.svg" alt="A kernel-observation workflow connects a user-visible symptom to scheduler events, process state, memory and filesystem call paths." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>A kernel-observation workflow connects a user-visible symptom to scheduler events, process state, memory and filesystem call paths. A learning diagram, not an actual trace capture or production system screenshot.</figcaption>
+</figure>
 
-| Area | Core ideas from the material |
+## 1. Start with the scheduler, not with an intuition
+
+When an application appears stuck, it is easy to say that it is “not getting CPU.” But a sleeping thread may be intentionally waiting on I/O, a lock or a timer. A runnable thread might be waiting in a runqueue; a running thread might frequently be preempted.
+
+The scheduler portion of the course covered process states, scheduling classes, **CFS**, real-time policies, runqueues, context switching, multicore load balancing and preemption. I tried to connect these concepts to the events visible in a timeline rather than treating them as independent definitions.
+
+| Observation | Question I learned to ask |
 | --- | --- |
-| Scheduling | Process states, runqueues, scheduling classes, preemption and multicore behavior |
-| Interrupts | IRQ and exception entry, interrupt context and deferred work |
-| Virtual memory | VMA, address translation, page tables, page faults, allocator behavior |
-| File systems | VFS objects (inode/dentry/superblock), file access paths, page cache |
-| Storage | EXT2 examples, EXT4 journaling concepts, flash/FTL and F2FS motivations |
-| Debugging | ftrace, KernelShark, GDB, Trace32, crash utility and vmcore concepts |
+| Context switch | Which task stopped running and why? |
+| Wake-up | What made the task runnable, and when was it scheduled? |
+| Long wait | Was the task sleeping or runnable but delayed? |
+| Multiple CPUs | Was load distribution or synchronization affecting progress? |
+| Frequent switching | Was the switching useful, or overhead caused by contention? |
 
-## A trace is evidence, not the explanation itself
+A timeline does not directly reveal a root cause. For example, an observed delay between wake-up and execution could reflect many factors; I still need the workload and relevant surrounding events to interpret it.
 
-The course used **ftrace** and related visual/debugging tools to inspect kernel execution. Trace data can tell an investigator which events happened and when; by itself it does not establish why the scheduler made a decision or why a device blocked.
+## 2. Interrupts and execution context
 
-I learned to combine three perspectives: an **observed symptom**, the relevant **kernel data structures and call paths**, and a **testable hypothesis**. This remains important when diagnosing storage or networking incidents at the infrastructure layer.
+The ARM/Linux material introduced exception handling, IRQ entry/exit, timers, deferred work and the rules that differ among **process context**, **interrupt context** and **workqueues**.
 
-## Virtual memory and page-cache behavior
+This answered a question I had from embedded programming: why can't a driver simply do any useful work inside an interrupt handler? The kernel must prioritize bounded, non-blocking work in the appropriate context, and often defer more expensive operations.
 
-The training covered virtual-to-physical translation, page faults, allocator concepts and file-backed memory. The practical insight was that application memory use, page cache, kernel allocations and physical storage I/O are related but separate accounting layers.
+Understanding these boundaries also makes traces easier to read. A long callback is not necessarily scheduled like an ordinary userspace thread; execution context changes what behavior is legal.
 
-## VFS and storage mechanisms
+## 3. Virtual memory: the address is not the page
 
-VFS makes different filesystem implementations accessible through shared interfaces, while metadata and persistence mechanisms depend on the filesystem and device. The course discussed EXT2 structures, EXT4 journaling, flash characteristics and F2FS design motivations.
+The memory-management part of KDT connected **VMA**, page tables, virtual-to-physical translation, demand paging, page faults and allocators.
 
-Those subjects later became especially relevant while working with replicated volumes and database recovery: **a storage API may report a success condition without explaining persistence, ordering or failure semantics underneath**.
+The progression I found most useful was:
 
-## What I did not claim
+1. A process reads or writes an address in its virtual space.
+2. The CPU uses translation structures to determine the physical destination.
+3. If the mapping is absent or protection disallows the access, control enters fault handling.
+4. The kernel may establish a valid mapping, load a file-backed page, or report an error.
+5. The process resumes or fails depending on the fault outcome.
 
-The original course documents describe many exercises, including kernel dumping, device drivers and performance diagnostics. They do not establish that I personally completed every proposed exercise or retained its test output. My verified public record therefore describes this as **training and conceptual learning**, not as a standalone implemented OS research project.
+This explains why an application can have a large virtual address range without every page being resident in RAM. It also explains why a program's resident size, mapped files, kernel allocations and page cache cannot be treated as identical quantities.
 
-[Back to the full KDT training record](/projects/kdt-linux-system-kernel-expert-course/).
+## 4. VFS: the `open()` path hides several layers
+
+The file-system lectures covered **VFS**, `inode`, `dentry`, `superblock`, file operations, EXT-family structures, page cache, consistency, journaling, flash translation layers and F2FS.
+
+I started thinking of a file operation as a journey through interfaces: pathname resolution, VFS objects, a concrete filesystem implementation, caches and writeback, block I/O and the device. Each layer has its own performance and failure behavior.
+
+The important contrast is **logical success versus physical persistence**. A successful return from a buffered write is not automatically proof of durable media state. Journaling can protect filesystem metadata consistency, but it does not give every application transaction exactly the semantics it wants.
+
+## 5. Tracing, dump analysis and performance tools answer different questions
+
+We studied debugging with ftrace/KernelShark, GDB, Trace32, crash utilities, kernel dumps, PMU and related monitoring concepts. I learned to associate each with the kind of evidence it can provide:
+
+| Evidence | Best use |
+| --- | --- |
+| ftrace / KernelShark | Time-ordered kernel events around observable behavior |
+| `perf` / PMU | Where CPU time or microarchitectural events accumulate |
+| `/proc` and process views | Live state and resource accounting |
+| vmcore / crash tools | A snapshot of kernel state after a failure |
+| Application logs | Domain-level events and errors |
+
+I would not use one tool as a substitute for all the others. A crash dump preserves a state snapshot; it cannot reconstruct every preceding scheduling decision without additional evidence.
+
+## 6. The question that stayed with me
+
+Later, while operating replicated volumes and stateful services, I often fixed the immediate symptom without being able to explain the kernel/filesystem behavior beneath it. The KDT study made that limitation visible to me.
+
+I want to go back to these mechanisms with **small, reproducible tracing experiments**—particularly VFS-to-block I/O latency, page-cache effects and scheduler wake-up delays—and measure rather than guess.
+
+[Linux Systems & Kernel Expert Course overview](/projects/kdt-linux-system-kernel-expert-course/) · [study repository](https://github.com/Petooooo/systems-notes).
