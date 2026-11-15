@@ -9,13 +9,19 @@ category: "Computer Engineering"
 area: "Hardware Acceleration"
 tags: ["Zynq", "FPGA", "CNN", "Quantization", "Systolic Array", "Embedded Inference"]
 type: "implementation-note"
-role: "Team project: PS-side development, model training, mobile app and communication server"
+role: "Lead HW/SW architecture and integration; PS software, PL design, systolic arrays, model training"
 period: "Sep–Dec 2024"
 status: "archived"
 techStack: ["Verilog", "C", "Python", "JavaScript", "Zynq FPGA", "AXI4-Lite"]
 ---
 
-> **Project context:** 2024 electronic-engineering graduation team project at Kyung Hee University. This write-up draws from our final poster, *Bit-Shift-Based CNN Accelerator: A Compact and Energy-Efficient Solution*, and my submitted project/CV summary. The poster documents the team architecture and evaluations; my recorded responsibilities were **PS-side development, CNN model training, a mobile application, and a communication server**. I do not attribute every RTL or PL block to my individual work.
+> **Project context:** 2024 electronic-engineering graduation team project at Kyung Hee University. This write-up draws from our final poster, *Bit-Shift-Based CNN Accelerator: A Compact and Energy-Efficient Solution*, and my submitted project/CV summary. The poster documents our team architecture and evaluations. My detailed OSL-oriented CV records that I developed **all PS software**, led **overall PL architecture and timing**, had primary responsibility for the **systolic-array accelerator and WS/IS dataflow**, **co-designed the BRAM data path**, independently trained the quantized CNN, and implemented both multiplier- and shift-based matrix multiplication accelerators. The mobile app and communication server were also recorded in my project portfolio. This was still a team project, with the BRAM work explicitly shared.
+
+<div className="grid gap-4 border-y border-white/10 py-5 sm:grid-cols-3">
+  <div><p className="text-2xl font-semibold text-white">−36.5%</p><p className="mt-1 text-xs text-slate-400">FPGA LUT utilization</p></div>
+  <div><p className="text-2xl font-semibold text-white">8.83 ms</p><p className="mt-1 text-xs text-slate-400">PS+PL inference · 15.9 ms PS only</p></div>
+  <div><p className="text-2xl font-semibold text-white">96.7%</p><p className="mt-1 text-xs text-slate-400">Top-1 accuracy · 97.3% baseline</p></div>
+</div>
 
 ## Motivation: CNN multiplication is expensive in small FPGA designs
 
@@ -54,6 +60,13 @@ Training / model preparation
 
 The project used a **Zynq processing system (PS) + programmable logic (PL)** design.
 
+<figure>
+  <a href="/figures/cnn-zynq-pipeline.svg" target="_blank" rel="noopener noreferrer">
+    <img src="/figures/cnn-zynq-pipeline.svg" alt="Redrawn Zynq HW/SW design: model quantization, PS-side IM2COL, ReLU and max pooling, AXI4-Lite interface, PL BRAM controller, and shift-based systolic PE array." loading="lazy" />
+  </a>
+  <figcaption>Figure 1. A readable reconstruction of the original graduation poster's system architecture. It retains the component responsibilities but does not reproduce internal timings or source code.</figcaption>
+</figure>
+
 The system diagram assigns several supporting CNN operations to software on the **PS**, including **IM2COL**, **ReLU**, and **max pooling**. A memory/interconnect path links that software work to the PL accelerator. The poster labels the PS/PL interfaces **AXI4-Lite**.
 
 On the **PL**, the documented modules are:
@@ -88,6 +101,20 @@ The poster's architecture figure shows **16 input BRAM banks and 16 output BRAM 
 
 This division matters because accelerating a CNN involves more than replacing the multiplier. The PS still has to arrange convolution inputs and handle other layers; the PL must be fed and controlled efficiently enough for the accelerator to help overall execution time.
 
+## Training-to-inference pipeline
+
+```mermaid
+flowchart LR
+  Train["Full-precision CNN training"] --> Quant["INQ + STE / power-of-two weights"]
+  Quant --> Prep["PS software: IM2COL and control"]
+  Prep --> Transfer["PS/PL data transfer"]
+  Transfer --> PE["PL: shift-based systolic PE array"]
+  PE --> Return["PS: post-processing and result"]
+
+  classDef stage fill:#183846,stroke:#69c7dc,color:#ecfbff
+  class Train,Quant,Prep,Transfer,PE,Return stage
+```
+
 ## 3. Arrange convolution as a dataflow problem
 
 The poster includes an **IM2COL** illustration: convolution input patches and filters are reshaped into a form suitable for regular dot products and parallel matrix-style processing.
@@ -108,13 +135,21 @@ Quantized weight -----+        |
 
 A datapath optimized for shifts is useful only when paired with a memory and scheduling structure that supplies the right activation values, quantized weights, and partial sums. The controller, BRAM organization, and PS-side transformations therefore belong to the **architecture**, not merely to its supporting code.
 
-## 4. My scope within the team
+## 4. What I implemented and led
 
-The submitted CV records my individual scope as **full PS-side development, CNN model training, mobile-app development, and communication-server development**.
+The poster is a team-level artifact, but my more detailed project CV gives a clearer picture of the scope I personally covered:
 
-In practical terms, that connects the model preparation and software side of the project to a PL accelerator built as part of a team. The graduation poster documents the overall PS/PL design and hardware results, but it does **not** specify which individual wrote each hardware module, how the mobile/server protocol was implemented, or the exact source-level implementation of every software operation.
+| Area | My contribution |
+| --- | --- |
+| **PS software** | Developed the complete software side, including CNN pre/post-processing, accelerator control, data transfer, and PS–PL integration. |
+| **PL architecture** | Designed the overall programmable-logic architecture and timing, taking primary responsibility for the systolic-array accelerator. |
+| **Dataflow** | Designed weight-stationary (WS) and input-stationary (IS) processing approaches. |
+| **BRAM data path** | **Co-designed** memory/control paths used to connect the accelerator and PS. This part was shared team work. |
+| **Model training** | Independently trained power-of-two-quantized CNN variants using INQ and STE. |
+| **Hardware comparison** | Implemented multiplier-based and shift-based matrix-multiplication accelerators with matching systolic-array dimensions for the resource comparison. |
+| **Supporting applications** | Developed the mobile app and communication server recorded in my original project portfolio. |
 
-I therefore separate **team-level architecture/results** from **my recorded responsibilities**, rather than presenting the complete FPGA RTL implementation as solo work.
+This was a **team capstone**, not an individual project, but my contribution extended across model preparation, PS software, PL datapath architecture, and system integration. The original poster does not enumerate every individual's commit or provide a public source tree for all modules, so these responsibility statements come from the detailed CV rather than being independently inferred from the figures.
 
 ## 5. Evaluation: hardware resources, accuracy and runtime
 

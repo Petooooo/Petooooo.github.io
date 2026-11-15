@@ -9,13 +9,19 @@ category: "Embedded Systems"
 area: "Memory Management"
 tags: ["TensorFlow Lite Micro", "TinyML", "Memory Planning", "C++", "Embedded Systems"]
 type: "implementation-note"
-role: "Individual undergraduate project; memory planner design and implementation"
+role: "Planner analysis, conflict-aware C++ allocation, TFLM integration and evaluation"
 period: "Sep–Dec 2024"
 status: "archived"
 techStack: ["C++", "TensorFlow Lite Micro", "Greedy Memory Planner", "Tensor Lifetime Analysis"]
 ---
 
 > **Project context:** Undergraduate work at Kyung Hee University, completed in 2024. This write-up reconstructs the design and evaluations from my original eight-page project report, *Memory Management through Lifecycle Analysis in TFLite Micro for Resource-Constrained Devices*. It describes what the report establishes, as well as what remained to be verified.
+
+<div className="grid gap-4 border-y border-white/10 py-5 sm:grid-cols-3">
+  <div><p className="text-2xl font-semibold text-white">28.33%</p><p className="mt-1 text-xs text-slate-400">Person Detect · peak memory saved</p></div>
+  <div><p className="text-2xl font-semibold text-white">14.06%</p><p className="mt-1 text-xs text-slate-400">Tiny U-Net · peak memory saved</p></div>
+  <div><p className="text-2xl font-semibold text-white">C++ / TFLM</p><p className="mt-1 text-xs text-slate-400">Planner design, integration, evaluation</p></div>
+</div>
 
 ## Problem: tensor buffers still occupy memory after some of their data is no longer needed
 
@@ -55,6 +61,13 @@ Output tensor B:
 [ may be placed in an allowed overlap region ]
 ```
 
+<figure>
+  <a href="/figures/tflm-lifecycle-reuse.svg" target="_blank" rel="noopener noreferrer">
+    <img src="/figures/tflm-lifecycle-reuse.svg" alt="Input tensor A divided into consumed and still-required bytes, with output B placed only inside the safe-to-reuse region." loading="lazy" />
+  </a>
+  <figcaption>Figure 1. The allowable-overlap concept, redrawn for readability from the submitted capstone report's input/output conflict diagrams. Select to view larger.</figcaption>
+</figure>
+
 This is **not a claim that every convolution can overwrite its input**. The legal overlap is operator- and execution-order-dependent. The allocator is only allowed to reuse a region if the supplied Conflict Data says that placement is safe.
 
 ## Step 1: decide placement order using a conflict graph
@@ -64,6 +77,13 @@ The project kept the greedy planner's overall placement framework but divided te
 **Buffers without Conflict Data** are considered first, ordered by size from largest to smallest. This retains the baseline heuristic for buffers that cannot use the special overlap rule.
 
 **Buffers with Conflict Data** are ordered using a reverse, output-to-input graph traversal. For example, given relations `A → B`, `B → C`, `C → E`, and `D → E`, the terminal output `E` becomes the traversal root. A breadth-first traversal (BFS) places outputs before their inputs; when candidates have the same depth, larger buffers take priority.
+
+<figure>
+  <a href="/figures/tflm-conflict-bfs.svg" target="_blank" rel="noopener noreferrer">
+    <img src="/figures/tflm-conflict-bfs.svg" alt="Conflict-free buffers sorted by size and conflict-connected buffers allocated using reverse BFS, starting with output E." loading="lazy" />
+  </a>
+  <figcaption>Figure 2. Output-first, BFS-based buffer ordering, redrawn from the report's conflict graph; this is an allocation heuristic, not a proof of optimality.</figcaption>
+</figure>
 
 Why reverse the order? The planner searches from low memory offsets. If the output is already near the beginning of the arena, the subsequent input can be positioned relative to that output while respecting its allowed-overlap boundary.
 
@@ -94,7 +114,22 @@ I initially tested the algorithm on a manually constructed buffer set, comparing
 
 I then adapted the planner and interpreter initialization so that a caller could provide an **array of Conflict Data and its count**. This allowed the planner to use supplied tensor relationships when constructing a layout for a TFLM model, without requiring each caller to hard-code offset calculations.
 
-Importantly, the reported experiments **manually calculated and supplied Conflict Data**. Generating that information automatically through compiler profiling was discussed as a possible route, not demonstrated as a completed automatic analysis pipeline.
+Importantly, the reported experiments used **manually calculated Conflict Data**, with that manual data preparation carried out by another team member. My primary work was analyzing the original planner, designing and implementing the conflict-aware ordering/placement logic in C++, integrating the modified planner into TFLM, and evaluating its peak-memory usage. Generating Conflict Data automatically through compiler profiling was a potential future extension, not a completed automatic pipeline.
+
+## End-to-end planner workflow
+
+```mermaid
+flowchart LR
+  Lifetimes["Tensor sizes and lifetimes"] --> Baseline["Baseline Greedy Planner analysis"]
+  Conflict["Manually prepared input/output Conflict Data"] --> Sort["Non-conflict size sort + conflict BFS"]
+  Baseline --> Sort
+  Sort --> Candidate["Conflict-aware candidate offsets"]
+  Candidate --> Integration["TFLM interpreter / planner integration"]
+  Integration --> Evaluate["Person Detect and Tiny U-Net evaluation"]
+
+  classDef step fill:#183546,stroke:#75cde4,color:#ecfaff
+  class Lifetimes,Baseline,Conflict,Sort,Candidate,Integration,Evaluate step
+```
 
 ## Evaluation
 
