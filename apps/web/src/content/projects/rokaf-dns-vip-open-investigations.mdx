@@ -46,6 +46,53 @@ Restarting a load balancer or DNS Pod can temporarily change timing and appear t
 
 I preferred to investigate the request path in stages: resolve name, reach target, negotiate transport, select Service endpoints, then test application readiness. Each step narrows the next one without requiring the public disclosure of internal addresses.
 
+## Request-path analysis: the same error can come from different layers
+
+The hardest part of intermittent connectivity was that clients typically reported a single outcome—timeout, connection failure or an application error—while the underlying request passed through several independently failing systems.
+
+A better way to analyze it is to **follow one request from the client's perspective**, recording what was established at each boundary.
+
+| Boundary | What I would capture | What it rules out |
+| --- | --- | --- |
+| Name resolution | Resolver answer, elapsed time, TTL | Incorrect or unstable name-to-address mapping |
+| Reachability | Destination and basic transport result | Path or VIP that cannot be reached |
+| TLS | Handshake result and certificate identity | CA/trust and endpoint-name mismatches |
+| Ingress routing | Selected router/entry point | Incorrect route matching |
+| Service/EndpointSlice | Whether ready destinations exist | Backend selection or readiness mistakes |
+| Application | Representative response and dependency health | A service process that starts but cannot do useful work |
+
+These are different levels of proof. A successful DNS lookup does not establish that the advertised VIP is reachable. A completed TLS handshake does not establish that Traefik selected the intended backend. A running Pod does not establish that the service endpoint is ready.
+
+### Why timestamps matter
+
+Suppose a client fails at 14:00:03, the DNS Pod restarts at 14:00:05, and a MetalLB speaker event appears at 14:00:06. Those events may be related, but **their order alone is insufficient to prove cause**. The client might have cached a resolution result before the DNS restart. Likewise, advertisement activity could be unrelated to the request path.
+
+A sound investigation needs synchronized timestamps, a consistent client vantage point and enough repeated observations to distinguish coincidence from a repeated mechanism. This is what was missing from my publicly preserved evidence.
+
+## DNS redundancy and VIP stability are different reliability questions
+
+A second resolver instance may improve resilience to the failure of one resolver Pod, but only if the replicas are placed and reached in a way that actually avoids the relevant failure domain. It does not fix a broken upstream resolver or a node-level network path.
+
+Similarly, a VIP gives clients a stable *logical destination*. That is not equivalent to permanent reachability. In layer-2 advertisement modes, the network must deliver traffic to the current advertiser. In other modes, the routing fabric has a different role. The appropriate evidence depends on the selected mode, so I did not publish a blanket diagnosis of MetalLB flapping.
+
+## How I would separate recovery from cause
+
+An operational restart can be a reasonable containment step when service continuity matters. However, it changes internal state and may destroy transient evidence. I now distinguish:
+
+1. **Immediate service condition:** Can a representative client complete a request?
+2. **Last known healthy state:** Which source of truth changed first?
+3. **Intervention:** What configuration or process state was changed?
+4. **Post-intervention check:** Did the request succeed from more than one vantage point?
+5. **Root-cause statement:** Is there independent evidence linking the intervention to the original failure mechanism?
+
+A working endpoint after a restart supports the fourth statement, **not necessarily the fifth**.
+
+## A safe reproduction plan
+
+For future work, a small local test cluster could generate repeat requests while recording resolver latency, endpoint readiness and advertisement events. The setup would use synthetic names and addresses, not information about the operational environment. Its purpose would be to test whether one candidate failure can reproduce the user-visible symptom, not to claim that an old incident had the same cause.
+
+This is exactly the kind of incomplete investigation I want to preserve. It contains an observed problem and a narrowed question, without rewriting uncertainty into a successful incident report.
+
 ## Where the investigation stands
 
 **Confirmed:** these shared layers warrant separate health checks; some reachability behavior was inconsistent; DNS redundancy and VIP behavior deserved investigation.

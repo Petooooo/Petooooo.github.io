@@ -199,30 +199,93 @@ a {
   border-top: 1px solid var(--line);
 }
 
+/* Long technical tables need stable labels and enough column width.
+   Keep complete Korean phrases together; use horizontal scrolling on narrow screens
+   instead of forcing unreadable short fragments into tiny cells. */
 .prose-platform table {
   display: block;
   width: 100%;
+  max-width: 100%;
+  margin: 1.4rem 0 1.75rem;
   overflow-x: auto;
-  border-collapse: collapse;
-  font-size: 0.92rem;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+  border-collapse: separate;
+  border-spacing: 0;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.45) transparent;
+  font-size: 0.91rem;
+  line-height: 1.6;
 }
 
-.prose-platform th,
-.prose-platform td {
-  border: 1px solid var(--line);
-  padding: 0.65rem 0.75rem;
+.prose-platform table th,
+.prose-platform table td {
+  box-sizing: border-box;
+  min-width: 10.5rem;
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  padding: 0.75rem 0.9rem;
   vertical-align: top;
-}
-
-.prose-platform th {
-  background: rgba(255, 255, 255, 0.055);
-  color: #ffffff;
-  font-weight: 650;
   text-align: left;
+  word-break: keep-all;
+  overflow-wrap: normal;
+  hyphens: manual;
 }
 
-.prose-platform td {
+.prose-platform table tr > :first-child {
+  min-width: 12.5rem;
+  border-left: 1px solid var(--line);
+}
+
+.prose-platform table tr > :not(:first-child) {
+  min-width: 14rem;
+}
+
+.prose-platform table tr:first-child > * {
+  border-top: 1px solid var(--line);
+}
+
+.prose-platform table th {
+  white-space: nowrap;
+  background: #171c24;
+  color: #f6f9ff;
+  font-weight: 650;
+}
+
+.prose-platform table td:first-child {
+  white-space: nowrap;
+  font-weight: 540;
+  color: #ecf4ff;
+}
+
+.prose-platform table td:not(:first-child) {
+  overflow-wrap: break-word;
   background: rgba(255, 255, 255, 0.018);
+}
+
+.prose-platform table tr:nth-child(even) td {
+  background: rgba(255, 255, 255, 0.037);
+}
+
+.prose-platform table code {
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .prose-platform table {
+    font-size: 0.86rem;
+    margin-inline: -0.25rem;
+    padding-bottom: 0.35rem;
+  }
+
+  .prose-platform table th,
+  .prose-platform table td {
+    padding: 0.7rem 0.8rem;
+  }
+
+  .prose-platform table tr > :first-child {
+    min-width: 11.5rem;
+  }
 }
 
 .prose-platform img {

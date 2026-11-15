@@ -59,6 +59,59 @@ During the later v4 phase I encountered a **JSON/date handling error** in a migr
 
 A failure here does not mean that earlier ClickHouse replica or storage work is irrelevant. It means that the migration pipeline has crossed into another independent failure mode.
 
+## A migration can have multiple, conflicting status reports
+
+One lesson from the Step 2 investigation was that **four different kinds of truth** coexist during a background migration.
+
+| Source | What it says | What it cannot prove alone |
+| --- | --- | --- |
+| HTTP response or UI badge | Whether the caller received a timely response | Whether the background worker completed |
+| Persistent progress table | Which phases and chunks have recorded progress | Whether every destination row is usable |
+| Analytics/storage health | Whether ClickHouse/Keeper and volumes can accept work | Whether migration code interpreted every row correctly |
+| Functional application test | Whether the current application can read/write | Whether every old historical edge case was exercised |
+
+These sources may disagree temporarily. For Step 2 I observed the caller-facing timeout while the persisted progress record showed completed state, **nine completed chunks and zero failed chunks**. The correct next action was to investigate the consistency of those reports, not automatically repeat every chunk.
+
+### A timeout is not a rollback
+
+A client may stop waiting while a database query or worker continues. That possibility is why durable migration state matters. In some applications a job lease or heartbeat would distinguish an active worker from an abandoned attempt; in others the background migration state machine is the more reliable source.
+
+I did not assume that the exact row counts alone proved success. The decision still needed follow-on reads and writes.
+
+## Different failures need different remedies
+
+I tried to avoid lumping the upgrade's symptoms into one “migration problem.”
+
+| Symptom | Failure layer | Reason an unrelated fix would not help |
+| --- | --- | --- |
+| `Timeout error.` | Caller/worker timing | Replacing storage may not alter the timeout boundary |
+| Phase marked completed | Migration bookkeeping | Restarting from zero may duplicate completed work |
+| ClickHouse read-only | Replica/coordination state | Application image retry cannot elect a coordinator |
+| Insufficient destination space | Storage capacity | Re-running INSERT without headroom repeats failure |
+| JSON/date handling error | State parsing and migration code | Keeper health alone cannot repair type handling |
+
+This decomposition made the sequence easier to reason about. It is also why I avoided changing multiple stateful components at the same time when trying to establish a cause.
+
+## A controlled verification checklist
+
+Once the underlying services are healthy, I would verify the migration through independent milestones:
+
+1. The persisted migration phase matches the expected transition.
+2. No chunks remain failed or stuck in a running state.
+3. Replica/coordinator health allows consistent reads and writes.
+4. Destination storage has adequate free space.
+5. Representative historical traces/observations can be queried.
+6. A new trace/observation can be written and retrieved.
+7. Background tasks continue to make progress after the application restart.
+
+I have not published evidence that every one of these final checks passed for the complete v4 rollout. The case should therefore remain a **field note of verified intermediate states and unresolved final validation**, rather than an invented completion report.
+
+## Why this matters for storage research
+
+The migration combined application schema assumptions, coordination metadata and physical storage limits. A write-heavy data transformation can fail for reasons far below its SQL code. The distinction resembles a broader OS question: **what guarantees does each layer provide, and where must correctness be verified after interruption?**
+
+That question connects this operational record to my interest in crash consistency, persistent writes and filesystem recovery.
+
 ## What I know and what I still need to check
 
 **Confirmed from the recorded investigation:** the Step 2 mismatch between timeout and persisted phase/chunks; separate insufficient-space symptoms; ClickHouse/Keeper read-only/coordination problems; a later Step 6 JSON/date error.

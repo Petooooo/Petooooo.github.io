@@ -62,6 +62,66 @@ Not every difficult incident ended with a verified single root cause. Keeping th
 | [GPU discovery and labels](/projects/rokaf-gpu-discovery-open-investigation/) | Resource/label discovery did not behave as expected; full cause needed further evidence |
 | [Control-plane and disk incidents](/projects/rokaf-control-plane-incident-log/) | etcd and read-only disk symptoms required separating recovery from host-level root-cause proof |
 
+## From service-by-service operation to a platform
+
+My starting point was not a blank Kubernetes cluster designed from a reference architecture. It was the operational problem of supporting **multiple services and AI workloads in an environment where ordinary cloud and internet dependencies could not be assumed**.
+
+I gradually came to think about the platform as a set of **contracts between teams, runtimes and persistent services** rather than a collection of YAML files:
+
+| Platform concern | The contract I needed | Why it mattered |
+| --- | --- | --- |
+| Build and delivery | A reviewed source revision can become a repeatable internal image | Public dependency availability cannot be assumed |
+| Runtime | A workload runs only when prerequisites and resource constraints are satisfied | A healthy deployment object is not useful service |
+| Service networking | Names, ingress rules and TLS consistently reach the intended backend | One failed shared dependency can affect multiple apps |
+| Persistent storage | Data survives or recovers according to a defined failure model | Restarting a Pod does not restore lost or unavailable state |
+| Databases | Replicas, leadership and client routing agree | Multiple Pods alone do not produce a writable database |
+| Identity and access | Each actor has only the scope it needs | Cluster API permissions are distinct from application object permissions |
+| GPU capacity | Requested accelerators are discoverable and operationally usable | Scheduler success does not guarantee memory or latency |
+| Observability | Failures can be narrowed to an accountable layer | Restarts without evidence can hide unresolved causes |
+
+### What “independent ownership” meant in practice
+
+I took direct responsibility for the infrastructure's **design, initial deployment, service integration, operational troubleshooting and improvements**, while application functionality and many service-specific decisions belonged to other workstreams. Independent platform engineering did not mean I personally authored every application running on it.
+
+That boundary matters because it describes the actual engineering work: making a service **deployable, reachable, authorized, observable and recoverable**, not claiming credit for every software component hosted there.
+
+## Design tensions I had to revisit
+
+As the number of dependencies grew, several goals conflicted with each other.
+
+### Simplicity versus resilience
+
+A single replica and a simple deployment path can be easy to maintain. Introducing replicas, storage coordination and multiple ingress paths can improve fault tolerance, but only if the operator can explain **which failure is tolerated and how recovery is verified**.
+
+### Shared platform versus isolation
+
+A common cluster simplifies deployment and maintenance, yet it also creates shared failure domains for DNS, storage capacity, certificates and network exposure. I learned to ask which failures should be isolated and which dependencies must exist even during bootstrap.
+
+### Replication versus resource pressure
+
+Longhorn, application-level database replication and object storage can each protect a different kind of state. Replication also consumes disk space and repair bandwidth. When capacity runs low, a redundant system may have insufficient headroom to repair itself after losing a copy.
+
+### Utilization versus predictable latency
+
+GPU time-slicing and shared infrastructure can increase consolidation but complicate memory isolation, queueing and failure recovery. A resource being advertised by the scheduler does not prove that a model service has enough usable device memory.
+
+## How I would judge an operational change
+
+I found it helpful to ask four questions **before** deciding whether a change was a genuine improvement.
+
+1. **Does it remove the original failure mechanism?** A workaround may avoid a symptom without resolving it.
+2. **What new dependency does it add?** A helper service can become another availability requirement.
+3. **How will I know it worked?** A green Pod status is weaker evidence than a representative request and a correct persisted state.
+4. **Can I safely recover the platform itself?** A registry or database used by the control plane should not be the only source of the resources needed to recover it.
+
+These questions became especially important during large data migrations and stateful incidents. Their purpose is to preserve the reasoning behind the design, not to claim that every proposed safeguard was deployed or benchmarked.
+
+## The technical direction this experience revealed
+
+Operating the platform made me comfortable navigating the visible layers of Linux, Kubernetes, storage and networking. It also showed me the limits of treating those layers as black boxes. When a PVC became unavailable, a replica entered read-only state or a node experienced memory pressure, the most useful next question often lay **below the Kubernetes API**.
+
+That is why my next focus is Linux kernel internals, VFS and filesystems, persistent I/O, memory pressure and storage performance. The ROKAF project is the record of the system-level problems that made those topics concrete.
+
 ## The thread connecting those problems
 
 What appeared to be an application-level failure often depended on a deeper prerequisite:

@@ -66,7 +66,71 @@ Object storage required a different mindset from block storage. Applications may
 
 A lifecycle rule is not just housekeeping. Deleting objects early may save disk space but break replay or recovery assumptions; keeping everything indefinitely can exhaust capacity. The correct retention period depends on who owns the data and how long an application may still reference it.
 
-## 5. An incomplete failure analysis is still useful
+## 5. What “volume healthy” really needs to mean
+
+I learned to distinguish **Kubernetes's view of a PVC** from the application's use of data inside that volume. A bound claim states that storage has been provisioned or associated; it says nothing by itself about a recent disk error, a database's recovery log or the consistency of user-facing operations.
+
+The recovery sequence can include several separate points:
+
+1. Scheduler chooses a node that can run the workload.
+2. The storage subsystem determines whether the volume can be attached there.
+3. The relevant replicas and data path become usable.
+4. The filesystem can be mounted with the expected permissions and semantics.
+5. The database or application repairs or replays its own persisted state.
+6. A representative client read/write operation succeeds.
+
+An operator who checks only step 1 may report success long before the consumer has received service.
+
+### Replication overhead is also recovery overhead
+
+Suppose a storage system normally has several data copies. Losing one copy does not necessarily mean immediate user-visible downtime, but it can produce a **degraded redundancy window**. Rebuilding the missing copy requires disk capacity, read bandwidth, write bandwidth and time; during the rebuild, ordinary application I/O may compete with repair traffic.
+
+| Operating state | Question I would ask |
+| --- | --- |
+| All replicas healthy | Is the application meeting its latency and durability expectations? |
+| One replica unavailable | Can the workload still read/write, and what redundancy remains? |
+| Rebuild active | Is there enough free space and I/O bandwidth to finish repair? |
+| Rebuild delayed | Is the bottleneck disk space, failed node, scheduling or storage policy? |
+| Service recovered | Did the database/application complete its own recovery, too? |
+
+I avoid publishing numerical rebuild times because the actual hardware, failure domain and workload determine them.
+
+## 6. Choosing the layer that owns durability
+
+A database with built-in replication and a replicated block volume can appear “doubly protected.” That does not necessarily mean it has twice the reliability. Both layers may rebuild simultaneously, compete for bandwidth or react differently to a partial failure.
+
+The decision depends on which layer is responsible for:
+
+- Detecting failed replicas.
+- Selecting a writable copy or leader.
+- Preserving write ordering and consistency.
+- Repairing stale state.
+- Exposing readiness to the application.
+- Providing backup or point-in-time restoration.
+
+In my ClickHouse considerations, this led me to examine **application-managed replication on local storage** rather than mechanically putting every database on a network-replicated volume. This was a workload-specific design choice, not a universal rule for all databases.
+
+## 7. Durability, backup and object lifecycle are different contracts
+
+A replicated volume helps tolerate some hardware failures. It does **not** replace a backup that can recover from accidental deletion or logical corruption. Likewise, MinIO object replication and an S3 lifecycle policy address different concerns.
+
+| Mechanism | Primary purpose | What it does not automatically solve |
+| --- | --- | --- |
+| Block replica | Keep additional copies of current block state | Recovering an old version of accidentally deleted data |
+| Snapshot | Preserve a point-in-time view | Off-cluster disaster recovery without a protected destination |
+| Backup | Recover data after logical or infrastructure loss | Immediate online failover |
+| Object lifecycle | Bound storage retention and growth | Understanding whether deleted objects are still needed |
+| Database replication | Maintain application-aware copies | Unconditional correctness of arbitrary client retries |
+
+A retention period needs to reflect the application's reference lifecycle. Deleting objects after an apparently reasonable interval can break a delayed consumer or historical replay task.
+
+## 8. How I would investigate a read-only symptom
+
+The phrase “read-only volume” can mean a filesystem remount, a storage subsystem state, a database replica state or even an application-level permission issue. My first step would be to identify **which component emitted the error**, not to assume that every layer independently became read-only.
+
+Only then would I compare application logs, mount status, volume state, host I/O evidence and database replica information. A definitive postmortem would need a time-correlated trace; the original public record does not establish such a single root cause.
+
+## 9. An incomplete failure analysis is still useful
 
 I kept several cases in the form of symptoms, hypotheses and checks rather than forcing a neat root cause. For example, **read-only volume behavior** may result from more than one layer; repeated restarts could erase evidence without answering the question.
 

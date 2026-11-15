@@ -67,6 +67,68 @@ NodePort, hostPort and load-balancer Services change **which component owns the 
 
 The operational pain is that every extra path increases the number of things that can be misconfigured. The better design is the one whose **packet path and failure modes I can explain**, not necessarily the one with the shortest manifest.
 
+## 6. TLS negotiation happens before HTTP routing
+
+The distinction between the TLS handshake and HTTP routing became a useful mental model. A server may select a certificate based on the requested server name and the configured TLS entry point **before it sees the HTTP path**.
+
+Consequently:
+
+- A wrong certificate cannot always be corrected by editing an HTTP router rule.
+- A trusted certificate issuer and a matching certificate name are separate checks.
+- A browser, a container image builder and a container runtime can use different trust stores.
+- A successful connection to a VIP does not mean the correct ingress router is selected.
+
+This helped me avoid changing several unrelated layers at once.
+
+### SAN, issuer and name matching
+
+| Property | Question | Typical failure category |
+| --- | --- | --- |
+| Issuer/trust | Does the client trust the certificate chain? | Unknown certificate authority |
+| Subject alternative name | Does the certificate identify the requested host/IP? | Name mismatch |
+| TLS configuration | Does the entry point choose the intended certificate? | Default certificate selection |
+| HTTP routing | Does the path/host match the intended router? | Wrong service or route |
+| Backend readiness | Are there usable endpoints? | 502/503 or no response |
+
+These checks apply to internal service endpoints and private registries, but each client may maintain trust differently.
+
+## 7. Why Service, NodePort, hostPort and VIP are not interchangeable
+
+They can all participate in exposing a workload, yet they select different boundaries of responsibility.
+
+| Exposure method | What it exposes | Trade-off |
+| --- | --- | --- |
+| ClusterIP Service | Stable in-cluster destination | Usually not directly reachable from outside the cluster |
+| NodePort | Service through a port on nodes | Node reachability and port use |
+| hostPort | Pod port bound through a host networking mechanism | Placement constraints and host port conflicts |
+| LoadBalancer Service | Service entry point backed by a load-balancer implementation | External advertisement/routing must also work |
+| Traefik ingress | HTTP(S) routing, TLS termination, rules | Requires valid entry points and backend Services |
+
+For a constrained cluster the best choice was not necessarily the one with the shortest Kubernetes manifest. I wanted a request path whose ownership and failure conditions I could follow.
+
+## 8. A client-centered diagnostic sequence
+
+For a sanitized reproducible environment, I would collect a minimal matrix of observations:
+
+1. Resolve the name and record which address was returned.
+2. Test whether the selected destination accepts a connection.
+3. Inspect the certificate selected during TLS negotiation.
+4. Confirm the intended ingress router matches the request.
+5. Inspect the Service and its ready endpoints.
+6. Send a representative request to the application and verify its response.
+
+Changing the DNS record, the MetalLB advertisement, the ingress route and the application in a single attempt would make cause attribution almost impossible.
+
+### Availability and path symmetry
+
+The same URL can behave differently from two clients because they traverse different DNS caches, routers, firewalls or node paths. Comparing vantage points is useful, but it needs to be deliberate. A connection succeeding from one node cannot by itself rule out network asymmetry elsewhere.
+
+## 9. Failure-domain questions that remained
+
+I was particularly interested in whether CoreDNS redundancy and MetalLB behavior had become **shared failure domains** for otherwise unrelated services. Yet having one resolver Pod or seeing a VIP transition is not enough to conclude that either caused a specific outage.
+
+A future investigation would correlate client request timestamps with resolver and endpoint observations and would explicitly record when a hypothesis did not fit the evidence. That discipline matters more than claiming a neat root cause for every connectivity symptom.
+
 ## What I kept in my notebook
 
 I kept unresolved questions about VIP behavior and DNS as open investigations instead of writing a misleading “fixed MetalLB” headline. The things I could verify were which layer was behaving differently and which hypotheses were still plausible.

@@ -57,13 +57,64 @@ My migration path included an earlier v3 upgrade before the v4 transition. The i
 4. **Capacity** — is there sufficient storage headroom for insert/rewrite work?
 5. **Functional checks** — can the application actually read and write the expected data?
 
-## 4. When a migration said “Timeout error”
+## 4. A better definition of database availability
+
+Operating replicated databases taught me that **redundancy is a property of the whole service path**, not just the count of database Pods.
+
+A useful checklist separates:
+
+1. **Process health** — are individual server processes alive?
+2. **Coordination** — can the cluster select or recognize the node that should accept writes?
+3. **Replica state** — are replicas synchronized enough for the intended read/write policy?
+4. **Routing** — do clients reach a backend with the correct role?
+5. **Persistence** — is state durably stored and recoverable after a failure?
+6. **Application compatibility** — can the current application use the schema and data version?
+7. **Client-visible behavior** — do representative reads and writes succeed?
+
+For example, Pgpool can keep its endpoint alive while the PostgreSQL backend does not accept the desired operation. MongoDB members can exist without satisfying the conditions for a writable primary. A ClickHouse replica may be alive but restricted by coordinator state.
+
+### Distinguishing leader, primary and writer
+
+| System | Relevant concept | What needs verification |
+| --- | --- | --- |
+| MongoDB | Replica-set primary and election | Does the client target a writable primary and receive expected acknowledgements? |
+| PostgreSQL / Pgpool | Primary/standby and pooler routing | Which endpoint accepts writes, and what happens on failover? |
+| ClickHouse / Keeper | Replicated table state and coordination | Is the replica writable and does the coordination metadata agree? |
+| Langfuse | Schema and background data migration | Are records transformed, and can current code read/write them? |
+
+The important lesson was to identify **which component is authoritative for each state** before deciding whether to retry, restart or restore.
+
+## Migration capacity and idempotency
+
+A data migration is often a new workload that runs alongside the service. It may read historical rows, allocate buffers, write replacement tables, rebuild materialized views and retain old data until cutover.
+
+I therefore think about storage headroom as a **functional precondition** of a migration rather than an afterthought. An `NOT_ENOUGH_SPACE`-style error is different from a SQL incompatibility: retrying it before changing the capacity condition can simply repeat the failure.
+
+A migration is also exposed to retries. If a worker processes part of a batch and the caller times out, restarting all of the work blindly risks duplicate effects or conflicting states unless the migration's own bookkeeping supports it.
+
+| Migration checkpoint | Evidence | Risk of a naive retry |
+| --- | --- | --- |
+| Stage requested | UI/caller state | Request may not reflect background progress |
+| Chunk started | Persisted job record | Another worker may still own it |
+| Chunk completed | Durable progress counter/state | Work may already have produced its output |
+| Data transformed | Destination schema/rows | Chunk accounting may not verify every record |
+| Application check | Read/write behavior | Historical and newly written data may follow different paths |
+
+This model helps explain why I wanted **persisted progress and functional verification**, not a single green status label.
+
+## Separating repair and migration traffic
+
+Database HA can be affected by both normal request traffic and background repair. During a rewrite or replica catch-up, I would monitor storage headroom, queueing delay, coordination health and application error rate separately. The performance cost of repair is part of the operational design, even if repair eventually succeeds.
+
+I do not have a public controlled benchmark quantifying those interactions. The value of this record is the engineering decision to treat each stateful layer separately and to verify data, not just deployment status.
+
+## 5. When a migration said “Timeout error”
 
 One particularly instructive step reported **`Timeout error.`**, yet the persisted migration state showed **`phase = completed`**, with **nine completed chunks and zero failed chunks**. Those observations are not equivalent to a blanket declaration of success, but they directly contradict the simplistic conclusion that every chunk must have failed.
 
 I treated the UI/worker timeout as one observation and the recorded migration progress as another. Before rerunning an expensive operation, the question became: *Did the background work continue and finish despite the caller timing out?* This avoided confusing the lifespan of a client request with the lifespan of the underlying data migration.
 
-## 5. Capacity, read-only states and Keeper
+## 6. Capacity, read-only states and Keeper
 
 Other work exposed a different class of issue: **remote inserts could fail with insufficient space**. No scheduler setting can compensate for genuinely unavailable storage capacity. I had to think about target storage size, temporary space needed for rewrites, and the consequences of retrying after a partial write.
 
@@ -71,7 +122,7 @@ A ClickHouse replica could also enter a read-only state. In those cases I checke
 
 During the v4 transition I also saw a background migration step involving a **JSON date/state conversion error**. The publicly useful lesson was not the internal date value: it was that application-side migration logic can fail on persisted state serialization even after earlier storage coordination problems are resolved.
 
-## 6. What I still wanted to verify
+## 7. What I still wanted to verify
 
 Some migration stages had reached a consistent recorded state while others were still being investigated. The remaining questions were about **end-to-end correctness after data rewriting**: did the application query the correct dataset, did writes work, were background jobs complete, and was the new state internally consistent?
 

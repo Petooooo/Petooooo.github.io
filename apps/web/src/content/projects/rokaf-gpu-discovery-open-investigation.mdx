@@ -47,6 +47,59 @@ A node selector can make a Pod run in one familiar location, but that does not p
 
 I considered time-slicing and, for compatible hardware, MIG as separate capacity policies—not fixes for discovery or registration failures.
 
+## A more precise diagnostic model
+
+I found it useful to treat GPU discovery as **three separate contracts**, because each has a different consumer and a different source of truth.
+
+| Contract | Producer | Consumer | Failure visible as |
+| --- | --- | --- | --- |
+| Host device visibility | Driver and operating system | Operator/device runtime | Hardware exists but no usable device interface |
+| Node feature information | Feature discovery / operator components | Placement policy and administrators | Missing or unexpected node labels |
+| Allocatable extended resources | Kubernetes device plugin / kubelet | Scheduler | A Pod asking for GPU resources cannot be admitted or placed |
+
+A feature label is metadata. An allocatable resource is a scheduler accounting value. They can be correlated, but treating one as a reliable substitute for the other can hide the real fault.
+
+### Why inspecting only one Pod is insufficient
+
+If the GPU Operator Pod appears healthy, I still need to ask whether the **driver container, feature discovery and device plugin** reached their own operational state. Conversely, a pending inference Pod may be blocked by a selector or toleration even if the node advertises GPU resources correctly.
+
+I therefore separated the following *candidate* evidence, rather than trusting a green deployment overview:
+
+1. The host recognizes the expected accelerator and driver interface.
+2. The node's reported labels match the expected discovery logic.
+3. The extended resource appears in allocatable capacity, not only capacity or labels.
+4. The workload requests a resource actually exposed by that plugin.
+5. Its node selector, affinity, taints and tolerations permit a matching node.
+6. Once placed, the process can initialize the accelerator and has enough memory.
+
+The last step is important. **Successful scheduling does not prove successful model loading**. The model's weights, KV cache, buffers and framework allocations can still exceed device memory.
+
+## A falsifiable set of hypotheses
+
+Instead of labeling every GPU scheduling problem as “Operator broken,” I would ask what observation would contradict each hypothesis.
+
+| Hypothesis | Supporting symptom | Evidence against it |
+| --- | --- | --- |
+| Driver or runtime unavailable | Host tools or GPU-enabled runtime fail | Host and test container see the accelerator correctly |
+| Feature discovery is incomplete | Required metadata absent | Discovery logs and node metadata are consistent |
+| Device plugin not registering | No extended GPU resource advertised | Kubelet allocatable view has expected resources |
+| Placement policy too restrictive | Pending Pod despite healthy resources | Minimal controlled Pod with equivalent requests schedules |
+| Runtime/model mismatch | Workload starts but GPU initialization fails | Representative workload loads and runs reliably |
+
+These are **investigation methods**, not a claim that I ran each hypothetical test in the production cluster.
+
+## Why the distinction mattered operationally
+
+It would be easy to “fix” the immediate symptom by pinning a service to a familiar node. That may restore one application while leaving the underlying resource-discovery mechanism broken for the next deployment. It can also reduce availability: a service restricted to a single compatible location has fewer recovery options.
+
+I wanted to preserve the difference between **temporary containment** and **a corrected resource model**. The latter requires a node inventory, expected discovery configuration and actual scheduling evidence that remain consistent across changes.
+
+## Follow-up experiment I would publish
+
+In a representative, non-sensitive test environment, I would record one node's advertised resources before and after a controlled plugin restart or configuration change, then schedule a minimal GPU test workload. The output would include the kernel/driver/toolkit versions, GPU resource request, scheduler decision, initialization result and an explicit distinction between *discovery* and *usable capacity*.
+
+I have not published those measurements yet. The value of this case is the diagnostic decomposition and the observed metadata discrepancy, not an unverified performance claim.
+
 ## Current state
 
 **Observed:** GPU-related labels/features were not appearing as expected during investigation.

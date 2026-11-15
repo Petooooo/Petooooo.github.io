@@ -62,6 +62,64 @@ A queue introduces new failure modes: backlog, slow consumers, poison messages, 
 
 Back-pressure also matters. Adding workers when the database is already overloaded may make the system less reliable instead of faster.
 
+## 5. The failure windows that changed my design thinking
+
+I found it useful to examine a logical unit of work in **failure windows**, not merely in terms of whether the queue or worker process was healthy.
+
+| Failure window | What may already have happened | Recovery question |
+| --- | --- | --- |
+| Before publish confirmation | A message may or may not have reached the broker | Does retry reuse the same logical work ID? |
+| After publish, before consumption | The job is queued but no worker has handled it | Is the queue durable and observable? |
+| During processing | Some intermediate work may exist | Can work resume or be safely retried? |
+| After side effect, before acknowledgement | The intended change may already be committed | Will redelivery repeat the external effect? |
+| After acknowledgement | Broker delivery is complete | Is the application outcome recorded and visible? |
+
+This table explains why **successful acknowledgement is not proof that a user-visible operation was correct**. The application needs durable progress and a clear definition of success.
+
+### A stable work identity matters more than an attempt ID
+
+Consider a user request that creates one report. The API call may time out, the caller may retry and the worker may also be redelivered. If each attempt receives an unrelated identity, the system can create multiple reports for one logical request.
+
+A stable idempotency key can represent the **user's intended operation**, while a separate attempt ID records each processing try. They should not be confused.
+
+## 6. State transitions and atomicity boundaries
+
+A useful conceptual state machine is:
+
+| State | Meaning | Permitted next actions |
+| --- | --- | --- |
+| `pending` | Accepted but not yet claimed | Claim or cancel |
+| `processing` | Worker holds a lease or work ownership | Complete, fail or time out |
+| `completed` | Durable result exists | Return existing result, do not repeat effect |
+| `failed` | Attempt did not complete | Retry if policy permits |
+| `dead-letter` | Automated attempts are exhausted | Inspect, repair and replay deliberately |
+
+The difficult part is **who persists the transition**. Recording `completed` in one database while writing output to a different object store does not automatically create one atomic transaction. Application-level reconciliation may still be required.
+
+For a DB-only operation, a uniqueness constraint or transaction can help protect one effect. For an external API or object storage write, the operation may need a deterministic resource key or an explicit check of existing state.
+
+This is design analysis, not a claim that every mechanism was deployed uniformly.
+
+## 7. Back-pressure and the cost of “more workers”
+
+A queue absorbs burstiness but can hide a mismatch between incoming demand and downstream capacity. If consumer throughput stays below producer throughput, the queue age and backlog will increase.
+
+| Observation | What it might mean | What I would check |
+| --- | --- | --- |
+| Queue depth rising | Input exceeds effective drain rate | Arrival rate, consumer completions |
+| Consumers busy, database slow | Downstream bottleneck | Query latency, connection pool |
+| Redelivery rate rising | Workers failing or losing acknowledgements | Timeout/restart patterns |
+| Oldest message age rising | Some work is starved | Priority, concurrency, poison messages |
+| Memory pressure on workers | Large jobs or unbounded in-flight work | Batch sizes and per-job memory |
+
+Adding workers can increase load on the very service already limiting throughput. I would define a **bounded concurrency budget** and measure the whole workflow rather than just the broker.
+
+## 8. What a reproducible test would look like
+
+I would test the important failure boundaries in an isolated service: publish a logical job, stop the consumer after committing a side effect but before acknowledgement, then allow redelivery and inspect the final state. The success condition is not “the worker ran twice”; it is that **the logical operation produced the intended effect once**.
+
+I would also compare normal, retried and permanently failing jobs in a dashboard with queue age, retries and terminal outcomes. These are proposed validation cases; no public production benchmark is included in my original records.
+
 ## What I learned
 
 The useful abstraction is not just a queue: it is a **workflow with durable identity, observable state and explicit retry semantics**. That lesson connects strongly to database migrations and any other background operation whose caller may time out while work continues.

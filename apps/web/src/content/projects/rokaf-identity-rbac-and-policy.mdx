@@ -1,5 +1,5 @@
 ---
-title: "Identity and Authorization: From ServiceAccounts to Object-Level Policy"
+title: "Identity and Authorization: [REDACTED] ServiceAccounts to Object-Level Policy"
 description: "How I reasoned about least privilege, Kubernetes RBAC, GitLab OAuth, Keycloak and OpenFGA when cluster permissions and application permissions diverged."
 date: "2026-11-15"
 draft: false
@@ -68,6 +68,64 @@ The interesting design problem was *where to ask each policy question*. If each 
 I had concrete Kubernetes API/RBAC and OAuth integration experience. For the wider Keycloak/OpenFGA approach, my records include **modeling and integration work**, but not a complete, independently verified cutover of all applications. I am intentionally keeping that distinction in the history rather than describing a fully uniform identity platform.
 
 I also still wanted a systematic method to **audit effective permissions** across CI, human operators and applications—not just verify that each service could log in.
+
+## 6. How I separated the authorization models
+
+The first mistake in an authorization review is to confuse **the identity that authenticates** with **the resource that identity may modify**. A ServiceAccount accepted by the Kubernetes API, a user logged in through OAuth2 and a user assigned to an application team are not the same principal for every resource.
+
+I drew the boundaries as follows:
+
+| Boundary | Typical subject | Protected resource | Policy question |
+| --- | --- | --- | --- |
+| Kubernetes RBAC | ServiceAccount / Kubernetes user | API resource and verb | May this identity read/update a Deployment in this namespace? |
+| OAuth2 / OIDC | Authenticated application user or client | Login/session/token | Who authenticated, and which token was issued? |
+| Application roles | User/team role | Application feature | May this user enter this administrative page? |
+| OpenFGA / ReBAC | Subject connected to an object | Project, document, workspace | Is this user an owner/editor/viewer through the relation graph? |
+
+An OIDC token may contain claims used by the application, but **issuing a token does not itself prove the caller is allowed to edit a particular document**. That decision depends on the application's resource model.
+
+## 7. ServiceAccount privilege design
+
+For Kubernetes jobs I wanted permissions based on **the exact verbs and resources the job uses** rather than a cluster-wide role granted simply because the job initially failed with a 403.
+
+An example of questions I would ask before creating a Role:
+
+- Does the job only read Pods, or also create/patch Deployments?
+- Is access needed in one namespace or across the cluster?
+- Does `get` access suffice, or is `list/watch` required?
+- Are Secret contents involved, or can a narrower identity/configuration solve the task?
+- Who owns token rotation, revocation and incident auditing?
+
+The principle is least privilege, but the real work is discovering a job's **actual API call surface**. A Role that looks narrow by name may still grant broad access through wildcard verbs or resources.
+
+## 8. Modeling relationships without promising a complete rollout
+
+I investigated Keycloak as an identity service and OpenFGA as a possible relationship policy layer. To evaluate the latter properly, I would start from small application objects:
+
+| Relationship | Example question | Required reasoning |
+| --- | --- | --- |
+| `owner` | Can the creator modify all project settings? | Direct ownership and transfer semantics |
+| `editor` | Can a team member edit one document? | Team membership and object grants |
+| `viewer` | Can a user read a shared workspace? | Direct vs inherited access |
+| Organization membership | Does removing a member revoke document access? | Inheritance and invalidation |
+| Delegated admin | Who can invite another user? | Scope and privilege escalation |
+
+A good ReBAC model must specify what happens when a relation is deleted, inherited, cached or unavailable. **Centralized policy becomes a dependency** and can create latency and availability questions of its own.
+
+I distinguish this model exploration from a fully deployed platform-wide authorization cutover. My public record supports RBAC and OAuth work and Keycloak/OpenFGA consideration; it does not establish that every application used one unified policy backend.
+
+## 9. A useful verification matrix
+
+A role change should be tested with **positive and negative cases**:
+
+1. A designated owner performs an allowed action.
+2. An editor attempts an owner-only action and is denied.
+3. An unrelated user cannot read a private object.
+4. Revoking a relationship affects future requests as intended.
+5. An unavailable external authorization service does not silently grant access.
+6. Audit records distinguish authenticated identity from denied action.
+
+This is a test-design matrix, not a claim that every case was run across all production applications.
 
 ## Takeaway
 

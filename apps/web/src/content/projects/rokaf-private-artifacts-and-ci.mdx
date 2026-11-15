@@ -69,6 +69,64 @@ A registry hosted by the same platform it supplies can become a circular depende
 
 The design decision is subtle: more replication of a single dependency is not the same as removing that dependency from the **recovery path**. This led me to think about what must already exist before the first job, first container pull or first rebuild can succeed.
 
+## 6. Reconstructing the actual dependency graph
+
+The most useful exercise was to ask what **must already be working** before a new image can be built and deployed. In a connected environment that dependency graph is often hidden by package registries and public image mirrors. In a closed network it becomes an operational requirement.
+
+| Artifact | Producer/source | Needed by | Failure if missing |
+| --- | --- | --- | --- |
+| Builder image | Approved image preparation process | GitLab Runner job | The job cannot start its own build tooling |
+| Kaniko executor | Content of the actual builder image | Build script | Command not found / non-executable path |
+| Base image | Private image repository | Dockerfile stage | Build cannot resolve the parent layer |
+| Dependency packages | Internal package mirror/cache | Application build step | Tool or package unavailable |
+| Internal CA trust | Approved certificate distribution | Builder and runtime | TLS handshake or verification failure |
+| Registry authorization | Nexus repository policy and job credential | Image push | Token exchange or push denied |
+| Target image | Completed CI job | K3s runtime | Image pull or startup failure |
+
+The table also shows why a successful job on one runner could not prove that every worker node or runtime had the same dependencies available.
+
+### Why I separated packaging from authorization
+
+The Kaniko executor issue was resolved by inspecting **the actual contents and entry point of the image**, not by expanding CI permissions. I treated the missing executable as a packaging defect. Later, registry authorization problems belonged to another layer entirely.
+
+This sounds obvious in retrospect, but without a dependency graph an operator can spend hours changing tokens when the binary itself does not exist—or rebuilding images when the request actually reached Nexus but was denied.
+
+## 7. A reproducibility checklist
+
+For a representative, non-sensitive CI pipeline I would record:
+
+1. **Source revision:** the Git commit or reproducible source package.
+2. **Builder identity:** exact image reference or digest and known executor path.
+3. **Dependency closure:** all base stages, OS packages and application packages resolvable internally.
+4. **Credential scope:** the job can perform only required registry actions.
+5. **Trust chain:** the builder trusts the registry certificate and the runtime separately trusts the image source.
+6. **Result:** image digest and the workload revision that consumed it.
+7. **Recovery input:** a minimal set of images/configuration that exists independently of the service being recovered.
+
+This is a **design checklist derived from the experience**, not a published copy of the actual operational pipeline.
+
+## 8. Why a registry error cannot be one diagnosis
+
+| Symptom | Likely boundary | Evidence I would request |
+| --- | --- | --- |
+| `/kaniko/executor` missing | Builder image packaging | Executable existence and image metadata |
+| Package manager cannot find a tool | Dependency installation/mirror | Lockfile, workspace and installed packages |
+| TLS unknown issuer | Trust root | Presented certificate and trusted issuer set |
+| Certificate name mismatch | Endpoint identity | Requested host/IP versus SAN |
+| Registry returns HTTP 401 | Authentication/authorization | Token exchange, repository path and scoped action |
+| Some runners work, others fail | Node/network/environment | Controlled placement comparison |
+| Registry recovery depends on itself | Bootstrap architecture | Minimal dependency path without registry |
+
+For the repository-specific 401 cases, I would not label every instance fully resolved unless the exact repo permissions and active job credentials had been correlated. **Reaching the registry, authenticating successfully and being authorized to push are three distinct milestones.**
+
+## 9. What I would measure in a future isolated lab
+
+A small testbed could deliberately remove one dependency at a time and record whether a clean build succeeds. The controlled variables would include builder digest, base image availability, CA trust, write permission and runner placement. A comparable result should specify which dependency was changed, how the job failed, and whether it recovered after restoring that dependency.
+
+I would use this to test a concrete reliability question: **Can an essential platform component be restored without depending on the same component's own repository endpoint?**
+
+That question is more durable than any individual image name or CI tool version.
+
 ## What changed in my approach
 
 I stopped treating an image-push failure as one generic CI problem and instead classified **packaging, package availability, authentication, authorization, TLS trust, node connectivity and bootstrap availability**. That made the diagnostic sequence more disciplined and made the overall delivery process easier to reason about.

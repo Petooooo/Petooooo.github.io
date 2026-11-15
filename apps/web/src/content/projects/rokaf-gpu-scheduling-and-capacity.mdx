@@ -57,7 +57,53 @@ When a workload runs only on particular nodes, an affinity or selector may isola
 
 The same problem appears in CPU/memory and storage scheduling: more operational constraints can mean less freedom for the scheduler.
 
-## 5. The questions that remain open
+## 5. The capacity calculation I wanted to make explicit
+
+Scheduling a GPU task involves at least three resource budgets:
+
+- **Device memory:** static weights, runtime buffers, KV cache, activation/scratch allocations.
+- **Compute availability:** kernels competing for execution time on the device.
+- **Serving throughput:** how many useful requests meet the latency target under concurrent load.
+
+A scheduler can see a numeric GPU resource request and still be unable to predict all three properties. A model server might fit into VRAM under one request pattern but fail or experience severe latency spikes when concurrency increases.
+
+| Decision | Capacity question | Evidence needed |
+| --- | --- | --- |
+| Whole-GPU allocation | Is the service underutilizing the device? | Per-workload VRAM and utilization measurements |
+| Time slicing | Will co-located services interfere? | Tail latency, memory pressure, workload mix |
+| MIG partition | Can the model fit and perform inside a fixed partition? | Supported hardware, chosen profile, measured memory |
+| More replicas | Is there enough spare device capacity after host loss? | Healthy capacity under a failure scenario |
+| CPU fallback | Is degraded throughput acceptable? | End-to-end latency and quality requirements |
+
+In particular, **time slicing does not partition GPU memory into guaranteed equal fractions**. Treating an advertised logical GPU slot as an isolation boundary can be misleading.
+
+## 6. Availability needs an explicit degraded mode
+
+I considered failure in terms of the user's experience rather than only Pod recreation:
+
+1. A GPU serving instance becomes unavailable.
+2. The service removes the unhealthy endpoint from its traffic path.
+3. Remaining instances receive a greater share of requests.
+4. Their queues, model memory usage and tail latency may change.
+5. The system either meets a degraded service target or starts rejecting work.
+
+This is **graceful degradation**, not necessarily seamless failover. If the remaining instances have no capacity margin, the service endpoint may stay reachable but user experience can still collapse.
+
+A useful design would define both the normal and single-failure request budget before choosing replica placement.
+
+## 7. Why I separate discovery from workload optimization
+
+A missing NFD label or device-plugin resource is a **discovery/registration problem**. Poor GPU utilization, out-of-memory errors or request latency variation are **capacity and application problems**. Both may happen together, but a scheduling constraint cannot repair a broken driver.
+
+I therefore keep an explicit diagnostic order: recognize hardware → advertise resources → schedule a small compatible workload → initialize the device → load a representative model → observe real request behavior.
+
+## 8. How I would benchmark a policy in isolation
+
+A representative test could run one workload on a whole GPU, then compare it with a compatible sharing policy while keeping model version, prompt/input distribution and request rate consistent. I would measure throughput, p50/p95/p99 latency, VRAM usage and error rate, repeating each run.
+
+This is a **proposed experiment**, not an already completed benchmark in the ROKAF environment. The open question is when consolidation benefits outweigh interference and reduced failure headroom.
+
+## 9. The questions that remain open
 
 I still had verification work around certain hardware-discovery labels and the exact behavior of possible GPU-sharing configurations. I did not turn those evaluations into claimed production benchmark results.
 

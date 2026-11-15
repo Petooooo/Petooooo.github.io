@@ -55,6 +55,58 @@ Some operational actions restored usable service, but I did not always preserve 
 
 I would not count a working dashboard after restart as proof that a disk-level fault was fixed.
 
+## Understanding etcd failure from below and above
+
+A control-plane incident can appear to have one component at its center: an API that stops answering requests. In practice, the API is **a consumer of persisted cluster state**, and its availability depends on several lower layers.
+
+I separated the state path conceptually:
+
+| Layer | Responsibility | How failure can propagate |
+| --- | --- | --- |
+| Filesystem / block I/O | Accept writes and preserve on-disk state | Read-only remount, I/O error, stalled sync |
+| etcd member | Maintain a consistent local log and state | Unavailable or inconsistent member |
+| etcd cluster | Reach quorum and commit updates | Cannot commit even when some members are running |
+| K3s / API server | Serve Kubernetes state operations | Reads/writes slow, fail or become unavailable |
+| Controllers / scheduler | Reconcile desired state | New Pods or endpoints not created when expected |
+| Applications | Respond to clients | Secondary outage even though the app image is healthy |
+
+**One healthy etcd process is not proof of a healthy quorum.** Conversely, a failed API request is not proof that etcd data is corrupt: networking, process state and storage latency may also be involved.
+
+### Read-only can describe more than one phenomenon
+
+I learned to ask whether “read-only” meant:
+
+- A filesystem remounted read-only after an error.
+- A mount that was intentionally configured read-only.
+- A database or replicated table entering a logical read-only state.
+- An application receiving permission errors while the filesystem remained writable.
+
+These conditions require different evidence. A database's read-only response must not be assumed to mean an ext4 remount; a filesystem error must not automatically be described as physical-disk corruption.
+
+## Recovery milestones and what each one proves
+
+| Milestone | Concrete check | Not established by that check |
+| --- | --- | --- |
+| Process restarted | Service process is alive | Data integrity |
+| Coordinator stable | Cluster membership/quorum looks usable | Every caller has recovered |
+| API responds | A representative API read works | Stateful writes are durable |
+| Workloads reconcile | Controllers place/repair objects | Application-level correctness |
+| Client verification | Representative read/write path works | Full historical consistency |
+
+A rollback, restore or service restart can be appropriate if it follows a supported process and preserves the necessary backups. But a running Pod should never be my only definition of success for a stateful recovery.
+
+## Why this changed my interest in filesystems
+
+When a database and orchestrator both report errors, the interesting question is often what **storage contract** each component assumed. A replicated control plane still depends on local durable state. On-disk metadata, write ordering, `fsync` latency, device errors and remount behavior can change what upper layers observe.
+
+This is not a claim that every recorded incident originated in the filesystem. It is a more precise way of asking what information a postmortem would need before calling a problem a kernel or storage bug.
+
+## Incident evidence I would retain next time
+
+A complete sanitized investigation could record a timeline with: first client-visible error, independent API availability check, health of each relevant coordination layer, host storage status, intervention time and functional verification time. The goal is to correlate them without exposing internal endpoints, topology or recovery commands.
+
+I would also retain a clear **unknowns** section. Not having a complete root cause does not erase the value of the incident, but it changes which statements I can defend.
+
 ## What remains open
 
 I have records of **etcd instability/corruption and read-only behavior** and the fact that I investigated and restored availability in some incidents. What I do not have in this public record is a safely shareable, time-correlated host-I/O and member-state trace that proves one unifying cause.
