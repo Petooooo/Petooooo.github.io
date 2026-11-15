@@ -5,6 +5,9 @@ on:
     branches:
       - main
   workflow_dispatch:
+  schedule:
+    # Refresh public study notes; GitHub may delay scheduled workflows.
+    - cron: "17 * * * *"
 
 permissions:
   contents: read
@@ -22,6 +25,20 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Checkout study notes
+        uses: actions/checkout@v4
+        with:
+          repository: Petooooo/systems-notes
+          ref: main
+          path: .external/systems-notes
+          persist-credentials: false
+
+      - name: Validate study notes
+        run: python3 .external/systems-notes/scripts/validate-notes.py
+
+      - name: Import reviewed public notes
+        run: python3 automation/scripts/sync-systems-notes.py .external/systems-notes
 
       - name: Setup Node
         uses: actions/setup-node@v4

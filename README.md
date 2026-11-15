@@ -25,7 +25,7 @@ This repository is not the private Workbench itself. Some writing and experiment
 ## Content Areas
 
 - `projects`: implementations and project-level records.
-- `notes`: study notes, infrastructure operations, troubleshooting, deployment runbooks, and paper reading notes.
+- `notes`: study notes, infrastructure operations, troubleshooting, deployment runbooks, and paper reading notes. Reviewed public notes from [Petooooo/systems-notes](https://github.com/Petooooo/systems-notes) are imported during the website build.
 - `research`: computer science and electrical/electronic engineering research notes.
 - `archive`: older drafts, experiments, and material outside the main sections.
 
@@ -60,7 +60,7 @@ The workflow in `.github/workflows/deploy-pages.yml` builds `apps/web` and publi
 SITE_URL=https://petooooo.github.io/
 ```
 
-Repository settings should use **Pages -> Build and deployment -> GitHub Actions**. Pushing to `main` runs the deployment workflow.
+Repository settings should use **Pages -> Build and deployment -> GitHub Actions**. Pushing to `main` runs the deployment workflow. It also checks out the public `systems-notes` repository, validates its frontmatter, and imports only notes marked `draft: false`, `reviewed: true`, and `sensitivity: public`. An hourly scheduled build refreshes study notes without a cross-repository token; it may be delayed by GitHub Actions scheduling. For immediate updates, manually trigger the website workflow.
 
 See `docs/deployment-github-pages.md` for verification and troubleshooting.
 

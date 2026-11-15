@@ -6,6 +6,7 @@ import SectionHeader from "@/components/SectionHeader.astro";
 import { byDateDesc, getAreaId, getEntryArea, isPublishedEntry, sortAreas } from "@/lib/content";
 const entries = (await getCollection("notes")).filter(isPublishedEntry).sort(byDateDesc);
 const areaOrder = [
+  "Study Roadmap",
   "Algorithms",
   "Baekjoon",
   "Computer Networks",

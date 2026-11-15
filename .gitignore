@@ -7,3 +7,9 @@ dist/
 npm-debug.log*
 .DS_Store
 coverage/
+__pycache__/
+*.pyc
+
+# Generated from public Petooooo/systems-notes during site builds
+apps/web/src/content/notes/external-study/
+.external/
