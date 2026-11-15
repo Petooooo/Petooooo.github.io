@@ -12,6 +12,7 @@ const highlights = [
   {
     type: "Undergraduate project / memory efficiency",
     title: "Lifecycle-aware allocation for TensorFlow Lite Micro",
+    href: "/projects/tflite-micro-lifecycle-memory-planning/",
     result: "28.33% / 14.06%",
     metric: "Peak-memory reductions on Person Detect / Tiny U-Net",
     description: "Analyzed tensor lifetimes and allocation conflicts, then explored buffer reuse and in-place updates to reduce memory pressure.",
@@ -20,6 +21,7 @@ const highlights = [
   {
     type: "Undergraduate project / hardware acceleration",
     title: "Area-efficient CNN acceleration on Zynq FPGA",
+    href: "/projects/bit-shift-cnn-accelerator-zynq/",
     result: "36.5%",
     metric: "FPGA area reduction in project evaluation",
     description: "Used bit-shift arithmetic, quantization, IM2COL, and systolic-array dataflow to explore the area/runtime trade-offs of embedded inference.",
@@ -42,7 +44,9 @@ const highlights = [
       {highlights.map((item) => (
         <article class="flex flex-col border border-white/10 bg-white/[0.025] p-5">
           <p class="font-mono text-xs uppercase tracking-wider text-signal">{item.type}</p>
-          <h2 class="mt-4 text-xl font-semibold text-white">{item.title}</h2>
+          <h2 class="mt-4 text-xl font-semibold text-white">
+            {item.href ? <a class="underline decoration-white/20 underline-offset-4 hover:text-signal" href={withBase(item.href)}>{item.title}</a> : item.title}
+          </h2>
           <p class="mt-5 text-2xl font-semibold tracking-tight text-white">{item.result}</p>
           <p class="mt-1 text-xs leading-5 text-slate-400">{item.metric}</p>
           <p class="mt-5 flex-1 text-sm leading-7 text-slate-300">{item.description}</p>
@@ -52,10 +56,10 @@ const highlights = [
         </article>
       ))}
     </div>
-    <p class="mt-6 text-sm leading-7 text-slate-400">The measurement summaries come from undergraduate project evaluations described in my <a class="text-signal underline underline-offset-4" href={withBase("/cv/#selected-projects")}>CV</a>. Full reports and reproducible project details will be linked when ready for public release.</p>
+    <p class="mt-6 text-sm leading-7 text-slate-400">The two undergraduate projects now have detailed write-ups based on my original 2024 report and team poster. Reported results, individual responsibilities, and unverified aspects are distinguished within each article.</p>
   </section>
   <section class="border-t border-white/10 py-12 md:py-16">
-    <SectionHeader eyebrow="Write-ups" title="Project notes" description="Detailed, reviewed implementation records appear here as they become ready to publish." />
+    <SectionHeader eyebrow="Write-ups" title="Project write-ups" description="Design decisions, implementation details, experiment results, and limitations." />
     {projects.length > 0 ? (
       <div class="grid gap-4 md:grid-cols-2">{projects.map((project) => <ProjectCard project={project} />)}</div>
     ) : (

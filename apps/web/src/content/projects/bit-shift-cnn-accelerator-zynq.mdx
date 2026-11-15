@@ -1,0 +1,175 @@
+---
+title: "Bit-Shift-Based CNN Accelerator on Zynq FPGA"
+description: "A team-built CNN inference system combining power-of-two weight quantization, shift-based processing elements, and a PS/PL architecture."
+date: "2026-11-15"
+draft: false
+reviewed: true
+sensitivity: public
+category: "Computer Engineering"
+area: "Hardware Acceleration"
+tags: ["Zynq", "FPGA", "CNN", "Quantization", "Systolic Array", "Embedded Inference"]
+type: "implementation-note"
+role: "Team project: PS-side development, model training, mobile app and communication server"
+period: "Sep–Dec 2024"
+status: "archived"
+techStack: ["Verilog", "C", "Python", "JavaScript", "Zynq FPGA", "AXI4-Lite"]
+---
+
+> **Project context:** 2024 electronic-engineering graduation team project at Kyung Hee University. This write-up draws from our final poster, *Bit-Shift-Based CNN Accelerator: A Compact and Energy-Efficient Solution*, and my submitted project/CV summary. The poster documents the team architecture and evaluations; my recorded responsibilities were **PS-side development, CNN model training, a mobile application, and a communication server**. I do not attribute every RTL or PL block to my individual work.
+
+## Motivation: CNN multiplication is expensive in small FPGA designs
+
+A conventional convolution repeatedly performs multiply-accumulate operations. For a small FPGA or edge device, hardware multipliers contribute to resource usage, while a CPU-only implementation can struggle to provide responsive inference.
+
+Our team explored an alternative: constrain trained weights to **signed powers of two** so the convolution's multiplication component can be implemented using shifts and sign handling. The wider system still needs accumulation, memory transfers, activation functions, pooling, and data scheduling; this is not a claim that the entire CNN becomes cost-free.
+
+The overall question was whether a carefully quantized network and a practical FPGA datapath could reduce hardware resource usage **without an unacceptable accuracy trade-off**.
+
+## 1. Quantize weights for shift-based inference
+
+The original poster describes a training-to-inference path from **FP32 inputs and weights** toward **INT8 inputs and INT4 weights**, using power-of-two quantization for the weight representation.
+
+Instead of implementing an arbitrary product `x × w`, the processing element handles a quantized weight corresponding to a signed `2^p` term. Its computation can then be built from bit shifting, sign handling, and accumulation.
+
+The team investigated two related training mechanisms:
+
+- **Incremental Network Quantization (INQ):** move weights toward the constrained power-of-two representation across training stages rather than forcing the whole network into it at once.
+- **Straight-Through Estimator (STE):** allow training to continue through a non-differentiable quantization operation by using a surrogate gradient treatment.
+
+These techniques are not inventions of this project. Our contribution was to use them in the project's quantized model and hardware-aware inference design.
+
+```text
+Training / model preparation
+    FP32 network and weights
+              |
+    Power-of-two quantization
+      (INQ and STE methods)
+              |
+    INT8 activations / INT4 weights
+              |
+    Shift-oriented inference datapath
+```
+
+## 2. Divide convolution and supporting operations across PS and PL
+
+The project used a **Zynq processing system (PS) + programmable logic (PL)** design.
+
+The system diagram assigns several supporting CNN operations to software on the **PS**, including **IM2COL**, **ReLU**, and **max pooling**. A memory/interconnect path links that software work to the PL accelerator. The poster labels the PS/PL interfaces **AXI4-Lite**.
+
+On the **PL**, the documented modules are:
+
+- Banks of **input and output BRAM**.
+- A **BRAM controller**, with an FSM and control unit managing data movement.
+- A **processing-element (PE) array** for shift-based convolution work.
+- The memory interface between the controller and accelerator.
+
+The poster's architecture figure shows **16 input BRAM banks and 16 output BRAM banks**, alongside two PE-array arrangements labeled **1 × 16 input-stationary (IS)** and **4 × 16 weight-stationary (WS)**. These are the arrangements presented in the source; the single poster does not provide a complete cycle-accurate explanation of how each mode is selected or scheduled.
+
+```text
+          Zynq Processing System (PS)
+    +------------------------------------+
+    | IM2COL  | ReLU  | Max Pooling       |
+    | Software control / communication   |
+    +------------------+-----------------+
+                       |
+               AXI4-Lite (poster)
+                       |
+          Programmable Logic (PL)
+    +------------------+-----------------+
+    | Input BRAM banks                  |
+    |          |                        |
+    |   BRAM controller / FSM           |
+    |          |                        |
+    |   Shift-based PE array            |
+    |          |                        |
+    | Output BRAM banks                 |
+    +-----------------------------------+
+```
+
+This division matters because accelerating a CNN involves more than replacing the multiplier. The PS still has to arrange convolution inputs and handle other layers; the PL must be fed and controlled efficiently enough for the accelerator to help overall execution time.
+
+## 3. Arrange convolution as a dataflow problem
+
+The poster includes an **IM2COL** illustration: convolution input patches and filters are reshaped into a form suitable for regular dot products and parallel matrix-style processing.
+
+It also compares **weight-stationary (WS)** and **input-stationary (IS)** systolic-array structures. Both aim to reduce avoidable data movement by retaining one kind of operand while other values flow through the array.
+
+Within one PE, the documented computation is deliberately simple:
+
+```text
+Activation -----------+
+                      |  Shift / sign
+Quantized weight -----+        |
+                               v
+                         Accumulate
+                               |
+                           Partial sum
+```
+
+A datapath optimized for shifts is useful only when paired with a memory and scheduling structure that supplies the right activation values, quantized weights, and partial sums. The controller, BRAM organization, and PS-side transformations therefore belong to the **architecture**, not merely to its supporting code.
+
+## 4. My scope within the team
+
+The submitted CV records my individual scope as **full PS-side development, CNN model training, mobile-app development, and communication-server development**.
+
+In practical terms, that connects the model preparation and software side of the project to a PL accelerator built as part of a team. The graduation poster documents the overall PS/PL design and hardware results, but it does **not** specify which individual wrote each hardware module, how the mobile/server protocol was implemented, or the exact source-level implementation of every software operation.
+
+I therefore separate **team-level architecture/results** from **my recorded responsibilities**, rather than presenting the complete FPGA RTL implementation as solo work.
+
+## 5. Evaluation: hardware resources, accuracy and runtime
+
+The poster provides three distinct comparisons. They should not be treated as interchangeable measurements.
+
+### FPGA resource utilization
+
+| FPGA resource | Shift-based model | Multiplication-based model |
+| --- | ---: | ---: |
+| LUTs | 12,603 | 19,833 |
+| Flip-flops | 8,786 | 11,114 |
+| BRAM | 34 | 34 |
+
+The poster reports a **36.5% area decrease**. The resource table supports this most directly as an approximately **36.5% reduction in LUT usage** (12,603 versus 19,833). It is more precise to call this a reported FPGA area/resource reduction than to assume every FPGA resource or the physical chip area fell by the same amount.
+
+### Model accuracy
+
+The chart compares the project's quantized model with a traditional model:
+
+| Model | Top-1 accuracy in poster |
+| --- | ---: |
+| Traditional model | 97.3% |
+| Our shift-based model | 96.7% |
+
+That is a **0.6 percentage-point difference** in the presented experiment. The poster does not give enough detail about the dataset and evaluation protocol to generalize this accuracy figure to unrelated models or tasks.
+
+### End-to-end processing time
+
+| Execution | Average runtime |
+| --- | ---: |
+| CPU only (PS) | 15.9 ms |
+| PS + PL accelerator | 8.83 ms |
+
+The poster identifies a **dual-core ARM Cortex-A9 PS at 667 MHz** for the runtime comparison. This shows a faster recorded PS+PL execution in the demonstrated setup.
+
+It is important not to conflate the comparisons: **FPGA resource usage** compares shift- and multiplier-based hardware designs, while the **runtime table** compares CPU-only execution against PS+PL execution. The latter does not isolate the effect of bit-shift arithmetic alone.
+
+## What this project taught me
+
+This project brought together several layers of engineering:
+
+1. **Model representation:** the choice of quantization determines which operations hardware must support.
+2. **Datapath design:** using bit shifts changes the cost of individual processing elements.
+3. **Memory and dataflow:** BRAM organization, operand reuse, and systolic-array mapping influence whether arithmetic units can stay busy.
+4. **Hardware/software integration:** PS-side transformations, control, and communication remain significant even after convolution work moves to the PL.
+5. **Measurement discipline:** resource utilization, accuracy, and end-to-end latency answer different questions.
+
+The original poster calls the design *energy-efficient*, but it does **not** provide a measured power or energy comparison. That remains a motivation and an area for additional validation, rather than a measured energy-saving result in this write-up.
+
+## Source and references
+
+- Primary source: team graduation poster, *Bit-Shift-Based CNN Accelerator: A Compact and Energy-Efficient Solution* (Kyung Hee University, 2024). Original team poster and evaluation charts were used to reconstruct this account; the full poster is not redistributed here.
+- Individual role: project entry in my submitted undergraduate portfolio/CV.
+- M. Elhoushi et al., *DeepShift: Towards Multiplication-Less Neural Networks*, CVPR Workshops (2021).
+- A. Zhou et al., *Incremental Network Quantization: Towards Lossless CNNs with Low-Precision Weights*, ICLR (2017).
+- S.-S. Park and K.-S. Chung, *CONNA: Configurable Matrix Multiplication Engine for Neural Network Acceleration*, Electronics (2022).
+
+*This was a completed undergraduate **team project**. The system architecture and reported evaluation results are team-level outcomes; my responsibilities are stated separately above.*
