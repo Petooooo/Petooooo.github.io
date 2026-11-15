@@ -7,6 +7,8 @@ import { byDateDesc, getAreaId, getEntryArea, isPublishedEntry, sortAreas } from
 const entries = (await getCollection("notes")).filter(isPublishedEntry).sort(byDateDesc);
 const areaOrder = [
   "Study Roadmap",
+  "Linux Kernel",
+  "System Programming",
   "Algorithms",
   "Baekjoon",
   "Computer Networks",

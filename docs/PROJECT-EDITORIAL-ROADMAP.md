@@ -10,8 +10,8 @@ This document separates **published engineering records** from **candidate artic
 | --- | --- |
 | About | Research direction and the personal connection among undergraduate projects, operational engineering and incoming graduate study |
 | CV | Concise factual timeline, responsibilities, award, technical skills and deep links to focused records |
-| Projects | Undergraduate project designs, ROKAF engineering experience and KDT training records |
-| systems-notes | Korean study articles with English taxonomy, slugs, directories and README/guidelines |
+| Projects | Undergraduate project implementations and ROKAF engineering experience only |
+| Notes / systems-notes | KDT Linux course notes, detailed study roadmap, and future Korean study articles (English navigation and metadata) |
 
 ## ROKAF engineering records — published
 
@@ -46,33 +46,38 @@ These pages explicitly distinguish **observed facts, plausible causes, mitigatio
 - Longhorn, ClickHouse and Keeper experiments: reproducible lab workloads before publishing numbers.
 - Actual Keycloak/OpenFGA rollout details: prototype versus deployment scope when safe to disclose.
 
-## K-Digital Training — published
+## KDT Linux course — now published as study notes
 
-| Focus | Slug |
+KDT topics are **course learning materials**, not implementation portfolios. Their canonical source is [systems-notes](https://github.com/Petooooo/systems-notes), and the website publishes them through the **Notes** collection.
+
+| Focus | New public notes route |
 | --- | --- |
-| Linux Systems & Kernel Expert Course overview | `kdt-linux-system-kernel-expert-course` |
-| POSIX, processes, IPC and socket programming | `kdt-posix-system-programming` |
-| Kernel tracing, virtual memory and VFS | `kdt-kernel-tracing-vfs-memory` |
-| Embedded Linux and driver foundations | `kdt-embedded-linux-drivers` |
-| Kernel dump and crash analysis learning progress | `kdt-crash-dump-analysis-progress` |
-| eBPF/BCC and monitoring learning progress | `kdt-ebpf-observability-progress` |
+| Linux systems course overview | `/notes/study-kdt-overview/` |
+| POSIX, IPC and networking | `/notes/study-kdt-posix/` |
+| Scheduling, memory and VFS | `/notes/study-kdt-kernel-vfs-memory/` |
+| Embedded Linux and drivers | `/notes/study-kdt-embedded-linux/` |
+| Crash dump analysis | `/notes/study-kdt-crash-dump/` |
+| eBPF/BCC and observability | `/notes/study-kdt-ebpf-observability/` |
+| OSLab preparation roadmap | `/notes/study-roadmap/` |
 
-The original syllabus and archived course lecture notes establish covered subjects and learning objectives. They **do not prove that every suggested capstone was individually completed**.
+All six original KDT project routes redirect to these Notes routes. The CV keeps the KDT qualification but points readers to the Notes series for technical details.
 
-## Next KDT / study experiments
+## Study roadmap and future experiments
 
-The KDT pages now read as **first-person course reflections**, including progress notes for crash analysis and eBPF monitoring. Future experiments should live primarily in `systems-notes` (Korean articles; English categories and README), with source code and measurements there:
+The source-of-truth roadmap is [systems-notes/notes/study-roadmap.mdx](https://github.com/Petooooo/systems-notes/blob/main/notes/study-roadmap.mdx). It covers:
 
-- Reproduce scheduler wake-up tracing with ftrace and KernelShark and capture a minimal result.
-- Measure page-cache and VFS/writeback behavior in an isolated storage experiment.
-- Develop and run a small POSIX IPC/network server with tests for failures and disconnects.
-- Revisit interrupt/workqueue concepts in an isolated driver example.
-- Study eBPF/BCC and `perf` with a representative workload.
+- Nov–Dec 2026: POSIX, scheduler, virtual memory, VFS, tracing
+- Jan 2027: ext4/F2FS, cache/writeback, blk-mq, NVMe/ZNS, isolated I/O experiments
+- Feb 2027: OSLab paper reviews and preparation for research-group participation
+- Spring 2027: coursework, baselines, reproducibility and research question selection
+- Continuous: algorithms, systems code, research reading and reproducible notes
+
+Experiments should be implemented in `systems-notes/labs/`, and results should be documented in Korean technical notes. Original KDT course source material and private mentor conversations are not published.
 
 ## Design and publishing conventions
 
 - Every focused article includes an original, dark-mode SVG based on the relevant mechanism; illustrations are conceptual, not production diagrams.
 - Favor problem → observations → questions → experiments/decisions → verified outcome → open questions.
-- For KDT, write in the voice of someone who **attended and learned**, not as a legalistic audit of the syllabus. Never invent a benchmark, personal kernel patch or independently completed final project.
+- KDT learning notes live in the separate study repository; preserve first-person learning context and distinguish illustrative examples from executed labs. Never invent benchmark figures, personal kernel patches or completed course capstones.
 - The main portfolio and project write-ups remain in English; `systems-notes` article titles and bodies remain in Korean.
 - On the public site, do not disclose military network identifiers, private credentials, detailed operational procedures, or internal topology.

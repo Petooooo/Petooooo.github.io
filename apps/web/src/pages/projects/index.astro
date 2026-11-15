@@ -24,24 +24,12 @@ const investigationOrder = [
   "rokaf-gpu-discovery-open-investigation",
   "rokaf-control-plane-incident-log"
 ];
-const trainingOrder = [
-  "kdt-linux-system-kernel-expert-course",
-  "kdt-posix-system-programming",
-  "kdt-kernel-tracing-vfs-memory",
-  "kdt-embedded-linux-drivers",
-  "kdt-crash-dump-analysis-progress",
-  "kdt-ebpf-observability-progress"
-];
 const journal = projects
   .filter((p) => rokafOrder.includes(p.slug))
   .sort((a, b) => rokafOrder.indexOf(a.slug) - rokafOrder.indexOf(b.slug));
 const openInvestigations = projects
   .filter((p) => investigationOrder.includes(p.slug))
   .sort((a, b) => investigationOrder.indexOf(a.slug) - investigationOrder.indexOf(b.slug));
-const trainingRecords = projects
-  .filter((p) => trainingOrder.includes(p.slug))
-  .sort((a, b) => trainingOrder.indexOf(a.slug) - trainingOrder.indexOf(b.slug));
-
 const highlights = [
   {
     type: "Undergraduate project / memory efficiency",
@@ -108,10 +96,5 @@ const highlights = [
     </div>
   </section>
 
-  <section class="border-t border-white/10 py-12 md:py-16">
-    <SectionHeader eyebrow="K-Digital Training · 2023–2024" title="Linux systems foundations" description="My learning journey from C++ and POSIX through Linux internals, drivers, storage and system tracing." />
-    <div class="grid gap-4 md:grid-cols-2">
-      {trainingRecords.map((project) => <ProjectCard project={project} />)}
-    </div>
-  </section>
+
 </BaseLayout>
