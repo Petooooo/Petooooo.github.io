@@ -2,14 +2,14 @@
 import { getCollection } from "astro:content";
 import BaseLayout from "@/layouts/BaseLayout.astro";
 import ContentCard from "@/components/ContentCard.astro";
-import SectionHeader from "@/components/SectionHeader.astro";
+import PageHeader from "@/components/PageHeader.astro";
 import { byDateDesc, getCollectionUrl, isPublishedEntry } from "@/lib/content";
 
 const entries = (await getCollection("research")).filter(isPublishedEntry).sort(byDateDesc);
 ---
 <BaseLayout title="Research" description="Jihwan Park's upcoming systems research notes, focusing on Linux, file systems, storage, and memory.">
+  <PageHeader eyebrow="Research" title="Research notebook" description="Research notes and experiments from my upcoming work at KAIST's Operating Systems Laboratory." />
   <section class="py-12 md:py-16">
-    <SectionHeader eyebrow="Research" title="Research notebook" description="I'm preparing to join KAIST's Operating Systems Laboratory in spring 2027. This section is reserved for research notes, experiments, and results I can stand behind." />
     {entries.length > 0 ? (
       <div class="grid gap-4 md:grid-cols-2">{entries.map((entry) => <ContentCard entry={entry} href={getCollectionUrl(entry)} label="research" />)}</div>
     ) : (

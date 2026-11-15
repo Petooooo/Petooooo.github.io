@@ -3,6 +3,7 @@ import { getCollection } from "astro:content";
 import BaseLayout from "@/layouts/BaseLayout.astro";
 import ProjectCard from "@/components/ProjectCard.astro";
 import SectionHeader from "@/components/SectionHeader.astro";
+import PageHeader from "@/components/PageHeader.astro";
 import { byDateDesc, isPublishedEntry } from "@/lib/content";
 import { withBase } from "@/lib/urls";
 
@@ -25,7 +26,7 @@ const highlights = [
     tags: ["FPGA", "Zynq", "Verilog"]
   },
   {
-    type: "ROK Air Force / Systems engineering",
+    type: "ROKAF / Systems engineering",
     title: "Independent on-premises K3s platform engineering",
     result: "K3s / Linux",
     metric: "Independently built & operated · Jul 2025–Present",
@@ -35,10 +36,8 @@ const highlights = [
 ];
 ---
 <BaseLayout title="Projects" description="Selected projects and engineering experience: TinyML memory planning, FPGA acceleration, and Linux infrastructure.">
-  <section class="border-b border-white/10 py-12 md:py-16">
-    <p class="font-mono text-xs uppercase tracking-[0.18em] text-signal">Selected work</p>
-    <h1 class="mt-4 text-4xl font-semibold text-white md:text-5xl">Projects &amp; engineering</h1>
-    <p class="mt-5 max-w-3xl text-base leading-8 text-slate-300">Work across memory-constrained ML and hardware acceleration, alongside independently building and operating an on-premises K3s platform during ROK Air Force service. These experiences are separate from my upcoming graduate research.</p>
+  <PageHeader eyebrow="Selected work" title="Projects & engineering" description="Memory-efficient ML, FPGA acceleration, and practical systems engineering." />
+  <section class="py-12 md:py-16">
     <div class="mt-6 grid gap-5 md:grid-cols-3">
       {highlights.map((item) => (
         <article class="flex flex-col border border-white/10 bg-white/[0.025] p-5">
@@ -55,7 +54,7 @@ const highlights = [
     </div>
     <p class="mt-6 text-sm leading-7 text-slate-400">The measurement summaries come from undergraduate project evaluations described in my <a class="text-signal underline underline-offset-4" href={withBase("/cv/#selected-projects")}>CV</a>. Full reports and reproducible project details will be linked when ready for public release.</p>
   </section>
-  <section class="py-12 md:py-16">
+  <section class="border-t border-white/10 py-12 md:py-16">
     <SectionHeader eyebrow="Write-ups" title="Project notes" description="Detailed, reviewed implementation records appear here as they become ready to publish." />
     {projects.length > 0 ? (
       <div class="grid gap-4 md:grid-cols-2">{projects.map((project) => <ProjectCard project={project} />)}</div>

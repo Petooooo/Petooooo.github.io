@@ -2,6 +2,7 @@
 import BaseLayout from "@/layouts/BaseLayout.astro";
 import SectionHeader from "@/components/SectionHeader.astro";
 import CVEntry from "@/components/CVEntry.astro";
+import PageHeader from "@/components/PageHeader.astro";
 
 const education = [
   {
@@ -31,8 +32,9 @@ const training = [
 const infrastructure = [
   {
     period: "Jul 2025–Present",
-    title: "ROK Air Force · Independently Built On-Premises K3s Infrastructure",
-    subtitle: "AI신기술체계개발대 / 인공지능기반기술중대 · Enlisted May 19, 2025; assigned July 7, 2025",
+    title: "ROKAF · On-Premises K3s Platform",
+    subtitle: "AI Systems Infrastructure · Independent platform engineering",
+    detail: "Received an award from the ROKAF Chief of Staff in recognition of this work.",
     highlights: [
       "Independently established, operated, and troubleshot a K3s-based platform in an on-premises, closed-network environment following my unit assignment.",
       "Handled platform deployments and day-to-day operations across container delivery, persistent storage, internal service networking, and recovery.",
@@ -115,20 +117,16 @@ const skills = [
 ---
 
 <BaseLayout title="CV" description="Jihwan Park — incoming M.S. student in AI Systems at KAIST (Spring 2027), with experience in Linux systems, memory efficiency, FPGA acceleration, and storage infrastructure.">
-  <section class="border-b border-white/10 py-12 md:py-16">
-    <p class="font-mono text-xs uppercase tracking-[0.16em] text-signal">Curriculum vitae</p>
-    <h1 class="mt-4 text-4xl font-semibold tracking-tight text-white md:text-5xl">Jihwan Park</h1>
-    <p class="mt-4 max-w-3xl text-base leading-8 text-slate-300 md:text-lg">
-      Incoming M.S. student at KAIST (Spring 2027) · AI Systems / Operating Systems Laboratory
-    </p>
-    <p class="mt-3 max-w-3xl text-sm leading-7 text-slate-400">
-      Focused on operating systems, storage, and memory. Independently built and operated an on-premises K3s platform during ROK Air Force service, alongside undergraduate work in memory efficiency and FPGA acceleration.
-    </p>
-    <div class="mt-6 flex flex-wrap gap-x-7 gap-y-2 text-sm text-slate-300">
+  <PageHeader
+    eyebrow="Curriculum vitae"
+    title="Jihwan Park"
+    description="Incoming M.S. student in AI Systems at KAIST (Spring 2027), joining the Operating Systems Laboratory."
+  >
+    <div class="mt-5 flex flex-wrap gap-x-7 gap-y-2 text-sm text-slate-400">
       <a class="underline decoration-white/20 underline-offset-4 hover:text-signal" href="mailto:jihwan.park@kaist.ac.kr">jihwan.park@kaist.ac.kr</a>
       <a class="underline decoration-white/20 underline-offset-4 hover:text-signal" href="https://github.com/Petooooo">GitHub</a>
     </div>
-  </section>
+  </PageHeader>
 
   <section class="py-10 md:py-14">
     <SectionHeader eyebrow="Background" title="Education" />
@@ -157,7 +155,7 @@ const skills = [
   </section>
 
   <section id="infrastructure-experience" class="scroll-mt-24 border-t border-white/10 py-10 md:py-14">
-    <SectionHeader eyebrow="Experience" title="ROK Air Force · On-premises K3s engineering" description="Independent platform construction, operations, and troubleshooting since the July 7, 2025 unit assignment. Internal topology and configurations are omitted." />
+    <SectionHeader eyebrow="Experience" title="ROKAF · AI Systems Infrastructure" description="Independently built, operated, and troubleshot on-premises K3s infrastructure in a closed network. Internal system details are omitted." />
     <div>
       {infrastructure.map((entry) => <CVEntry {...entry} />)}
     </div>

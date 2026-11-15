@@ -1,12 +1,12 @@
 ---
 import BaseLayout from "@/layouts/BaseLayout.astro";
 import SectionHeader from "@/components/SectionHeader.astro";
-import { withBase } from "@/lib/urls";
+import PageHeader from "@/components/PageHeader.astro";
 
 const journey = [
   { period: "2021 — 2025", title: "Kyung Hee University", detail: "B.S. in Computer Science and Engineering, with a double major in Electronic Engineering. Projects included TinyML memory planning and FPGA CNN acceleration." },
   { period: "Oct 2023 — Mar 2024", title: "Linux System & Kernel Expert Course (KDT)", detail: "Studied C/POSIX system programming, scheduling, virtual memory, VFS/file systems, device drivers, and tracing/debugging." },
-  { period: "Jul 2025 — Present", title: "ROK Air Force · On-premises K3s infrastructure", detail: "Enlisted May 19, 2025, and was assigned July 7 to AI신기술체계개발대 / 인공지능기반기술중대. Independently built and operated a K3s-based internal platform in a closed-network environment, including troubleshooting, storage, and recovery." },
+  { period: "Jul 2025 — Present", title: "ROKAF · AI Systems Infrastructure", detail: "Independently built and operated an on-premises K3s platform in a closed network, handling infrastructure troubleshooting and recovery. Received an award from the ROKAF Chief of Staff for this work." },
   { period: "Spring 2027", title: "KAIST · Incoming M.S.", detail: "Joining the Department of AI Systems and the Operating Systems Laboratory, with a growing focus on kernel, storage, and memory systems." }
 ];
 
@@ -17,27 +17,17 @@ const interests = [
 ];
 ---
 <BaseLayout title="About" description="About Jihwan Park — computer science, electronic engineering, Linux infrastructure, and upcoming graduate study in operating systems and storage.">
-  <section class="border-b border-white/10 py-12 lg:py-20">
-    <p class="font-mono text-xs uppercase tracking-[0.18em] text-signal">About me</p>
-    <div class="mt-6 grid gap-8 lg:grid-cols-[0.9fr_1.1fr]">
-      <div>
-        <h1 class="text-4xl font-semibold leading-tight text-white md:text-5xl">Jihwan Park</h1>
-        <p class="mt-4 text-lg text-slate-400">Systems software, storage, and the layers in between.</p>
-        <div class="mt-7 flex flex-wrap gap-3 text-sm">
-          <a class="border border-white/20 px-4 py-2 text-white transition hover:border-signal hover:text-signal" href="mailto:jihwan.park@kaist.ac.kr">Email ↗</a>
-          <a class="border border-white/20 px-4 py-2 text-white transition hover:border-signal hover:text-signal" href={withBase("/cv")}>View CV ↗</a>
-        </div>
-      </div>
-      <div class="space-y-4 text-base leading-8 text-slate-300">
-        <p>I studied computer science and electronic engineering at Kyung Hee University. I enjoy the part of computing where software behavior meets real hardware limits.</p>
-        <p>My undergraduate projects involved TensorFlow Lite Micro memory allocation and a CNN accelerator on Zynq FPGA. In KDT, I studied system programming, kernel internals, file systems, and debugging.</p>
-        <p>After entering the Republic of Korea Air Force in May 2025, I joined an AI systems unit in July. There, I independently set up and have operated a K3s-based on-premises platform in a closed network. Building the system and handling failures firsthand gave me sustained experience with deployments, persistent storage, artifact distribution, and recovery.</p>
-        <p>Those experiences led me toward the kernel and I/O stack: file systems, flash storage, and the path between GPUs, memory, and storage. I'll join KAIST's AI Systems master's program and Operating Systems Laboratory in spring 2027.</p>
-      </div>
+  <PageHeader eyebrow="Profile" title="About" description="My background connects computer science, hardware, and hands-on systems engineering." />
+
+  <section class="border-b border-white/10 py-12 md:py-16">
+    <div class="max-w-3xl space-y-4 text-base leading-8 text-slate-300">
+      <p>I studied computer science and electronic engineering at Kyung Hee University, working on memory-constrained ML and FPGA acceleration. I later studied Linux system programming and kernel internals through KDT.</p>
+      <p>At the Republic of Korea Air Force (ROKAF), I independently built and operated a K3s-based platform for on-premises AI systems infrastructure in a closed network. I handled deployments, persistent storage, troubleshooting, and recovery, and received an award from the ROKAF Chief of Staff for this work.</p>
+      <p>I'll join KAIST's AI Systems master's program and Operating Systems Laboratory in spring 2027. I'm particularly interested in file systems, storage, memory management, and I/O performance.</p>
     </div>
   </section>
 
-  <section class="py-12 lg:py-16">
+  <section class="py-12 md:py-16">
     <SectionHeader eyebrow="Background" title="How I got here" description="Different kinds of work, connected by an interest in how systems behave under constraints." />
     <div class="grid gap-0">
       {journey.map((item) => (
@@ -52,7 +42,7 @@ const interests = [
     </div>
   </section>
 
-  <section class="border-t border-white/10 py-12 lg:py-16">
+  <section class="border-t border-white/10 py-12 md:py-16">
     <SectionHeader eyebrow="Looking ahead" title="Research interests" description="Questions I want to explore during graduate study." />
     <div class="grid gap-5 md:grid-cols-3">
       {interests.map((item) => (
@@ -64,7 +54,7 @@ const interests = [
     </div>
   </section>
 
-  <section class="border-t border-white/10 py-12 lg:py-16">
+  <section class="border-t border-white/10 py-12 md:py-16">
     <SectionHeader eyebrow="Notebook" title="Why I keep this site" description="A place to keep useful technical details instead of just project titles." />
     <p class="max-w-3xl text-base leading-8 text-slate-300">I use this site to collect notes from things I've built, studied, and debugged. The operations notes leave out internal hostnames, credentials, and other private infrastructure details. I prefer explaining concrete decisions and trade-offs over polishing an impressive-sounding summary.</p>
   </section>

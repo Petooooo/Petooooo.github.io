@@ -2,11 +2,10 @@
 import { getCollection } from "astro:content";
 import BaseLayout from "@/layouts/BaseLayout.astro";
 import AreaPostRail from "@/components/AreaPostRail.astro";
-import SectionHeader from "@/components/SectionHeader.astro";
+import PageHeader from "@/components/PageHeader.astro";
 import { byDateDesc, getAreaId, getEntryArea, isPublishedEntry, sortAreas } from "@/lib/content";
 const entries = (await getCollection("notes")).filter(isPublishedEntry).sort(byDateDesc);
 const areaOrder = [
-  "학습 로드맵",
   "Study Roadmap",
   "Algorithms",
   "Baekjoon",
@@ -34,8 +33,8 @@ const areaGroups = sortAreas([...new Set(entries.map(getEntryArea))], areaOrder)
 }));
 ---
 <BaseLayout title="Notes" description="Technical notes, implementation details, operating records, and reusable references.">
-  <section class="py-12 md:py-14">
-    <SectionHeader eyebrow="Notes" title="Technical notebook" description="Study notes, engineering references, and operational records in one place — from operating systems and networking to Kubernetes troubleshooting." />
+  <PageHeader eyebrow="Notes" title="Technical notebook" description="Study notes, programming exercises, and engineering references." />
+  <section class="py-12 md:py-16">
     {areaGroups.length > 0 && (
       <nav class="mb-8 border-y border-white/10 py-3" aria-label="Notes areas">
         <div class="flex flex-wrap gap-2">
