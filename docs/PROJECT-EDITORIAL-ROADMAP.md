@@ -11,7 +11,7 @@ This document separates **published engineering records** from **candidate artic
 | About | Research direction and the personal connection among undergraduate projects, operational engineering and incoming graduate study |
 | CV | Concise factual timeline, responsibilities, award, technical skills and deep links to focused records |
 | Projects | Undergraduate project implementations and ROKAF engineering experience only |
-| Notes / systems-notes | KDT Linux course notes, detailed study roadmap, and future Korean study articles (English navigation and metadata) |
+| Notes / systems-notes | Linux system notes, a topic index, and future Korean technical articles (English navigation and metadata) |
 
 ## ROKAF engineering records — published
 
@@ -58,17 +58,17 @@ KDT topics are **course learning materials**, not implementation portfolios. The
 | Embedded Linux and drivers | `/notes/study-kdt-embedded-linux/` |
 | Crash dump analysis | `/notes/study-kdt-crash-dump/` |
 | eBPF/BCC and observability | `/notes/study-kdt-ebpf-observability/` |
-| OSLab preparation roadmap | `/notes/study-roadmap/` |
+| Kernel-to-storage reading map | `/notes/study-roadmap/` |
 
 All six original KDT project routes redirect to these Notes routes. The CV keeps the KDT qualification but points readers to the Notes series for technical details.
 
-## Study roadmap and future experiments
+## Connected topics and future experiments
 
-The source-of-truth roadmap is [systems-notes/notes/study-roadmap.mdx](https://github.com/Petooooo/systems-notes/blob/main/notes/study-roadmap.mdx). It covers:
+The source-of-truth connection map is [systems-notes/notes/study-roadmap.mdx](https://github.com/Petooooo/systems-notes/blob/main/notes/study-roadmap.mdx). It covers:
 
 - Nov–Dec 2026: POSIX, scheduler, virtual memory, VFS, tracing
 - Jan 2027: ext4/F2FS, cache/writeback, blk-mq, NVMe/ZNS, isolated I/O experiments
-- Feb 2027: OSLab paper reviews and preparation for research-group participation
+- Feb 2027: systems-paper reviews and evaluation methods
 - Spring 2027: coursework, baselines, reproducibility and research question selection
 - Continuous: algorithms, systems code, research reading and reproducible notes
 
