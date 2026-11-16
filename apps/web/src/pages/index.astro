@@ -80,7 +80,7 @@ const toolGroups = [
   </section>
 
   <section class="py-12 md:py-16">
-    <SectionHeader eyebrow="Research direction" title="Interests" description="Areas I'm interested in exploring as I begin graduate study." />
+    <SectionHeader eyebrow="Focus" title="Interests" />
     <div class="grid gap-6 md:grid-cols-3">
       {interests.map((item) => (
         <div class="border-t border-white/15 pt-5">
@@ -124,7 +124,7 @@ const toolGroups = [
 
   {recentPosts.length > 0 && (
     <section class="border-t border-white/10 py-12 md:py-16">
-      <SectionHeader eyebrow="Notebook" title="Recent notes" description="Technical notes, newest first." />
+      <SectionHeader eyebrow="Notebook" title="Recent notes" />
       <div class="grid gap-4 md:grid-cols-2">
         {recentPosts.map((entry) => <ContentCard entry={entry} href={getCollectionUrl(entry)} label={entry.collection === "research" ? "Research" : "Note"} />)}
       </div>

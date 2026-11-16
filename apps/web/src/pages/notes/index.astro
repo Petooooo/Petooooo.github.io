@@ -6,8 +6,10 @@ import PageHeader from "@/components/PageHeader.astro";
 import { byDateDesc, getAreaId, getEntryArea, isPublishedEntry, sortAreas } from "@/lib/content";
 const entries = (await getCollection("notes")).filter(isPublishedEntry).sort(byDateDesc);
 const areaOrder = [
-  "Study Roadmap",
+  "Index",
   "Linux Kernel",
+  "Storage & File Systems",
+  "Graduate Study",
   "System Programming",
   "Algorithms",
   "Baekjoon",
@@ -35,7 +37,7 @@ const areaGroups = sortAreas([...new Set(entries.map(getEntryArea))], areaOrder)
 }));
 ---
 <BaseLayout title="Notes" description="Technical notes, implementation details, operating records, and reusable references.">
-  <PageHeader eyebrow="Notes" title="Technical notebook" description="Study notes, programming exercises, and engineering references." />
+  <PageHeader eyebrow="Notes" title="Technical notebook" description="Linux internals, file systems, storage, algorithms, and things I want to revisit." />
   <section class="py-12 md:py-16">
     {areaGroups.length > 0 && (
       <nav class="mb-8 border-y border-white/10 py-3" aria-label="Notes areas">
