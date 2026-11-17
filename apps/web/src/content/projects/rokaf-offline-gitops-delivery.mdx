@@ -1,0 +1,202 @@
+---
+title: "Two Control Loops Behind Offline GitOps Delivery"
+description: "How I separated image production from desired-state reconciliation in a closed-network K3s environment, and what Kaniko, a private registry, certificate trust and Argo CD taught me about dependable delivery."
+date: "2026-11-17"
+draft: false
+reviewed: true
+reviewStatus: "reviewed"
+sensitivity: sanitized
+category: "Systems Engineering"
+area: "CI/CD & GitOps"
+tags: ["K3s", "GitLab Runner", "Kaniko", "Nexus3", "Argo CD", "GitOps", "Private CA"]
+type: "implementation-note"
+role: "Private image supply-chain integration, Kubernetes CI troubleshooting and GitOps delivery design"
+period: "2025–2026"
+status: "active"
+techStack: ["GitLab CI", "Kubernetes", "Kaniko", "Nexus3", "Argo CD", "Helm", "Linux"]
+---
+
+A successfully built container image is not a deployed service. That distinction sounds obvious until both jobs are described as one "CI/CD pipeline" and a broken deployment gets diagnosed by rerunning the build.
+
+I was building out service delivery for an on-premises K3s platform that could not assume access to public image registries or package repositories. I worked with a **GitLab Runner using the Kubernetes executor, Kaniko, a private Nexus3 registry and Argo CD**. My objective was not merely to automate a sequence of commands. I wanted a particular source revision to produce an identifiable image, and a separately reviewable deployment state to say *which image the cluster should run*.
+
+The architecture I documented at the time had two repositories with different purposes: **application source** fed the build path, and **GitOps state** defined Kubernetes resources reconciled by Argo CD. It also included Auto Sync as part of the intended deployment experience. The surviving incident records are much more detailed about build jobs, runner placement, registry and certificate failures than about Argo CD's per-Application sync policy or recovery history. This account deliberately preserves that evidence boundary instead of claiming an exhaustively verified automatic rollout and rollback system.
+
+## One commit does not update both kinds of state
+
+A source commit can trigger a build and produce an image. It does not automatically change the manifests Argo CD is watching. Somewhere, a **deployment reference**—for example an immutable image digest or an explicitly promoted tag—must become the desired version in the GitOps repository.
+
+That is a second, independent decision. It can be implemented as a reviewable commit, an automated promotion, or a separate release process. Without knowing which path is configured, a green CI job says only that the build-side contract passed.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/offline-gitops-two-loops.svg" target="_blank" rel="noopener noreferrer" aria-label="Open image supply and GitOps reconciliation control-loop comparison">
+    <img src="/figures/journals/offline-gitops-two-loops.svg" alt="The image supply path on the left records a source revision, Kubernetes-executor build and a registry image identity; a separate GitOps loop on the right compares desired Git state with observed Kubernetes state using Argo CD. A promotion boundary connects the image identity to the desired image reference but is not shown as automatically implemented." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Conceptual ownership map, not an actual network topology. The dashed promotion edge is a separate contract; it does not assert an implemented automatic image-tag update.</figcaption>
+</figure>
+
+I found it useful to think in terms of two proofs:
+
+| Proof I needed | Responsible system | What a green result does **not** establish |
+| --- | --- | --- |
+| **Image provenance** — a particular source revision becomes an image that a runtime can fetch | GitLab CI, builder, artifact registry and trust configuration | That Kubernetes has switched to this image |
+| **Desired/live convergence** — the manifests in Git match the observed cluster resources | GitOps repository, Argo CD and Kubernetes controllers | That the workload serves a correct user request |
+
+Argo CD makes the distinction between *Synced* and *Healthy* explicit: one concerns agreement with desired manifests, and the other concerns the assessed health of the application resources. Even *Healthy* is not a substitute for a representative end-to-end request or state-integrity test.
+
+## Why I used a Kubernetes-executor Runner rather than hiding a Docker daemon
+
+The Runner created build jobs inside Kubernetes. That was operationally convenient because the workload could run in the same orchestration system as the surrounding platform. It also forced me to understand what **the job container**, **Runner helper**, **Kubernetes image pull** and **build executor** were each doing.
+
+Kaniko was my image-building path. Rather than require every build job to run a privileged Docker daemon, its executor builds from a Dockerfile and publishes the resulting image to the configured registry. That avoids one common Docker-in-Docker privilege requirement, but it is not a universal security guarantee: the Runner pod configuration, file mounts, credentials and privileges still matter.
+
+I did consider a Docker-in-Docker approach as an alternative. In this environment it would have added privileged execution and more daemon/TLS configuration to operate. I preferred getting the Kaniko job working first rather than expanding the moving parts before I understood the initial failure.
+
+### The executor image did not behave like a general-purpose CI shell
+
+One of the concrete bugs was particularly instructive. The Kubernetes Runner job tried to invoke \`/kaniko/executor\`, but the command was not available from the effective runtime environment. Rewriting the CI YAML repeatedly would not fix a missing or inaccessible executable.
+
+The answer was at the image boundary: I built a small **shell-capable wrapper** that preserved Kaniko's executor files while providing the shell environment expected by the Runner job. The earlier job-image issue was resolved and the CI job began working with that wrapper.
+
+This was not about GitOps at all. Argo CD cannot reconcile an image that the upstream build path never produced.
+
+It also exposed an important diagnostic ambiguity. At another point, a failing job was assigned to a different Runner, and the environment inspected during failure did not match the container I expected. Before analyzing a command path, I had to establish *which Runner and which container had actually executed the job*. Cluster placement can change the effective environment even when the pipeline file does not change.
+
+### Reproducibility is a closure property
+
+In a closed network, a successful Dockerfile is not enough. The builder's own base image, every \`FROM\` dependency, package manager index, certificate chain and registry permission needs to be available through the approved internal supply path.
+
+I separated the build prerequisites into a small inventory:
+
+| Dependency | Why it cannot be optional |
+| --- | --- |
+| Runner and helper image | The job may fail before the user's script starts |
+| Builder executable and shell compatibility | The job can start but cannot run the build |
+| Base images and build-time packages | A Dockerfile may rely on unreachable upstream dependencies |
+| Registry credentials and permissions | Authentication may succeed while repository push is denied |
+| Trusted CA and endpoint identity | The client may reject a genuine internal endpoint as untrusted |
+| Image identity in the GitOps repo | A new build cannot become the desired deployment by implication |
+
+Some failures in this list look similar from the pipeline's final red status. Their repair procedures are not the same.
+
+## I had to locate the TLS failure before changing trust
+
+The private registry used a certificate chain that was not necessarily trusted by every container or node. When a push or pull failed with an \`x509\` error, the useful question was not "How do I disable verification?" It was **who made the TLS connection and which trust store did that client use?**
+
+There are at least three distinct connections:
+
+**Build-to-registry.** Kaniko connects to the private registry to push or fetch image layers. Its container must trust the certificate chain and use an endpoint name matching the certificate.
+
+**Kubernetes node-to-registry.** The kubelet/container runtime pulls the image *before the application or CI job container starts*. Installing a CA only inside the image-building process cannot repair a node-level pull error.
+
+**Argo CD-to-Git.** The repository component fetching the GitOps desired state has its own Git/TLS trust relationship. It cannot be fixed by giving a Kaniko container a CA bundle.
+
+In an earlier registry incident, the error occurred while Kubernetes was pulling the CI job image—before the Kaniko script could run. That localized the failure to **node runtime trust**, not to the builder's internal certificate store. On a different failure path, including the relevant trusted CA in the builder environment addressed verification of a registry connection made by that builder. Those are separate fixes at separate trust boundaries.
+
+Disabling certificate verification as a permanent remedy would erase an important protection and hide whether I had actually distributed the correct issuer chain. I kept the trust question explicit instead.
+
+## A build result still needed a deployment decision
+
+The documented GitOps structure used a Git repository as the source of desired Kubernetes resource state and Argo CD to compare that state with the running cluster. The diagram was not just "GitLab pushes a Pod." It separated **artifact production** from **resource reconciliation**.
+
+The design question that follows is deceptively practical: *Which update is allowed to change the running image?*
+
+A mutable tag can be rewritten in the registry without changing the manifest's text. Argo CD may still show the same declared image reference, while the exact bytes a node pulls can depend on caching and pull policy. An immutable digest gives a more precise artifact identity, but it still needs a GitOps commit or an intentional update to the declared image. Digest pinning and immutable tags are two possible techniques; neither should be mistaken for a deployed release process merely because it appears in an architectural diagram.
+
+I preferred a clean separation of concerns:
+
+- The **application repository** determines what was built and from which source revision.
+- The **registry** retains the resulting image artifact and resolves the referenced digest/tag.
+- The **GitOps repository** records what version should run and with which non-secret Kubernetes configuration.
+- **Argo CD** compares manifests with cluster state and, according to configured policies, synchronizes drift.
+- **Kubernetes** handles scheduling and runtime convergence; the application must still satisfy readiness and functional checks.
+
+The distinction is particularly important when rollback is mentioned. Reverting a manifest commit may restore a previous **desired image reference**, but a true rollback still requires that image to be present, pullable, compatible with database state and capable of serving requests. Argo CD auto-sync is not a promise of application-level transactional rollback.
+
+## The registry could become its own recovery dependency
+
+A private image registry makes the rest of the platform independent from the public internet, but it can also make the platform dependent on the registry's availability.
+
+Consider a recovery scenario in which a registry is unavailable while its own Pod needs to be recreated. If the registry image can only be pulled *from that same unavailable registry*, the normal recovery path forms a cycle.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/offline-gitops-bootstrap-cut.svg" target="_blank" rel="noopener noreferrer" aria-label="Open registry bootstrap circular-dependency figure">
+    <img src="/figures/journals/offline-gitops-bootstrap-cut.svg" alt="A conceptual circular dependency: the private registry serves images needed by K3s workloads, while registry recovery itself may require a pull from the same registry. An independent minimal recovery image source breaks the bootstrap dependency; the figure is a design option, not a verified deployment." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Bootstrap dependency graph. The alternative recovery source is an evaluated design direction, not a claim that a complete independent recovery registry was deployed.</figcaption>
+</figure>
+
+I investigated keeping a minimal trusted set of recovery images or another independent bootstrap path so that essential control-plane and artifact services would not rely entirely on their own availability. This was a design concern; I do not have a retained recovery drill demonstrating that the proposed independent path passed every failure scenario.
+
+It also highlights an uncomfortable dependency: **the system that delivers new workloads may not be available while the infrastructure is being repaired**. In that state, a self-heal policy in Argo CD cannot summon a missing container image from a registry that cannot respond.
+
+## Sync status is not application correctness
+
+Once I treated GitOps as a reconciliation loop, I stopped expecting one green status to answer every operational question.
+
+| Situation | GitOps-level observation | Next question |
+| --- | --- | --- |
+| Image built and uploaded, manifest still points to an earlier image | No automatic deployment follows from CI success | Was promotion to desired state performed? |
+| Argo CD reports \`OutOfSync\` | Live resources differ from desired manifests | Is sync blocked, manual, or intentionally paused? |
+| Argo CD reports \`Synced\` but the Pod cannot pull its image | Manifests can match while runtime is broken | Is node-level registry trust or artifact availability failing? |
+| Application resources are reported \`Healthy\` but requests fail | Resource-level health does not fully exercise user behavior | Do ingress, dependencies and data operations work? |
+| An old desired revision is reapplied | Desired state changed back | Is the older image available and schema-compatible? |
+
+The failure case I encountered repeatedly was *ownership confusion*. A Kaniko execution failure is not an Argo CD problem. A node rejecting an image's certificate is not a broken Deployment specification. A controller marking a manifest Synced does not guarantee that every application dependency is usable.
+
+Automatic reconciliation is a valuable capability, but it is safe only when the desired state and all its artifacts are available and the rollout is compatible with persistent state.
+
+### Auto Sync, pruning and self-healing should not be one checkbox in the story
+
+My internal architecture material explicitly described GitOps with Auto Sync and Kubernetes resource state. It does not retain the per-Application configuration or full operation history needed to assert that every workload had automated pruning, self-heal or reliable rollback enabled.
+
+Those options solve different problems:
+
+- **Automatic sync** reconciles eligible desired-state changes according to the Application policy.
+- **Self-heal** concerns drift from desired state caused by changes in the live resources.
+- **Pruning** allows resources removed from the desired configuration to be removed from the cluster, subject to policy.
+- **Rollback** is a separate recovery process with artifact and data-compatibility constraints; enabling automatic sync does not magically make it safe.
+
+In a stateful production environment, I would review pruning and destructive change policies separately from ordinary image rollout. A Git commit that deletes a PersistentVolumeClaim cannot be judged by the same standard as changing a stateless image tag.
+
+## What the surviving records actually establish
+
+The original work contains concrete evidence for some links and mainly architectural evidence for others.
+
+| Activity | Status supported by the record |
+| --- | --- |
+| GitLab Runner with Kubernetes executor | **Configured and used** |
+| Kaniko wrapper to satisfy executable/shell expectations | **Implemented; previously failing job began working** |
+| Private Nexus registry, image pushing and trust/permission troubleshooting | **Implemented and investigated**, with some permission cases still open |
+| Private CA differences between builder and node runtime | **Observed and addressed by failure layer** |
+| GitOps repo + Argo CD comparison and Auto Sync in platform architecture | **Explicitly documented as the designed deployment path** |
+| Per-Application sync policy, automatic image-reference promotion and pruning coverage | **Not independently established** |
+| Fully automated recovery or successful rollback of an arbitrary stateful service | **Not established** |
+| Measured improvement in deployment frequency, lead time or recovery time | **Not recorded publicly** |
+
+That separation is deliberate. The deployment model was real engineering work, but I do not want the final write-up to present a design diagram as evidence for an unrecorded reliability outcome.
+
+## How I would verify the entire contract today
+
+A representative evaluation would use a harmless test service and an approved test artifact:
+
+1. Produce an image from a known source revision; retain the artifact identity and build result.
+2. Confirm a node can pull that artifact using its own container-runtime certificate configuration.
+3. Update the GitOps repository's desired image reference and confirm Argo CD observes the corresponding desired-state change.
+4. Verify the operation outcome, the live Pod image identity, readiness and an actual application request.
+5. Cause a controlled, reversible drift and observe the documented policy rather than assuming self-heal is enabled.
+6. Validate the recovery path with the private registry unavailable, without involving live data.
+
+The list is an **acceptance test plan**, not an assertion that all six experiments were carried out during service operation. It would allow me to distinguish CI correctness, GitOps convergence and user-visible availability with recorded evidence rather than inference.
+
+The engineering lesson was that **image provenance, desired resource state and usable runtime state are three different contracts**. Putting GitLab, Nexus and Argo CD into one deployment diagram is easy. Making each contract independently observable, reproducible and recoverable is where the operational design begins.
+
+## References and connected engineering records
+
+- [Argo CD — core concepts: target state, sync and health](https://argo-cd.readthedocs.io/en/stable/core_concepts/)
+- [Argo CD — sync options and pruning](https://argo-cd.readthedocs.io/en/stable/user-guide/sync-options/)
+- [GitLab Runner — Kubernetes executor](https://docs.gitlab.com/runner/executors/kubernetes/)
+- [GitLab Runner — self-signed certificates and custom CAs](https://docs.gitlab.com/runner/configuration/tls-self-signed/)
+- [Private images, Kaniko and Nexus CI investigation](/projects/rokaf-private-artifacts-and-ci/)
+- [Networking and TLS trust boundaries](/projects/rokaf-networking-and-tls/)
+- [On-premises K3s platform overview](/projects/independent-on-premises-k3s-platform-engineering/)
