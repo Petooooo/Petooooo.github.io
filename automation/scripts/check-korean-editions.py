@@ -133,10 +133,39 @@ def main():
             localized=figure.replace("/figures/","/figures/ko/",1)
             if f'src="{localized}"' not in rendered:
                 errors.append(f"Localized image not linked: {slug}: {localized}")
-        svg_files=list((DIST/"figures/ko").rglob("*.svg"))
+    svg_files=list((DIST/"figures/ko").rglob("*.svg"))
     for p in svg_files:
         try:ET.parse(p)
         except ET.ParseError as e:errors.append(f"Invalid translated SVG: {p} ({e})")
+
+    # Catch known machine-translation artifacts in published diagram captions.
+    # Unpublished draft SVGs in a working tree do not count in this audit.
+    referenced=set()
+    for source_page in source:
+        loc=source_page.parent/"kr/index.html" if source_page!=DIST/"index.html" else DIST/"kr/index.html"
+        if not loc.is_file():
+            continue
+        html=loc.read_text(encoding="utf-8")
+        referenced.update(re.findall(r'(?:src|href)="(/figures/ko/[^"]+[.]svg)"',html))
+
+    mistranslations=(
+        "회사연혁", "제품정보", "팟캐스트", "자주 묻는 질문",
+        "사이트맵", "본문 바로가기", "회사 소개", "구매하기",
+        "로그인 해주세요", "고객 검증", "일러스트레이션",
+    )
+    for figure in sorted(referenced):
+        svg=DIST/figure.lstrip("/")
+        if not svg.is_file():
+            errors.append(f"Missing SVG referenced by Korean page: {figure}")
+            continue
+        try:root=ET.parse(svg).getroot()
+        except ET.ParseError:continue
+        for el in root.iter():
+            if el.tag.rsplit("}",1)[-1] not in {"text","tspan"}:
+                continue
+            label=(el.text or "").strip()
+            if any(term in label for term in mistranslations):
+                errors.append(f"Unnatural SVG label: {figure}: {label[:120]}")
     if len(svg_files)<60:errors.append(f"Too few localized SVGs: {len(svg_files)}")
     sitemap=" ".join(p.read_text() for p in DIST.glob("sitemap*.xml"))
     if re.search(r'/kr(?:/|<)',sitemap):errors.append("Hidden /kr editions leaked into sitemap")
