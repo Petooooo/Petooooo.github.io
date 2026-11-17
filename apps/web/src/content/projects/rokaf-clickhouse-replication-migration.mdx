@@ -1,0 +1,171 @@
+---
+title: "Moving ClickHouse Data into ReplicatedMergeTree"
+description: "The decisions and failure states behind converting existing ClickHouse tables into a Keeper-coordinated replicated design, without confusing a healthy replica with verified data consistency."
+date: "2026-11-17"
+draft: false
+reviewed: true
+reviewStatus: "reviewed"
+sensitivity: sanitized
+category: "Systems Engineering"
+area: "Databases & Migrations"
+tags: ["ClickHouse", "ReplicatedMergeTree", "ClickHouse Keeper", "Data Migration", "Storage Reliability"]
+type: "implementation-note"
+role: "Database migration design, replicated-table conversion and replica-state investigation"
+period: "2026"
+status: "active"
+techStack: ["ClickHouse", "ClickHouse Keeper", "Kubernetes", "SQL", "Linux Storage"]
+---
+
+Adding another ClickHouse process is straightforward. Making an existing dataset behave like a replicated database is not.
+
+I had a working standalone ClickHouse deployment with existing tables and analytics data. The goal was to introduce application-level replication without treating a Kubernetes replica count, a successful table attach or a green readiness probe as proof that the data had been safely migrated. I wanted to preserve the tables that already existed, understand which component owned replication state and make it possible to investigate failures without repeatedly recreating the environment.
+
+The part that required the most care was **changing the contract around existing data**. A non-replicated MergeTree table owns its data parts locally. A ReplicatedMergeTree-family table still stores its data parts in each replica's storage, but coordinates part metadata and replication work through ClickHouse Keeper. These are different failure and recovery models, not interchangeable table-engine names.
+
+This is a sanitized engineering record. The diagrams are conceptual, and the article excludes actual deployment layout, internal paths, identifiers, volumes and recovery commands. It distinguishes the states I observed from checks that would still be needed for a comprehensive migration sign-off.
+
+## Why I did not solve this with another block-storage replica
+
+One option was to lean on a replicated Kubernetes volume and run ClickHouse as though all resilience belonged below the database. That can be attractive for applications without their own replication, but ClickHouse already understands **tables, immutable data parts, merges and replica coordination**.
+
+Combining database-level and block-level replicas without a clear reason can multiply write paths and repair traffic. If an application replica already needs to fetch data parts after a failure, a storage layer simultaneously rebuilding those blocks adds another consumer of disk and network bandwidth.
+
+That does not mean local storage is always superior or a replicated volume is always wrong. It meant I had to pick the **layer responsible for restoring the database's usable state** before choosing the persistent-volume implementation. The trade-off was operational: application-level replication requires its own coordination, replica inspection and data verification.
+
+The important storage question became: *Which copy can serve a correct query after one instance has failed, and how would I know?*
+
+## A second Pod is not a second data replica
+
+A Kubernetes controller can create another ClickHouse Pod using the same image and configuration. If the existing tables are ordinary MergeTree tables, that does not automatically connect the two local datasets.
+
+ReplicatedMergeTree-family tables identify a logical replication group through Keeper metadata. Each replica has an identity within that group, and the replicas exchange data parts to converge. Keeper coordinates metadata and work; it is not a network filesystem containing the table's complete data parts.
+
+That separation shaped the migration:
+
+- The destination needed compatible table definitions, not merely an identical container.
+- The Keeper table identity had to refer to the **same logical replicated table**, while each participating replica identity had to be distinct.
+- Existing local parts could not be treated as already synchronized just because an engine name had changed.
+- Reads, writes, table definitions and derived objects needed verification at the application boundary.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/clickhouse-replica-ownership.svg" target="_blank" rel="noopener noreferrer" aria-label="Open the comparison between standalone MergeTree and Keeper-coordinated replicated tables">
+    <img src="/figures/journals/clickhouse-replica-ownership.svg" alt="Two conceptual architectures: standalone MergeTree owns local data parts, while two representative ReplicatedMergeTree replicas keep separate local parts and coordinate their replication metadata through Keeper." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Conceptual comparison, not the actual deployment topology. Keeper stores coordination metadata; the replicas retain their own table data parts.</figcaption>
+</figure>
+
+## The existing tables changed how I planned the migration
+
+I worked from an existing standalone backup rather than an empty database. That immediately ruled out the reassuring but incomplete success condition of "the new cluster started."
+
+The first inventory I needed was the **table engine and dependency graph**. A database containing several MergeTree-family tables may also have ordinary views and materialized views. Those derived definitions are not simply more base tables to transform with an engine-name substitution.
+
+My conversion work focused on the storage-engine tables, translating relevant MergeTree-family declarations to their replicated counterparts. I kept views and materialized views out of the initial base-table conversion and treated their recreation as a separate dependency-order question.
+
+Why? A materialized view can be a **write-producing consumer** of an insert stream. Reintroducing it before the source and destination relationship is understood risks duplicated work, or a failed recreation that obscures whether the underlying data tables are already consistent. Its target table may have independent replication behavior. The correct ordering depends on each view's definition and source, not a blanket rule to "turn views back on last."
+
+The implementation record confirms that the engine conversion was completed for the intended base-table set and that the table engines were inspected afterward. It does **not** establish a publicly verifiable full inventory of all historical rows, every derived output and every query.
+
+### The identifiers matter more than their textual form
+
+In a replicated engine, a coordination path represents a **table replication group**; a replica name distinguishes members. A mismatch can make two tables coordinate under different identities or collide with existing metadata.
+
+I investigated Keeper-path and table-attachment problems while moving from standalone metadata. In one phase, attempts to attach existing tables raised **`KEEPER_EXCEPTION`** and replication entered a **read-only** state.
+
+The same symptom can arise from more than one issue: a missing or expired Keeper session, conflicting metadata, an incompatible table definition or a path/identity problem. I would not use a single error label as proof of one root cause. The disciplined approach was to separate coordination connectivity, namespace identity and local table metadata instead of retrying a destructive migration step by guesswork.
+
+## The read-only state was an important signal
+
+A replicated table is not necessarily writable just because the ClickHouse process itself is healthy. During the investigation I inspected replica state rather than relying only on process liveness. The eventual observed intermediate state was that the converted replicated tables were no longer read-only and their visible replication queues were drained.
+
+That was a meaningful milestone. It was not yet a complete correctness result.
+
+| Observation | What it supports | What it cannot establish alone |
+| --- | --- | --- |
+| Expected replicated table engines appear in the table inventory | The definitions were attached as intended | The historical data is identical across replicas |
+| Keeper communication is available | The coordination layer is reachable | All part fetches have finished |
+| `is_readonly = 0` | A sampled replica is not in read-only mode | Every query and insert will succeed under failure |
+| `queue_size = 0` | No pending replica tasks in that queue at the sampled instant | Permanent convergence or equal row counts |
+| An insert and read succeed | The tested client path is functional | Historical partitions and views have been checked |
+| Both replicas are healthy in Kubernetes | Processes pass configured health checks | Application-visible data equivalence |
+
+I specifically saw a period in which one replica progressed while another lagged behind. That was consistent with asynchronous replication and catch-up work; it also meant that a temporary difference in observed part or row state could not automatically be called corruption.
+
+The right response was not to erase the slower replica's state, but to identify what remained pending and whether the difference was shrinking, stable or growing.
+
+## Queue progress is evidence, not a checksum
+
+ClickHouse exposes different windows into replica health. I used the concepts represented by **`system.tables`**, **`system.replicas`** and their replication progress to distinguish engine conversion from ongoing synchronization. A fuller investigation would also inspect **`system.replication_queue`**, active parts and relevant query results.
+
+The problem is that these sources answer different questions:
+
+- The engine catalog answers **what the server thinks the table is**.
+- Replica status answers **whether this replica can participate and which work remains queued**.
+- The replication queue answers **what work is waiting or failing**.
+- Parts and content checks answer **what data is currently visible locally**.
+- An application query answers **whether the required user-visible operation succeeds**.
+
+I would not call these five observations a single "healthy" flag. In particular, two replicas can have different physical part layouts as merges progress. Equal counts of physical parts are not a general consistency criterion. Even comparing total rows requires care with engines such as ReplacingMergeTree, where merge state or query semantics can affect visible results.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/clickhouse-migration-evidence.svg" target="_blank" rel="noopener noreferrer" aria-label="Open the independent layers of migration verification">
+    <img src="/figures/journals/clickhouse-migration-evidence.svg" alt="A conceptual evidence matrix comparing table metadata, Keeper connectivity, read-only state, pending replication work, content checks and application queries across migration milestones." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>A verification matrix rather than a fabricated performance chart. The marks indicate the kinds of evidence that would be required, not actual measurements from the environment.</figcaption>
+</figure>
+
+### What I would demand before calling it complete
+
+A careful sign-off would take place across multiple independent boundaries:
+
+1. Restore the backup in a controlled environment and confirm its recovery assumptions.
+2. Enumerate storage-engine tables, schema definitions and dependent views.
+3. Confirm each intended base table belongs to the correct replicated coordination group without identity conflicts.
+4. Check for read-only status, session errors, pending fetches and failed replication-queue work on **each** replica.
+5. Reconcile representative partitions and logical query results, including edge cases appropriate to the engine semantics.
+6. Verify view and materialized-view behavior without double-processing inserts.
+7. Run representative reads and writes through the actual application integration, including a recovery or restart test when appropriate.
+8. Record data differences, unresolved limitations and follow-up work rather than declaring a universal success.
+
+This is a validation plan, not a claim that all eight checks passed in the original environment.
+
+## Views, writes and the question of who consumes an insert
+
+I deferred view creation while the base-table conversion and replica synchronization were being established. It gave me a smaller set of state transitions to debug: first table metadata and data parts, then derived definitions and their insert behavior.
+
+A materialized view may be local to the server where an insert occurs. A replicated target table may then propagate the results to another replica. If another view also processes the same logical source data, correctness depends on how ingestion is routed and what the view definitions actually do. Simply repeating the same configuration on every replica is not a substitute for tracing the insert path.
+
+This was one of the design details I considered important enough not to bury inside a Helm deployment guide. There is a difference between "replicas have the same base data" and "the entire analytics pipeline produces the expected aggregates."
+
+## What the migration taught me about failure ownership
+
+The frustrating part of this work was that several unrelated conditions could present as a non-writable analytics service: an unavailable Keeper session, a mismatch in table identity, an unfinished part transfer or a storage resource constraint. Restarts can change the symptom without explaining which state was authoritative.
+
+My working distinction became:
+
+| State owner | What it knows | What I needed to inspect |
+| --- | --- | --- |
+| Kubernetes | Pod and volume lifecycle | Scheduling, restarts, health checks |
+| ClickHouse local server | Table definitions and local parts | Engine inventory, parts and read/write behavior |
+| Keeper | Replication coordination metadata | Session and table/replica identity |
+| Replication worker | Pending data-part operations | Queue progress, failures and lag |
+| Application | Whether queries and writes are useful | Representative endpoints and datasets |
+
+The design choice was not "use replication because high availability is good." It was to move responsibility for table consistency into the component that understands data parts and replication logs, and then measure availability **at the client and data level**.
+
+### Where the evidence stops
+
+**Observed and implemented:** migration from a standalone dataset toward ReplicatedMergeTree-family tables; backup-based planning; treatment of views separately; investigation of attachment/Keeper exceptions and read-only state; an observed writable/no-pending-queue intermediate state; a period of unequal replica progress.
+
+**Not established by public evidence:** an exhaustive historic row-for-row reconciliation, a measured zero-data-loss guarantee, comprehensive view correctness after all changes, or a proven failure-tolerant service-level objective.
+
+This distinction is deliberate. An engineering record is more useful when it says exactly what a check proved than when it equates one green status field with a finished migration.
+
+## Related reading
+
+- [ClickHouse: ReplicatedMergeTree table engines](https://clickhouse.com/docs/reference/engines/table-engines/mergetree-family/replication)
+- [ClickHouse: system.replicas](https://clickhouse.com/docs/reference/system-tables/replicas)
+- [ClickHouse: system.replication_queue](https://clickhouse.com/docs/reference/system-tables/replication_queue)
+- [Database availability and migration state](/projects/rokaf-database-ha-and-langfuse-migrations/)
+- [Storage and recovery ownership](/projects/rokaf-stateful-storage-and-recovery/)
+- [On-premises platform engineering](/projects/independent-on-premises-k3s-platform-engineering/)
