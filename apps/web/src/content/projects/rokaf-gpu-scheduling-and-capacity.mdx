@@ -1,7 +1,8 @@
 ---
 title: "GPU Scheduling Is a Capacity Decision, Not Just a Device Request"
-description: "How I weighed full-device ownership, time-slicing/MIG, missing node labels and reduced-capacity service behavior."
+description: "A first-person account of configuring time-slicing, comparing it with hardware-isolated MIG, and reasoning about VRAM contention, scheduling, and degraded service capacity."
 date: "2026-11-15"
+updated: "2026-11-17"
 draft: false
 reviewed: true
 sensitivity: sanitized
@@ -15,98 +16,132 @@ status: "active"
 techStack: ["Kubernetes", "GPU", "NVIDIA", "Scheduling", "MIG", "Reliability"]
 ---
 
-GPU workloads introduced a familiar-looking but difficult trade-off: **maximize utilization** or **preserve predictable behavior under load and failure**. In a shared on-premises system, both goals matter, and a device plugin's ability to advertise resources does not automatically settle the question.
+When I started placing AI workloads on a shared Kubernetes cluster, the first number to look at seemed obvious: GPU utilization. But an idle-looking device is not necessarily wasted capacity. A model can reserve most of its memory while using relatively little compute, and a second model can fail to start even though the utilization graph looks quiet.
 
-I worked on AI service placement in K3s and considered **whole-GPU assignment, device-plugin behavior, time-slicing and MIG where supported**, as well as how services should behave when a GPU host becomes unavailable.
+I configured GPU sharing with time-slicing and spent time separating two problems that are easy to conflate: **whether Kubernetes sees a schedulable resource** and **whether the application can actually run within its memory and latency budget**. I also evaluated whole-GPU assignment and MIG where the hardware supports it. Those are different ownership models, not successive optimization steps.
+
+## A logical GPU slot is not a GPU partition
+
+A Kubernetes device plugin advertises extended resources to the scheduler. With ordinary whole-device allocation, a GPU request generally corresponds to exclusive placement on the advertised device. With time-slicing enabled, the plugin can advertise multiple *replicas* of one physical GPU as allocatable units.
+
+That increases the number of Pods that the scheduler can place. It **does not multiply physical SMs or device memory**. A request for one replicated GPU does not reserve a fixed fraction of VRAM, guarantee a percentage of compute time, or give the Pod a separate fault domain.
+
+This distinction mattered whenever I had to decide whether a workload was small enough to share a card. The right question was not simply, "Can another Pod be scheduled?" It was, "What happens when both processes allocate their peak working set and execute kernels at the same time?"
 
 <figure className="project-concept-figure">
-  <a href="/figures/journals/gpu-capacity-tradeoffs.svg" target="_blank" rel="noopener noreferrer" aria-label="Open technical diagram">
-    <img src="/figures/journals/gpu-capacity-tradeoffs.svg" alt="Whole-GPU, time-sliced, partitioned and fallback replicas make different promises about isolation, memory capacity and performance after failure." loading="lazy" decoding="async" />
+  <a href="/figures/journals/gpu-capacity-tradeoffs.svg" target="_blank" rel="noopener noreferrer" aria-label="Open comparison of dedicated GPU, time-slicing and MIG">
+    <img src="/figures/journals/gpu-capacity-tradeoffs.svg" alt="Three different GPU resource models: a dedicated whole GPU, shared memory and interleaved execution with time-slicing, and separately partitioned compute and memory with hardware-supported MIG." loading="lazy" decoding="async" />
   </a>
-  <figcaption>Whole-GPU, time-sliced, partitioned and fallback replicas make different promises about isolation, memory capacity and performance after failure. Conceptual model; no internal access policy, topology or resource inventory is shown.</figcaption>
+  <figcaption>Conceptual resource ownership. Time-slicing creates additional schedulable access to the same device; MIG partitions a supported GPU into isolated instances. The drawing is not a benchmark or a diagram of internal hardware.</figcaption>
 </figure>
 
-## 1. A GPU request is only as meaningful as what Kubernetes advertises
+## Three allocations that solve different problems
 
-Scheduling decisions depend on resources visible to the cluster. I investigated issues where **GPU Operator and Node Feature Discovery labels/resources were not appearing as expected**. The existence of a physical GPU did not mean that Kubernetes correctly recognized a schedulable accelerator.
+### Whole-device assignment
 
-The useful sequence was to separate hardware/driver recognition from device-plugin registration, node labels, Pod resource requests and application startup. Jumping directly to the inference container could misidentify an infrastructure discovery issue as a model bug.
+A single workload owns the device allocation. It has the largest available pool of memory and compute capacity, and it does not compete with another Pod that has been assigned the same GPU through the time-slicing mechanism.
 
-## 2. Full GPU versus sharing: what is actually isolated?
+That simplicity is attractive for models with large weight sets, variable KV-cache growth or strict response-time expectations. The cost is consolidation: an application might reserve a GPU while leaving much of its compute capability idle. Dedicated placement also does not eliminate other failure modes such as driver faults or host loss.
 
-It is tempting to see a GPU as a pool of interchangeable fractions. In practice, **time-slicing**, **MIG** and **whole-device allocation** have different guarantees.
+### Time-slicing
 
-| Choice | What made it attractive | What I needed to question |
+Time-slicing multiplexes workloads onto the **same physical GPU**. The additional resource advertisements act like admission opportunities, not hard quotas. The processes share the GPU memory pool, and runtime execution is interleaved by the device scheduling machinery.
+
+That distinction creates two independent risks:
+
+- **Memory contention:** separately scheduled Pods can each allocate memory from the same physical pool. A configuration with several replicas does not imply that each receives one equally sized memory slice.
+- **Performance and fault interference:** execution and memory-bandwidth contention can affect tail latency, and the replicated workloads are not hardware fault-isolated from one another.
+
+Time-slicing is useful when several relatively small, bursty workloads would otherwise leave an accelerator idle. It is a poor substitute for predictable memory isolation. The workload mix, not the number of advertised replicas, determines whether it helps.
+
+### MIG, on supported GPUs
+
+Multi-Instance GPU (MIG) changes the physical partitioning model. Supported devices can expose GPU instances with specified compute and memory resources, including stronger isolation of their memory-system paths. Unlike time-slicing, one instance cannot simply consume the other instance's allocated memory.
+
+That predictability comes with constraints. MIG support depends on the actual accelerator and its mode; available instance profiles impose discrete sizes. A workload whose memory footprint exceeds a profile cannot be made to fit by merely asking the Kubernetes scheduler for another logical replica. Partitioning can also strand capacity if demand is not aligned with the available shapes.
+
+I treated MIG as a **hardware-dependent design alternative**, not as something I could claim to have deployed on every GPU. The record of implementing time-slicing and the evaluation of MIG must stay separate.
+
+| Question | Whole GPU | Time-slicing | MIG on compatible hardware |
+| --- | --- | --- | --- |
+| Does the Pod share the same physical compute resource with other allocated workloads? | Not through this allocation | Yes, interleaved on one device | Separated into hardware instances |
+| Is GPU memory hard-partitioned between the allocations? | No co-tenant in this allocation | **No** | **Yes, per instance** |
+| Is there hardware-backed isolation between co-tenants? | No co-tenant in this allocation | **No** | **Yes, within MIG's specified boundaries** |
+| Can small models consolidate onto one device? | Only if another mechanism is used | Yes, with interference risk | Yes, if a profile fits and the GPU supports MIG |
+| What capacity can be guaranteed from the resource request alone? | The allocation, not an end-to-end latency SLA | No proportional compute or VRAM share | Instance resources, not an application latency SLA |
+
+## The placement decision was really a workload decision
+
+I found it more useful to classify workloads by their operating requirements than to rank GPU-sharing modes as universally better or worse.
+
+| Workload characteristic | First option to evaluate | What could change the decision |
 | --- | --- | --- |
-| **Whole device** | Predictable access to device memory and execution | Lower consolidation and possible idle capacity |
-| **Time-slicing** | Higher apparent concurrency for tolerant workloads | Shared memory and contention; logical slots are not physical partitions |
-| **MIG (compatible hardware)** | Hardware-backed partitions with stronger boundaries | Availability, partition sizes and model memory requirements |
-| **Multiple replicas** | Service continues if one workload or node fails | Where remaining capacity comes from and how requests are rerouted |
+| Large model weights or unpredictable KV-cache growth | Whole device | A verified smaller model/profile or stricter admission control |
+| Several lightweight, bursty services | Time-slicing | Combined memory peak, queueing and interference |
+| Independent tenants requiring strong resource boundaries | MIG, if supported | Available profiles and per-instance capacity |
+| Service must remain available after a GPU host is lost | Multiple eligible serving paths with spare capacity | Headroom, routing health checks and degraded throughput policy |
+| GPU is physically present but not advertised to Kubernetes | Repair discovery/registration first | Sharing mode cannot fix a missing device-plugin resource |
 
-Some inference workloads require a substantial working set or show latency variation under contention. For those, using the entire GPU can be the simpler, more reliable choice even if the utilization chart looks less impressive.
+A successful scheduling event is only the first gate. A representative inference request must still fit in memory, initialize successfully and meet the intended response-time budget.
 
-## 3. Failover versus graceful degradation
+## The earlier problem: discovery and scheduling were mixed together
 
-The second question was what happens when a host with an active GPU service disappears. A replica can keep the endpoint reachable, but if one of two serving paths is gone, the remaining deployment may have **less throughput and higher tail latency**.
+I also encountered GPU Operator and Node Feature Discovery behavior where expected labels or resources were missing or inconsistent. The debugging sequence could not start with the model server: if the node never advertises a suitable resource, the inference process may never run.
 
-I considered **degraded-capacity service** as a more realistic objective than claiming full-capacity, zero-interruption failover. This led me to think about placement, how load balancing discovers healthy replicas, and the capacity margin needed to absorb a failure.
+I separated the investigation into these boundaries:
 
-## 4. Why placement constraints were not a long-term solution
+**Hardware recognition.** Is a compatible device visible to the driver and container runtime?
 
-When a workload runs only on particular nodes, an affinity or selector may isolate an immediate problem. But restrictive placement can make recovery harder by leaving fewer choices after a node failure. With GPU workloads, compatibility sometimes requires explicit placement; the trick is to avoid accidentally encoding a temporary diagnostic workaround as a permanent availability policy.
+**Device plugin registration.** Does Kubernetes advertise the expected extended resource and allocatable count?
 
-The same problem appears in CPU/memory and storage scheduling: more operational constraints can mean less freedom for the scheduler.
+**Node metadata.** Are node labels or feature-discovery rules missing, and are workload placement constraints depending on those labels?
 
-## 5. The capacity calculation I wanted to make explicit
+**Pod allocation.** Is the resource request valid for the advertised type, and does the container actually receive device access?
 
-Scheduling a GPU task involves at least three resource budgets:
+**Application behavior.** After allocation, can the model load and serve representative requests without exhausting memory or violating latency expectations?
 
-- **Device memory:** static weights, runtime buffers, KV cache, activation/scratch allocations.
-- **Compute availability:** kernels competing for execution time on the device.
-- **Serving throughput:** how many useful requests meet the latency target under concurrent load.
+A label problem, a device-allocation problem and a model-memory problem can produce similarly unhelpful symptoms at the application layer. They require different evidence and different repairs. My separate [GPU discovery investigation](/projects/rokaf-gpu-discovery-open-investigation/) retains unresolved observations rather than assigning every symptom to one cause.
 
-A scheduler can see a numeric GPU resource request and still be unable to predict all three properties. A model server might fit into VRAM under one request pattern but fail or experience severe latency spikes when concurrency increases.
+## Why I did not equate more schedulable replicas with better capacity
 
-| Decision | Capacity question | Evidence needed |
-| --- | --- | --- |
-| Whole-GPU allocation | Is the service underutilizing the device? | Per-workload VRAM and utilization measurements |
-| Time slicing | Will co-located services interfere? | Tail latency, memory pressure, workload mix |
-| MIG partition | Can the model fit and perform inside a fixed partition? | Supported hardware, chosen profile, measured memory |
-| More replicas | Is there enough spare device capacity after host loss? | Healthy capacity under a failure scenario |
-| CPU fallback | Is degraded throughput acceptable? | End-to-end latency and quality requirements |
+Consider a physical GPU with a fixed amount of memory. The device plugin may advertise additional replicated allocations, but the combined worst-case memory demand of all admitted workloads can still exceed that one pool. It is possible to raise the number of Pending Pods that become Running and simultaneously lower the fraction of user requests that complete successfully.
 
-In particular, **time slicing does not partition GPU memory into guaranteed equal fractions**. Treating an advertised logical GPU slot as an isolation boundary can be misleading.
+Compute contention is different. Two models may individually fit in VRAM and still interfere with one another's execution and memory bandwidth. In interactive serving, that often matters most at the tail of the latency distribution, not at average GPU utilization.
 
-## 6. Availability needs an explicit degraded mode
+I would therefore evaluate sharing against four budgets rather than one:
 
-I considered failure in terms of the user's experience rather than only Pod recreation:
+- **Resident memory:** model weights plus maximum observed runtime workspace and cache growth.
+- **Compute and memory-bandwidth contention:** how co-located workloads change actual service behavior.
+- **Tail latency and errors:** p50, p95, p99 and out-of-memory or initialization failures under a controlled workload mix.
+- **Failure headroom:** whether remaining healthy devices can accept traffic after one serving path becomes unavailable.
 
-1. A GPU serving instance becomes unavailable.
-2. The service removes the unhealthy endpoint from its traffic path.
-3. Remaining instances receive a greater share of requests.
-4. Their queues, model memory usage and tail latency may change.
-5. The system either meets a degraded service target or starts rejecting work.
+This is an evaluation framework, not a claim that the military environment produced a publicly reportable benchmark. I have not retained a sanitized set of comparative throughput or latency results, so the article does not assign invented percentages to time-slicing or MIG.
 
-This is **graceful degradation**, not necessarily seamless failover. If the remaining instances have no capacity margin, the service endpoint may stay reachable but user experience can still collapse.
+## Availability means having somewhere useful to fail over
 
-A useful design would define both the normal and single-failure request budget before choosing replica placement.
+Replicas can preserve an endpoint but not necessarily its normal capacity. If one GPU-backed instance disappears, the remaining serving paths may handle a larger share of requests, and their queues and tail latencies may change. A scheduler may be able to place an additional Pod while that Pod has insufficient usable device memory to load the model.
 
-## 7. Why I separate discovery from workload optimization
+The design question I returned to was: **what service level is acceptable when capacity is degraded?** For some workloads, rejecting excess jobs is preferable to allowing queues to grow without bound; for others, a slower response may be acceptable. Either decision must be explicit.
 
-A missing NFD label or device-plugin resource is a **discovery/registration problem**. Poor GPU utilization, out-of-memory errors or request latency variation are **capacity and application problems**. Both may happen together, but a scheduling constraint cannot repair a broken driver.
+That trade-off also affected placement constraints. Pinning an application tightly to one class of nodes can repair a short-term compatibility problem while making the system less resilient to a later node failure. I tried to keep temporary discovery workarounds distinct from long-term availability policy.
 
-I therefore keep an explicit diagnostic order: recognize hardware → advertise resources → schedule a small compatible workload → initialize the device → load a representative model → observe real request behavior.
+## What was implemented, and what remains a comparison
 
-## 8. How I would benchmark a policy in isolation
+| Work | Evidence boundary |
+| --- | --- |
+| Shared GPU resource configuration using time-slicing | **Implemented/configured** as part of the cluster work |
+| GPU Operator, NFD and resource-advertisement troubleshooting | **Observed and investigated**; some root-cause questions remained open |
+| Whole-device allocation for capacity reasoning | **Compared as an option**; not a published workload benchmark |
+| MIG profile selection and isolation analysis | **Evaluated alternative** conditional on GPU support; not claimed as universally deployed |
+| Repeated, controlled latency/throughput comparison among all three policies | **Not publicly verified** |
+| Zero-interruption failover with full performance after host loss | **Not claimed** |
 
-A representative test could run one workload on a whole GPU, then compare it with a compatible sharing policy while keeping model version, prompt/input distribution and request rate consistent. I would measure throughput, p50/p95/p99 latency, VRAM usage and error rate, repeating each run.
+The conclusion is not that time-slicing was a mistake or that MIG is always superior. It is that **the right sharing policy follows from the isolation and performance contract of each workload**. More advertised GPU resources are useful only when they translate into usable application capacity.
 
-This is a **proposed experiment**, not an already completed benchmark in the ROKAF environment. The open question is when consolidation benefits outweigh interference and reduced failure headroom.
+## References and connected cases
 
-## 9. The questions that remain open
-
-I still had verification work around certain hardware-discovery labels and the exact behavior of possible GPU-sharing configurations. I did not turn those evaluations into claimed production benchmark results.
-
-The direction I want to pursue is clearer: performance and isolation claims should come from **device memory behavior, measured latency and actual failure testing**, not the fact that a Kubernetes manifest contains a GPU resource request.
-
-**Related:** [GPU discovery investigation](/projects/rokaf-gpu-discovery-open-investigation/) · [K3s platform overview](/projects/independent-on-premises-k3s-platform-engineering/).
+- [NVIDIA GPU Operator — Time-Slicing GPUs in Kubernetes](https://docs.nvidia.com/datacenter/cloud-native/gpu-operator/latest/gpu-sharing.html)
+- [NVIDIA Multi-Instance GPU — user guide](https://docs.nvidia.com/datacenter/tesla/mig-user-guide/latest/introduction.html)
+- [NVIDIA Kubernetes device plugin — shared access modes](https://github.com/NVIDIA/k8s-device-plugin)
+- [GPU discovery investigation](/projects/rokaf-gpu-discovery-open-investigation/)
+- [On-premises platform overview](/projects/independent-on-premises-k3s-platform-engineering/)
