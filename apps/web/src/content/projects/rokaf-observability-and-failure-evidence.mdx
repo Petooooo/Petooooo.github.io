@@ -1,0 +1,208 @@
+---
+title: "When Metrics Went Missing: WAL Pressure, Exporter Placement, and GPU Visibility"
+description: "A closed-network K3s observability investigation: Prometheus WAL exhaustion, missing node metrics, DCGM Exporter placement, and the limits of what an empty dashboard can prove."
+date: "2026-11-17"
+draft: false
+reviewed: true
+reviewStatus: "reviewed"
+sensitivity: sanitized
+category: "Systems Engineering"
+area: "Observability & Reliability"
+tags: ["K3s", "Prometheus", "Grafana", "node-exporter", "DCGM Exporter", "Prometheus Operator", "WAL", "GPU", "Logging"]
+type: "implementation-note"
+role: "Observability stack integration, exporter placement decisions, and incident investigation"
+period: "2025–2026"
+status: "active"
+techStack: ["K3s", "Prometheus", "Grafana", "Prometheus Operator", "node-exporter", "DCGM Exporter", "GPU Operator", "Elasticsearch", "Logstash", "Kibana"]
+---
+
+One of the more uncomfortable moments in operating infrastructure was opening Grafana to investigate a problem and finding that an expected metric was simply **gone**. The node-exporter workload and its Service could still exist in Kubernetes. That did not mean the monitoring system had a usable current sample.
+
+Another incident looked similar—GPU utilization was missing from a dashboard—but involved a different boundary. A DCGM Exporter DaemonSet ran on one GPU host but not another, even though I expected it to cover both. Its placement rules, not the Grafana chart, became the important evidence.
+
+On an on-premises, closed-network K3s platform I used Prometheus, Grafana, node-exporter, DCGM Exporter and centralized logging/search. These episodes taught me that a dashboard is the last consumer of several independent contracts. An empty panel can result from a missing producer, an undiscovered target, a failed scrape, an unavailable time-series database, or a mismatched label filter; by itself it cannot distinguish between them.
+
+The useful question became: **where did the observation path stop producing evidence, and how could I tell without relying on the broken dashboard itself?**
+
+This is an evidence-bounded investigation rather than a claim of complete coverage, validated paging alerts, or a proven end-to-end recovery exercise. Node identities, real internal URLs, cluster placement, and sensitive service settings are omitted.
+
+## Four meanings of an empty panel
+
+I found that "the metric disappeared" hides four different questions.
+
+**1. Was the exporter scheduled and collecting?** A DaemonSet resource may exist while its Pod is absent from the intended node. Even a running exporter can fail to expose useful device metrics.
+
+**2. Was the target discoverable and scrapeable?** A ServiceMonitor can exist yet be excluded by Prometheus namespace or label selection, fail to select the Service, or reference the wrong named port. Even after discovery succeeds, a target may still fail its scrape.
+
+**3. Could Prometheus ingest and retain samples?** A healthy exporter does not guarantee storage headroom. TSDB and WAL errors can prevent fresh evidence from becoming queryable data.
+
+**4. Did Grafana ask for the right series?** Datasource, time range, metric name and labels must match the stored series. A stale or absent series is not equivalent to a measured zero.
+
+These distinctions constrained my debugging order. If Prometheus has not discovered a scrape target, adjusting a Grafana panel is premature. If Prometheus cannot write its WAL, repeatedly restarting node-exporter attacks the wrong boundary.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/observability-evidence-matrix.svg" target="_blank" rel="noopener noreferrer" aria-label="Open observability evidence coverage diagnostic matrix">
+    <img src="/figures/journals/observability-evidence-matrix.svg" alt="A matrix of observability failure surfaces: placement, direct endpoint, target discovery, storage and visualization. Retained observations for node-exporter and DCGM are marked distinctly from proposed diagnostic checks." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Diagnostic evidence coverage, not the actual cluster topology. Strong observations and unperformed follow-up checks are different markings; the matrix does not infer a single shared root cause.</figcaption>
+</figure>
+
+## Incident 1 — the collector ran out of disk while node metrics disappeared
+
+The clearest storage fault was the Prometheus error:
+
+> `/prometheus/wal/…: no space left on device`
+
+I have removed the exact WAL segment identifier. The message provides direct evidence of **a filesystem write failure in the Prometheus data path**. That is much stronger evidence of a storage problem than the appearance of an empty dashboard.
+
+Around the same period, node-exporter values stopped appearing in Grafana even though the node-exporter DaemonSet and Service remained present. That is a separate observed symptom, consistent with an impaired monitoring path. The evidence does not establish that WAL exhaustion alone caused every missing series, and it does not exclude simultaneous scrape-level problems.
+
+The important distinction was that node-exporter produced host metrics while Prometheus collected and persisted them. A functioning producer does not guarantee that its observer can record new samples.
+
+### Retention is not the whole storage budget
+
+Prometheus maintains a write-ahead log for recent head data before compaction produces persistent TSDB blocks. The WAL, in-memory/head-associated files, historical blocks and temporary compaction demand have different space behavior.
+
+I had to distinguish metric retention time from peak disk headroom needed by the active write path. A size limit for historical retention does not guarantee enough room for the WAL and compaction. A storage design must reserve capacity for those overlapping demands.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/prometheus-wal-visibility-gap.svg" target="_blank" rel="noopener noreferrer" aria-label="Open Prometheus storage headroom and missing-versus-zero metric distinction">
+    <img src="/figures/journals/prometheus-wal-visibility-gap.svg" alt="A conceptual storage-budget cross section separates TSDB blocks, head, WAL and reserve capacity. A separate timeline compares a real zero metric with missing samples after ingest failure; neither shows real usage measurements." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Conceptual TSDB budget and query semantics. No block sizes, dates or datapoints are claimed to be measurements from the original incident.</figcaption>
+</figure>
+
+Three shortcuts would have misled the investigation:
+
+- **"The DaemonSet exists, so the metrics are safe."** The exporter may work while Prometheus is unable to persist or query new samples.
+- **"A blank panel means the host was idle."** Missing time-series data is not a numeric zero. Stale series can disappear from instant queries.
+- **"Deleting the WAL is a clean fix."** WAL removal may discard the recent samples it protects. It is a potentially destructive last resort, not ordinary maintenance.
+
+I considered verifying filesystem and PVC usage, examining WAL/head/block sizes, changing retention or ingestion load, and expanding capacity. The surviving record does not confirm which exact corrective change was ultimately applied, the samples lost, or a completed after-recovery measurement.
+
+A disciplined recovery sequence would start with independent filesystem and Prometheus log evidence, preserve the useful diagnostic state, restore writable headroom, and only then test direct exporter response, target health, fresh sample ingestion and the Grafana query. **These are acceptance criteria, not experiments I can claim to have fully completed.**
+
+## Incident 2 — the GPU existed, but its exporter was elsewhere
+
+The GPU monitoring problems occurred at a different boundary. A metric cannot originate from a device when its exporter was not placed on the node that exposes it.
+
+The K3s environment included GPU nodes and non-GPU nodes. I operated the GPU Operator with DCGM Exporter and wanted exporter coverage to follow **hardware role**, not a hardcoded node identity.
+
+Two episodes revealed opposite scheduling mistakes.
+
+**Too broad:** The exporter was scheduled onto machines without GPU devices, where Pods failed to progress beyond `ContainerCreating`. A DaemonSet does not automatically know which node is a compatible GPU host.
+
+**Too narrow:** In a different episode an exporter ran on one GPU machine but not a second expected GPU machine. A direct request to the expected exporter endpoint on the uncovered host returned **connection refused**. Inspection showed a DaemonSet selector tied specifically to the first GPU node.
+
+These are distinct failures. I would not merge them into one incident merely because Grafana displayed missing GPU data in both cases.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/dcgm-exporter-placement-coverage.svg" target="_blank" rel="noopener noreferrer" aria-label="Open GPU exporter scheduling coverage alternatives">
+    <img src="/figures/journals/dcgm-exporter-placement-coverage.svg" alt="A placement grid compares exporter scheduling on all nodes, on a single pinned GPU node, and on nodes with the GPU role label. Non-GPU nodes are distinguished from GPU nodes, with observed failure patterns and a proposed role-based model." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Three placement policies, not three collected cluster snapshots. The GPU-role selector was the preferred design direction; its final fleet-wide verification was not retained.</figcaption>
+</figure>
+
+The cleaner configuration was to label GPU-role nodes and constrain DCGM Exporter through supported GPU Operator Helm values or ClusterPolicy settings, with affinity and tolerations if needed. Editing a controller-generated DaemonSet directly is fragile because the operator may reconcile it back to the declared configuration.
+
+A selector that names one host can pass a quick test but silently exclude later GPU hosts. A role selector expresses the resource class and makes the intended coverage easier to audit. I considered this approach, but the available record does not establish a verified, permanent rollout across every GPU node.
+
+### Placement is not proof of scrape success
+
+Even with the correct Pod placement, I would want several independent observations:
+
+| Boundary | Evidence to inspect | What a failure implies |
+| --- | --- | --- |
+| GPU host | Driver and device visibility | Hardware or runtime prerequisites may be wrong |
+| Scheduling | Exporter Pods on every intended GPU-role node | Selector, affinity, taint or operator settings may exclude nodes |
+| Endpoint | `/metrics` response with expected DCGM series | Exporter process, network or metric collector may be unavailable |
+| Discovery | Prometheus selects ServiceMonitor and matching Service | Selector, namespace, label or endpoint port mismatch |
+| Target | Expected Prometheus target appears and is `UP` | If down, inspect scrape address, path and reachability |
+| Storage | Fresh DCGM series queryable in Prometheus | Ingestion and retention are separate from scraping |
+| Dashboard | Grafana query labels match those series | Query/datasource failure is distinct from exporter placement |
+
+I also encountered a configuration review where the DCGM Exporter `ServiceMonitor` option was disabled. Running an exporter Pod is not equivalent to configuring a scrape path. In other GPU Operator investigations, node-feature-discovery labels were absent when `nfd.enabled: false` was used. These are meaningful checks but **not a single proven causal chain for every GPU metric incident**.
+
+## ServiceMonitor selection is its own layer
+
+A Prometheus Operator installation does not automatically ingest every Kubernetes Service that exposes Prometheus-format metrics. Those Services still need matching discovery and scrape configuration.
+
+The Prometheus resource's `serviceMonitorSelector` and `serviceMonitorNamespaceSelector` determine which ServiceMonitor objects it considers. Each ServiceMonitor must then match the desired Service and its endpoints. Only after discovery does it make sense to investigate a target's actual scrape response.
+
+The distinction between target **absent** and target **present but down** matters:
+
+| What I observe | Most useful next boundary |
+| --- | --- |
+| No target generated | ServiceMonitor existence, selector matching, namespace and labels |
+| Target listed as `DOWN` | Network path, endpoint, protocol, timeout or exporter logs |
+| Target `UP` but GPU metric absent | Collector fields, `/metrics` payload and label mapping |
+| Series exists in Prometheus but not Grafana | Datasource, query labels and time range |
+| Collector reports TSDB/WAL write errors | Disk headroom, ingest pressure and storage integrity |
+
+Grafana and Prometheus were also run in **different namespaces** in part of my setup. In that case a short, namespace-local Service name in the datasource can be misleading; an appropriate Service FQDN makes the cross-namespace destination explicit.
+
+Another operational request concerned scraping non-Kubernetes services exposing Prometheus-format metrics through several static endpoints. I evaluated additional scrape jobs for those endpoints. The request and configuration discussion exist, but I do **not** have a retained proof that the entire job set was deployed and remained healthy.
+
+## GPU utilization cannot certify isolation
+
+A GPU-utilization chart is useful for capacity diagnostics but is not a guarantee about workload isolation.
+
+With time-slicing, workloads can share a physical GPU and VRAM without dedicated hardware memory partitions. Whole-GPU assignment and MIG have different resource guarantees, and even MIG capabilities depend on hardware eligibility. Physical-device metrics should not silently be relabeled as precise per-tenant latency or memory accounting.
+
+The question is not only whether a GPU time series exists. It is **what unit that metric actually describes**: physical device, MIG instance, container process or workload mapping. This connects directly to my [GPU sharing and capacity analysis](/projects/rokaf-gpu-scheduling-and-capacity/) and [GPU resource-discovery investigation](/projects/rokaf-gpu-discovery-open-investigation/).
+
+## Metrics, logs and traces answer different questions
+
+Alongside Prometheus and Grafana, I operated centralized logging and search using Elasticsearch, Logstash and Kibana. Loki and deeper database observability were also considered in later work. I do not want to turn the presence of those components into an unsupported claim of complete application instrumentation.
+
+| Question | Strong starting evidence | Limitation |
+| --- | --- | --- |
+| Is a node under CPU, memory or disk pressure? | Host exporter time series | Does not explain a particular application error |
+| Is the expected GPU node observable? | Pod placement, exporter endpoint, DCGM series | Does not establish per-workload GPU isolation |
+| Did metrics stop being persisted? | Prometheus logs and TSDB filesystem | Does not prove the exporter stopped |
+| Why did a request fail? | Application/ingress logs and actual request | Does not automatically connect every service hop |
+| What crossed a distributed request? | Correlated logs or **traces, when instrumented** | No trace exists for an uninstrumented path |
+| Did the service recover? | Representative functional operation | One successful request is not a historical correctness audit |
+
+Metrics reveal patterns, logs can reveal specific failures, and traces link operations when tracing is actually installed and instrumented. Their coverage must be established rather than assumed.
+
+## Design decisions I kept
+
+The lesson from the WAL incident and the DCGM placement problems was not "add more dashboards." It was to treat the monitoring system as infrastructure with its own capacity, placement and recovery boundaries.
+
+**Make each stage inspectable.** I want to distinguish exporter endpoint, target discovery, scrape success, durable ingest and dashboard query. Otherwise the graph becomes an unreliable oracle.
+
+**Define the intended hardware population.** Exporter placement should follow GPU capability and policy, not one machine's identity. Role labels still need ongoing verification as nodes change.
+
+**Budget the active time-series write path.** Storage retention alone is not a full TSDB capacity plan. WAL/head data and compaction need reserve space.
+
+**Keep a monitoring-independent way to debug monitoring.** Kubernetes workload state, raw endpoints, collector logs and filesystem usage must remain inspectable when Prometheus itself is unhealthy.
+
+Those are **engineering conclusions and design directions**, not verified claims of successful alert rollout or measured reduction in recovery time.
+
+## Evidence ledger — what the record actually supports
+
+| Record | Confidence | Boundary |
+| --- | --- | --- |
+| Prometheus reported a WAL `no space left on device` error | **Observed** | Final retention/capacity fix and lost data range not preserved |
+| node-exporter values disappeared from Grafana while DaemonSet and Service remained | **Observed** | Exact exclusive causal relationship with WAL fault not established |
+| DCGM exporter was restricted to one GPU host by selector | **Observed** | Permanent correction across all GPU nodes not documented |
+| Second expected GPU exporter endpoint returned connection refused | **Observed** | Full target/metric recovery not confirmed |
+| DCGM workload was also attempted on GPU-less nodes in another episode | **Observed** | Final consistent scheduling policy not audited |
+| Cross-namespace Grafana datasource and ServiceMonitor configuration were investigated | **Documented troubleshooting** | Exact final selector settings and audit absent |
+| Grafana, Prometheus and centralized logging/search were used | **Implemented stack** | Universal logs/traces, alert efficacy and fleet-wide coverage not verified |
+
+I cannot support exact retention thresholds, complete monitoring coverage, permanent GPU-role fix, a quantified recovery improvement or successful WAL recovery using the surviving evidence. I have intentionally not added such claims.
+
+The central lesson was that **the absence of a metric has a topology**. Its cause can live at device placement, the exporter, the scrape controller, the TSDB write path or the visualization query. An empty panel identifies none of those by itself.
+
+## References and connected engineering records
+
+- [Prometheus — local storage, WAL and retention](https://prometheus.io/docs/prometheus/latest/storage/)
+- [Prometheus — staleness and absent time series](https://prometheus.io/docs/prometheus/latest/querying/basics/)
+- [Prometheus Operator — ServiceMonitor troubleshooting](https://prometheus-operator.dev/docs/platform/troubleshooting/)
+- [NVIDIA — DCGM Exporter and the metrics endpoint](https://docs.nvidia.com/datacenter/cloud-native/gpu-telemetry/latest/dcgm-exporter.html)
+- [NVIDIA — GPU Operator/DCGM Exporter configuration](https://docs.nvidia.com/datacenter/dcgm/latest/installation/install-dcgm-exporter.html)
+- [GPU scheduling and capacity decisions](/projects/rokaf-gpu-scheduling-and-capacity/)
+- [GPU discovery investigation](/projects/rokaf-gpu-discovery-open-investigation/)
+- [On-premises K3s engineering overview](/projects/independent-on-premises-k3s-platform-engineering/)
