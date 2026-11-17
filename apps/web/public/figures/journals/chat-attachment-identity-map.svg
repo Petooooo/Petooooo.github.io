@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1480 840" role="img" aria-labelledby="fig-title fig-desc"><title id="fig-title">One attachment, multiple identities</title><desc id="fig-desc">A Rocket.Chat message and retrieval route refer to an upload record. The record must identify the same file in old GridFS chunks and new MinIO object keys. This is a conceptual relation map, not a real topology.</desc>
+<rect x="0" y="0" width="1480" height="840" rx="0" fill="#081420" stroke="#081420" stroke-width="0"/>
+<text x="52" y="67" fill="#f0f8fe" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="37" font-weight="750" text-anchor="start">One attachment, multiple identities</text>
+<text x="52" y="103" fill="#abc9d8" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="19" font-weight="500" text-anchor="start">A retained message does not mean the binary is available from the new backend.</text>
+<path d="M52 125H1428" fill="none" stroke="#315064" stroke-width="1"  stroke-linecap="round"/>
+<text x="62" y="177" fill="#8cb9cb" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="17" font-weight="750" text-anchor="start">APPLICATION REFERENCE</text>
+<rect x="58" y="194" width="330" height="135" rx="17" fill="#122b3b" stroke="#46697f" stroke-width="1.5"/>
+<text x="83" y="238" fill="#eef8ff" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="24" font-weight="700" text-anchor="start">Message &amp; attachment</text>
+<text x="83" y="274" fill="#abc9da" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="17" font-weight="500" text-anchor="start">historical message present</text>
+<rect x="58" y="408" width="330" height="132" rx="17" fill="#122b3b" stroke="#46697f" stroke-width="1.5"/>
+<text x="83" y="450" fill="#eef8ff" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="24" font-weight="700" text-anchor="start">File retrieval route</text>
+<text x="83" y="485" fill="#abc9da" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="17" font-weight="500" text-anchor="start">browser URL / authorization</text>
+<text x="504" y="177" fill="#8cb9cb" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="17" font-weight="750" text-anchor="start">METADATA IDENTITY</text>
+<rect x="476" y="194" width="493" height="347" rx="18" fill="#153548" stroke="#6c94ac" stroke-width="2.1"/>
+<rect x="498" y="214" width="449" height="54" rx="9" fill="#20465b" stroke="#395f75" stroke-width="1.5"/>
+<text x="521" y="249" fill="#d3f6ef" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="20" font-weight="760" text-anchor="start">UPLOAD RECORD</text>
+<text x="509" y="318" fill="#f1f9ff" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="22" font-weight="680" text-anchor="start">_id / name</text>
+<path d="M506 337H940" fill="none" stroke="#496a7d" stroke-width="1.2"  stroke-linecap="round"/>
+<text x="509" y="377" fill="#f4f9fb" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="20" font-weight="610" text-anchor="start">AmazonS3.path / path / url</text>
+<path d="M506 398H940" fill="none" stroke="#496a7d" stroke-width="1.2"  stroke-linecap="round"/>
+<text x="509" y="443" fill="#b1cfde" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="17" font-weight="500" text-anchor="start">record points to a binary location</text>
+<text x="509" y="489" fill="#80ddc3" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="17" font-weight="660" text-anchor="start">One ID, multiple lookup contracts</text>
+<text x="1056" y="177" fill="#8cb9cb" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="17" font-weight="750" text-anchor="start">PAYLOAD IDENTITY</text>
+<rect x="1046" y="194" width="376" height="218" rx="17" fill="#231f39" stroke="#786690" stroke-width="1.5"/>
+<text x="1072" y="236" fill="#dabdeb" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="18" font-weight="730" text-anchor="start">OLD BINARY STORE</text>
+<text x="1072" y="272" fill="#f3e9ff" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="23" font-weight="720" text-anchor="start">GridFS files + chunks</text>
+<text x="1072" y="304" fill="#d0bcd9" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="16" font-weight="500" text-anchor="start">chunks ordered by file ID</text>
+<rect x="1072" y="332" width="43" height="42" rx="5" fill="#534267" stroke="#8873a0" stroke-width="1"/>
+<rect x="1127" y="332" width="43" height="42" rx="5" fill="#534267" stroke="#8873a0" stroke-width="1"/>
+<rect x="1182" y="332" width="43" height="42" rx="5" fill="#534267" stroke="#8873a0" stroke-width="1"/>
+<rect x="1237" y="332" width="43" height="42" rx="5" fill="#534267" stroke="#8873a0" stroke-width="1"/>
+<rect x="1292" y="332" width="43" height="42" rx="5" fill="#3d3654" stroke="#8873a0" stroke-width="1"/>
+<rect x="1347" y="332" width="43" height="42" rx="5" fill="#3d3654" stroke="#8873a0" stroke-width="1"/>
+<rect x="1046" y="450" width="376" height="230" rx="17" fill="#163b39" stroke="#458a80" stroke-width="1.5"/>
+<text x="1072" y="489" fill="#88e5d1" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="18" font-weight="730" text-anchor="start">NEW BINARY STORE</text>
+<text x="1072" y="528" fill="#e2fff5" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="24" font-weight="710" text-anchor="start">MinIO object key</text>
+<text x="1072" y="568" fill="#c3e7de" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="17" font-weight="500" text-anchor="start">prefix / uploads / room</text>
+<text x="1072" y="592" fill="#c3e7de" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="17" font-weight="500" text-anchor="start">/ user / file</text>
+<path d="M1072 615H1393" fill="none" stroke="#367f72" stroke-width="1"  stroke-linecap="round"/>
+<text x="1072" y="643" fill="#93e7d6" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="16" font-weight="500" text-anchor="start">key must match the record</text>
+<path d="M390 267C430 267 430 310 474 314" fill="none" stroke="#74bcd2" stroke-width="3"  stroke-linecap="round"/>
+<path d="M390 462C430 462 429 403 474 403" fill="none" stroke="#74bcd2" stroke-width="3"  stroke-linecap="round"/>
+<path d="M970 308C1000 308 1002 273 1043 273" fill="none" stroke="#bda5e0" stroke-width="3.2" stroke-dasharray="8 7" stroke-linecap="round"/>
+<path d="M970 416C1000 416 1008 553 1043 553" fill="none" stroke="#7ddfca" stroke-width="3.2"  stroke-linecap="round"/>
+<text x="397" y="248" fill="#8fbfcd" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="14" font-weight="500" text-anchor="start">upload ID</text>
+<text x="395" y="504" fill="#8fbfcd" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="14" font-weight="500" text-anchor="start">file URL</text>
+<text x="973" y="256" fill="#cebdde" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="15" font-weight="500" text-anchor="start">before</text>
+<text x="977" y="516" fill="#83dbcb" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="15" font-weight="500" text-anchor="start">after</text>
+<rect x="58" y="719" width="1364" height="72" rx="12" fill="#102738" stroke="#35576b" stroke-width="1.5"/>
+<text x="81" y="749" fill="#8bc8d9" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="17" font-weight="750" text-anchor="start">OBSERVED</text>
+<text x="235" y="750" fill="#8ae6bf" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="18" font-weight="680" text-anchor="start">new uploads succeeded</text>
+<text x="730" y="750" fill="#e8bd93" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="18" font-weight="680" text-anchor="start">historical attachment access failed</text>
+<text x="81" y="776" fill="#97b1c0" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="14" font-weight="500" text-anchor="start">Conceptual identities only; no real IDs, object counts, endpoints or deployment topology.</text>
+</svg>

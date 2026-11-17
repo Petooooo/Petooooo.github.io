@@ -24,6 +24,7 @@ K3s는 이런 서비스의 공통 실행 환경을 제공했지만 모든 책임
 | 배포 조정 | [GitOps의 두 제어 루프](/projects/rokaf-offline-gitops-delivery/) — 빌드 성공과 Kubernetes 상태 동기화의 차이 |
 | 영속 데이터 | [Pod와 데이터의 복구 시점](/projects/rokaf-stateful-storage-and-recovery/) — Longhorn Attach, Replica 재구축, 애플리케이션 준비 |
 | 객체 저장소 | [MinIO 이전과 객체 차이 검증](/projects/rokaf-object-storage-migration/) — 전송, IAM, Lifecycle, 누락 객체 |
+| 채팅 첨부파일 | [GridFS에서 MinIO로 옮기며 사라진 과거 파일](/projects/rokaf-chat-attachments-object-storage/) — 파일 식별자와 S3 Key·업로드 메타데이터를 맞추는 문제 |
 | 데이터베이스 | [DB 고가용성과 마이그레이션](/projects/rokaf-database-ha-and-langfuse-migrations/) — MongoDB, PostgreSQL, ClickHouse와 Keeper |
 | ClickHouse | [ReplicatedMergeTree로 데이터 옮기기](/projects/rokaf-clickhouse-replication-migration/) — 테이블 메타데이터, Replica 상태, 데이터 검증 |
 | 인증과 인가 | [ServiceAccount부터 객체 권한까지](/projects/rokaf-identity-rbac-and-policy/) — Kubernetes RBAC와 애플리케이션 권한 |

@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1460 855" role="img" aria-labelledby="title desc"><title id="title">An attachment migration needs an identity audit</title><desc id="desc">Audit matrix distinguishes observed new-upload success and historical-download failure from proposed per-file verification and unverified final reconciliation. No real file counts or identifiers.</desc>
+<rect x="0" y="0" width="1460" height="855" rx="0" fill="#081420" stroke="#081420" stroke-width="1.4"/>
+<text x="52" y="69" fill="#f2f9ff" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="36" font-weight="760" text-anchor="start">An attachment migration needs an identity audit</text>
+<text x="52" y="110" fill="#adc5d4" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="19" font-weight="500" text-anchor="start">A copied object is not proof that the original message can retrieve it.</text>
+<path d="M52 132H1408" stroke="#345668"/>
+<rect x="52" y="171" width="1356" height="90" rx="12" fill="#203c4e" stroke="#41637a" stroke-width="1.4"/>
+<text x="74" y="221" fill="#f3fbff" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="19" font-weight="720" text-anchor="start">Evidence row</text>
+<text x="354" y="221" fill="#f3fbff" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="18" font-weight="720" text-anchor="start">Message / record</text>
+<text x="624" y="221" fill="#f3fbff" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="18" font-weight="720" text-anchor="start">Source bytes</text>
+<text x="894" y="221" fill="#f3fbff" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="18" font-weight="720" text-anchor="start">S3 key / metadata</text>
+<text x="1164" y="221" fill="#f3fbff" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="18" font-weight="720" text-anchor="start">In-app read</text>
+<rect x="52" y="277" width="1356" height="108" rx="10" fill="#142d37" stroke="#304f60" stroke-width="1.4"/>
+<text x="72" y="324" fill="#f0f9ff" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="23" font-weight="680" text-anchor="start">New upload</text>
+<text x="72" y="356" fill="#81cadc" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="17" font-weight="540" text-anchor="start">Observed</text>
+<rect x="349" y="312" width="42" height="37" rx="8" fill="#1e574b" stroke="#1e574b" stroke-width="1.4"/>
+<text x="370" y="339" fill="#92e6c2" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="21" font-weight="740" text-anchor="middle">✓</text>
+<text x="403" y="338" fill="#d6e8ef" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="16" font-weight="520" text-anchor="start">record created</text>
+<rect x="619" y="312" width="42" height="37" rx="8" fill="#2b4657" stroke="#2b4657" stroke-width="1.4"/>
+<text x="640" y="339" fill="#a7c8dd" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="21" font-weight="740" text-anchor="middle">—</text>
+<text x="673" y="338" fill="#d6e8ef" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="16" font-weight="520" text-anchor="start">not a GridFS copy</text>
+<rect x="889" y="312" width="42" height="37" rx="8" fill="#1e574b" stroke="#1e574b" stroke-width="1.4"/>
+<text x="910" y="339" fill="#92e6c2" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="21" font-weight="740" text-anchor="middle">✓</text>
+<text x="943" y="338" fill="#d6e8ef" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="16" font-weight="520" text-anchor="start">object created</text>
+<rect x="1159" y="312" width="42" height="37" rx="8" fill="#1e574b" stroke="#1e574b" stroke-width="1.4"/>
+<text x="1180" y="339" fill="#92e6c2" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="21" font-weight="740" text-anchor="middle">✓</text>
+<text x="1213" y="338" fill="#d6e8ef" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="16" font-weight="520" text-anchor="start">download works</text>
+<rect x="52" y="393" width="1356" height="108" rx="10" fill="#172c3a" stroke="#304f60" stroke-width="1.4"/>
+<text x="72" y="440" fill="#f0f9ff" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="23" font-weight="680" text-anchor="start">Historical file</text>
+<text x="72" y="472" fill="#81cadc" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="17" font-weight="540" text-anchor="start">Observed</text>
+<rect x="349" y="428" width="42" height="37" rx="8" fill="#1e574b" stroke="#1e574b" stroke-width="1.4"/>
+<text x="370" y="455" fill="#92e6c2" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="21" font-weight="740" text-anchor="middle">✓</text>
+<text x="403" y="454" fill="#d6e8ef" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="16" font-weight="520" text-anchor="start">message present</text>
+<rect x="619" y="428" width="42" height="37" rx="8" fill="#454151" stroke="#454151" stroke-width="1.4"/>
+<text x="640" y="455" fill="#e3d0b4" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="21" font-weight="740" text-anchor="middle">?</text>
+<text x="673" y="454" fill="#d6e8ef" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="16" font-weight="520" text-anchor="start">extract not audited</text>
+<rect x="889" y="428" width="42" height="37" rx="8" fill="#454151" stroke="#454151" stroke-width="1.4"/>
+<text x="910" y="455" fill="#e3d0b4" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="21" font-weight="740" text-anchor="middle">?</text>
+<text x="943" y="454" fill="#d6e8ef" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="16" font-weight="520" text-anchor="start">key requires mapping</text>
+<rect x="1159" y="428" width="42" height="37" rx="8" fill="#584338" stroke="#584338" stroke-width="1.4"/>
+<text x="1180" y="455" fill="#efbc8b" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="21" font-weight="740" text-anchor="middle">!</text>
+<text x="1213" y="454" fill="#d6e8ef" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="16" font-weight="520" text-anchor="start">download failed</text>
+<rect x="52" y="509" width="1356" height="108" rx="10" fill="#142d37" stroke="#304f60" stroke-width="1.4"/>
+<text x="72" y="556" fill="#f0f9ff" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="23" font-weight="680" text-anchor="start">Per-file audit</text>
+<text x="72" y="588" fill="#b9c4cf" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="17" font-weight="540" text-anchor="start">Planned checks</text>
+<rect x="349" y="544" width="42" height="37" rx="8" fill="#2b4657" stroke="#2b4657" stroke-width="1.4"/>
+<text x="370" y="571" fill="#a7c8dd" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="21" font-weight="740" text-anchor="middle">ID</text>
+<text x="403" y="570" fill="#d6e8ef" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="16" font-weight="520" text-anchor="start">join references</text>
+<rect x="619" y="544" width="42" height="37" rx="8" fill="#2b4657" stroke="#2b4657" stroke-width="1.4"/>
+<text x="640" y="571" fill="#a7c8dd" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="21" font-weight="740" text-anchor="middle">ID</text>
+<text x="673" y="570" fill="#d6e8ef" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="16" font-weight="520" text-anchor="start">verify bytes</text>
+<rect x="889" y="544" width="42" height="37" rx="8" fill="#2b4657" stroke="#2b4657" stroke-width="1.4"/>
+<text x="910" y="571" fill="#a7c8dd" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="13" font-weight="740" text-anchor="middle">KEY</text>
+<text x="943" y="570" fill="#d6e8ef" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="16" font-weight="520" text-anchor="start">compare exact key</text>
+<rect x="1159" y="544" width="42" height="37" rx="8" fill="#2b4657" stroke="#2b4657" stroke-width="1.4"/>
+<text x="1180" y="571" fill="#a7c8dd" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="13" font-weight="740" text-anchor="middle">GET</text>
+<text x="1213" y="570" fill="#d6e8ef" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="16" font-weight="520" text-anchor="start">test as user</text>
+<rect x="52" y="631" width="1356" height="138" rx="13" fill="#0f2939" stroke="#345567" stroke-width="1.4"/>
+<text x="78" y="674" fill="#f1f8fc" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="23" font-weight="710" text-anchor="start">What remains unverified</text>
+<text x="78" y="712" fill="#c8dce6" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="19" font-weight="500" text-anchor="start">Complete historical inventory, matching bytes, access controls and rollback behavior.</text>
+<text x="78" y="745" fill="#9ebfce" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="17" font-weight="500" text-anchor="start">An S3 object lookup does not replace a real Rocket.Chat download.</text>
+<circle cx="77" cy="802" r="9" fill="#6bd3ad"/><circle cx="440" cy="802" r="9" fill="#e4b789"/><circle cx="804" cy="802" r="9" fill="#d9c5a5"/>
+<text x="99" y="808" fill="#adc8d6" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="16" font-weight="500" text-anchor="start">Observed success</text>
+<text x="462" y="808" fill="#adc8d6" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="16" font-weight="500" text-anchor="start">Observed failure</text>
+<text x="826" y="808" fill="#adc8d6" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="16" font-weight="500" text-anchor="start">Unverified / planned</text>
+</svg>

@@ -602,5 +602,12 @@
   "“A blank panel means the host was idle.”": "“그래프가 비어 있으니 호스트가 유휴 상태였다.”",
   "“Deleting the WAL is a clean fix.”": "“WAL 파일을 지우면 간단히 해결된다.”",
   "“The DaemonSet exists, so the metrics are safe.”": "“DaemonSet이 있으니 메트릭도 정상이다.”",
-  "“the service is down.”": "‘서비스가 죽었다.’"
+  "“the service is down.”": "‘서비스가 죽었다.’",
+  "Chat attachments": "채팅 첨부파일",
+  "Rocket.Chat attachment-storage investigation, GridFS extraction planning, S3 object-key and metadata reconciliation": "Rocket.Chat 첨부파일 저장소 이전 조사, GridFS 추출과 S3 Key·메타데이터 대조",
+  "Thirteen detailed accounts of the engineering choices, failed assumptions and reliability trade-offs behind the platform.": "플랫폼을 구축·운영하며 마주친 장애와 설계 선택, 신뢰성의 대가를 정리한 13편의 기술 기록이다.",
+  "When Old Attachments Disappeared: Rocket.Chat's GridFS-to-MinIO Migration": "예전 첨부파일은 어디로 갔을까: Rocket.Chat의 GridFS에서 MinIO로",
+  "Why preserved messages and successful new uploads did not restore historical attachments: GridFS payloads, Rocket.Chat upload metadata, S3 object keys, and a migration plan based on observable identities.": "대화 내역과 새 업로드는 정상인데 예전 첨부파일만 열리지 않았던 이유. GridFS 파일 데이터와 Rocket.Chat 메타데이터, MinIO 객체 Key를 맞추는 과정.",
+  "GridFS": "GridFS",
+  "When Old Attachments Disappeared: Rocket.Chat's GridFS-to-MinIO Migration | Jihwan Park": "예전 첨부파일은 어디로 갔을까: Rocket.Chat의 GridFS에서 MinIO로 | 박지환"
 }

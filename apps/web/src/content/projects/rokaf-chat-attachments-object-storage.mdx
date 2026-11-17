@@ -1,0 +1,136 @@
+---
+title: "When Old Attachments Disappeared: Rocket.Chat's GridFS-to-MinIO Migration"
+description: "Why preserved messages and successful new uploads did not restore historical attachments: GridFS payloads, Rocket.Chat upload metadata, S3 object keys, and a migration plan based on observable identities."
+date: "2026-11-17"
+draft: false
+reviewed: true
+reviewStatus: "reviewed"
+sensitivity: sanitized
+category: "Systems Engineering"
+area: "Storage & Reliability"
+tags: ["Rocket.Chat", "MongoDB", "GridFS", "MinIO", "S3", "Migration", "Data Integrity"]
+type: "implementation-note"
+role: "Rocket.Chat attachment-storage investigation, GridFS extraction planning, S3 object-key and metadata reconciliation"
+period: "2026"
+status: "active"
+techStack: ["Rocket.Chat", "MongoDB", "GridFS", "MinIO", "S3", "mc", "Linux"]
+---
+
+After moving a Rocket.Chat workspace, I could see the old conversations and user accounts. The messages were still there, including messages that referred to images and other attachments. But opening those older files failed.
+
+At first it looked like another incomplete database migration. The more revealing test was to upload a **new** file into the destination workspace. It went into MinIO and could be accessed. The application could talk to its new object store, but that did not mean the historical attachment records pointed to objects it could actually find.
+
+The difference between those two tests became the center of the investigation. It was no longer enough to say that MongoDB had been restored, or that S3 uploads worked. I needed to understand how a **message, a file metadata record, a GridFS binary, and an S3 object key** were supposed to identify the same attachment.
+
+This article records the migration issues and the procedure I worked through. It does not claim a verified lossless migration of every historical file. Internal hosts, bucket names, user identifiers and deployment settings are omitted; all identifiers in examples below are placeholders.
+
+## A message survived, but the attachment did not
+
+There were several objects of state that looked like a single "file" in Rocket.Chat's user interface.
+
+The message belonged to Rocket.Chat's application data. A separate upload record held an attachment identity and fields used to locate it. With GridFS, the binary was stored in MongoDB's file and chunk collections. After moving to MinIO, the intended binary location was an object in an S3-compatible bucket.
+
+That last distinction mattered. MongoDB's GridFS representation separates **file metadata** from **binary chunks**. Restoring conversations or upload records is not, by itself, evidence that the GridFS chunks they referred to were included or rebuilt correctly. The file-storage type is yet another choice: Rocket.Chat's current file-upload documentation explicitly warns that previously uploaded files do not automatically become available merely by changing the storage backend. The exact storage and URL conventions also depend on the application version.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/chat-attachment-identity-map.svg" target="_blank" rel="noopener noreferrer" aria-label="See how a Rocket.Chat attachment spans a message reference, upload metadata, GridFS chunks and S3 object identity">
+    <img src="/figures/journals/chat-attachment-identity-map.svg" alt="Relational identity map. A Rocket.Chat message and browser route reference a MongoDB upload record; before migration its binary is held in a GridFS file/chunks collection, while the proposed S3 backend locates it by an exact object key. The diagram shows conceptual relationships, not a real infrastructure topology." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>One visible attachment crosses several identities. Only the key and metadata relationships are modeled here; no server addresses, real file IDs or private infrastructure are shown.</figcaption>
+</figure>
+
+Once I separated those records, the first observation made sense: **message history was available, but the historical binary was not necessarily reachable through the new storage configuration**. That was a narrower and more useful conclusion than "MongoDB migration failed."
+
+## I used a successful new upload as a reference
+
+Rather than invent the expected S3 key format, I inspected how the running Rocket.Chat version stored an attachment that had just been uploaded successfully.
+
+The newly created object followed a structured key, conceptually:
+
+`<workspace-prefix>/uploads/<room-id>/<user-id>/<upload-id>`
+
+The precise identifiers are not published. What mattered was that the path was not simply the original filename or an arbitrary GridFS document ID placed at the bucket root. Its segments were part of the application's lookup convention.
+
+For the older uploads I needed to reconcile three distinct fields:
+
+| Field or location | Role in the observed version | Why it mattered |
+| --- | --- | --- |
+| S3 object key | Binary's exact location inside the bucket | The object must exist under the key Rocket.Chat expects |
+| `AmazonS3.path` | Object reference stored in the upload record | A valid object under another key is still invisible to this reference |
+| `path` | Application-facing upload path, structurally `/file-upload/<id>/<name>` | Not the same thing as the bucket's object key |
+| `url` | URL used to retrieve or preview the attachment | Needed to follow the route expected by the running application |
+| GridFS file ID and chunks | Original binary's identity and byte content | Required for an actual payload migration |
+
+In the version I was working with, an upload URL used a route of the form `/ufs/AmazonS3:Uploads/<id>/<name>`. That is an observation about the migration environment, **not a universal URL rule for every Rocket.Chat release**. For example, Rocket.Chat's current migration documentation distinguishes the newer `/file-upload/` route from a legacy `/ufs/` route.
+
+A wrong S3 key, an inconsistent upload record, and a stale public URL can all produce a broken historical attachment. Changing the S3 endpoint does not repair those identities.
+
+## The export problem was separate from the lookup problem
+
+A historical file had to be extracted from GridFS before I could place it under the matching S3 key. GridFS does not store a directory tree of the kind I wanted to upload to MinIO; it stores file documents and ordered binary chunks. A successful extract needs to reconstruct the bytes associated with the correct file ID.
+
+I worked through a staging approach that deliberately kept extraction and path construction separate. The working list of older file IDs could be exported from MongoDB into a text manifest. I had considered keeping the extracted files in one flat directory, each named by its ID, before reorganizing them with `mv` into a tree matching the newly observed S3 layout.
+
+That separation mattered for debugging. If the GridFS export was wrong, rebuilding the paths could not fix the bytes. If the export was correct but the S3 key was wrong, repeating the export would be wasted work.
+
+The proposed workflow was therefore:
+
+1. Identify which upload records still needed historical binaries and keep their stable file IDs.
+2. Extract the corresponding GridFS files without assuming that their old names already matched MinIO keys.
+3. Use the matching application metadata to derive the expected S3 key for each extracted binary.
+4. Stage and transfer the files to the object store, then reconcile `AmazonS3.path` and the application-facing reference fields where needed.
+5. Check both the stored object and an authenticated preview or download through Rocket.Chat.
+
+I investigated a `mongofiles`-based extraction and an `mc` copy workflow. Commands and staging arrangements were discussed and refined, but the preserved evidence does **not** establish that all historical objects were copied or validated successfully. I therefore treat the steps above as the migration procedure I developed, not as a finished reconciliation report.
+
+## Another failure looked similar but belonged to MongoDB
+
+During the broader migration work I also encountered MongoDB connectivity failures, including `getaddrinfo ENOTFOUND` for a replica-set member and `ReplicaSetNoPrimary`.
+
+That was a different class of failure. If a process cannot resolve a MongoDB member's hostname, or if the client cannot find a writable primary when one is required, extraction and metadata updates may fail before an S3 key is ever tested. The fact that a replica set was configured does not by itself establish working member name resolution and primary selection from every application Pod.
+
+I kept that problem separate from the attachment-key mismatch. A client unable to read GridFS and a client reading the wrong S3 key can both result in "file unavailable," but they need different evidence and different changes. There was not enough evidence to attribute all historical download failures to replica-set DNS.
+
+## The comparison needed more than a success counter
+
+The tempting completion criterion was simple: every object appears in the bucket, so the job is finished. But an S3 listing is not a Rocket.Chat functional test. The important link is from **the original logical upload ID to the binary actually returned for that ID**.
+
+I wanted a reconciliation ledger with a row per original attachment, not merely a total number of bytes.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/chat-attachment-reconciliation-matrix.svg" target="_blank" rel="noopener noreferrer" aria-label="Compare evidence for new and historical Rocket.Chat attachments across GridFS extraction, metadata, S3 key and application download">
+    <img src="/figures/journals/chat-attachment-reconciliation-matrix.svg" alt="Audit matrix distinguishing the observed working new upload, observed failed legacy access, a proposed extract-and-map workflow, and full historical reconciliation that remained unverified. Columns compare application metadata, binary/key evidence and user-visible download." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>The matrix distinguishes what I observed from the additional checks I would need. It deliberately contains no invented totals, success percentages or historical file samples.</figcaption>
+</figure>
+
+A sensible row would record the logical upload ID, source GridFS ID, expected S3 key, extraction status, destination object presence, comparable size/checksum evidence, and a user-facing read result.
+
+A missing object and a wrong metadata reference are different states. So are a non-matching file size, a permission denial, and a failed preview generated by the application. Even a successful object `HEAD` request proves only that the object is visible through that API credential; it does not prove that the same file is returned through Rocket.Chat's authentication and file-upload route.
+
+I would not use an S3 ETag as an unconditional MD5 checksum. Multipart uploads and other object-storage details can change how ETags are generated. Stronger verification requires a checksum known to be comparable, or reading both sides and comparing their bytes where appropriate.
+
+## The cutover could not be just a storage setting
+
+Once new files were going to MinIO and old files still depended on GridFS, changing the storage type made the application appear to have two histories. The storage setting affected **where Rocket.Chat now looked**, not where every earlier file had been moved.
+
+A safe transition therefore needs an explicit boundary between old and new writes. Existing GridFS data should remain recoverable while the object inventory and metadata are being reconciled. If the application keeps accepting new uploads during migration, the procedure also needs to account for files created after the first export.
+
+Rollback is not simply changing the setting back. If messages, upload metadata or files were updated after the cutover, that state must remain consistent with the selected backend. A switch that restores old files while hiding new uploads would only exchange one problem for another.
+
+I did not record a complete rollback drill, byte-for-byte audit of the whole attachment history, or a final all-files preview/download pass. Those are open verification items, not results that can be inferred from successful new uploads.
+
+## Why this incident stayed with me
+
+At the beginning, I thought I was moving files from one storage product to another. The real problem turned out to be preserving an **identity relationship across three different storage models**: Rocket.Chat's message and upload records, GridFS's file/chunk representation, and MinIO's object-key namespace.
+
+The useful experimental contrast was already in front of me: new attachments worked, historical ones did not. That directed attention away from a blanket "MinIO is broken" diagnosis and toward the keys, metadata and original bytes needed to make an old attachment readable.
+
+The migration could be considered complete only when a historical message led to the right upload record, the record pointed to the right binary, and the user could read the result. A copy command finishing, a MongoDB restore succeeding, or an S3 bucket containing objects each answered only one part of that question.
+
+## References
+
+- [Rocket.Chat — File Upload Settings](https://docs.rocket.chat/docs/file-upload)
+- [Rocket.Chat — Cloud-to-Self-Managed Migration (version-dependent URL changes)](https://docs.rocket.chat/docs/migrate-from-cloud-hosted-to-self-managed-workspace)
+- [MongoDB — GridFS files and chunks](https://www.mongodb.com/docs/manual/core/gridfs/)
+- [Rocket.Chat — filestore-migrator](https://github.com/RocketChat/filestore-migrator) — an available reference tool, **not a claim that I used it**.
