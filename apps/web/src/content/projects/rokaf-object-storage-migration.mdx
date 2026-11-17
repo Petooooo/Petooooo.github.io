@@ -1,0 +1,220 @@
+---
+title: "Migrating MinIO: When the Object Count Didn't Match"
+description: "A real standalone-to-distributed MinIO migration, the choice between block replicas and erasure-coded storage, interrupted transfers, missing objects, IAM migration, and the limits of copy-based verification."
+date: "2026-11-17"
+draft: false
+reviewed: true
+reviewStatus: "reviewed"
+sensitivity: sanitized
+category: "Systems Engineering"
+area: "Storage & Reliability"
+tags: ["MinIO", "S3", "Object Storage", "Erasure Coding", "Migration", "Data Integrity"]
+type: "implementation-note"
+role: "Object-storage architecture, migration execution, discrepancy investigation and integrity checks"
+period: "2026"
+status: "active"
+techStack: ["MinIO", "Kubernetes", "Longhorn", "S3", "mc", "Linux Storage"]
+---
+
+The copy operation had finished, but the two object stores still did not agree.
+
+After moving data from a standalone MinIO deployment toward a distributed one, I compared bucket inventories, object counts and stored sizes. The totals were different. A subsequent `mc diff` showed at least one object that existed on the original side but not on the destination. I also found incomplete multipart uploads while investigating the discrepancy.
+
+This changed what I considered a migration result. A completed transfer command was evidence that a **transfer attempt ended**. It was not evidence that the destination held the same logical objects, that the objects were readable, or that applications could continue using their existing credentials and metadata.
+
+The migration itself was part of a larger storage redesign. I had previously operated a single MinIO server backed by a Longhorn persistent volume. I wanted object storage to own its own distributed redundancy rather than treating a replicated block device as the entire availability strategy. The difficult part was not only building the new system: it was transferring existing data and application contracts between two different failure models.
+
+This article reconstructs those engineering decisions and the discrepancies I actually observed. Diagrams are conceptual and deliberately omit the deployment's physical layout, endpoints, identifying paths and security configuration.
+
+## Changing who owns redundancy
+
+The original architecture had a straightforward ownership split: one MinIO server handled the S3 API and its object namespace, while Longhorn replicated the underlying block volume. Longhorn could help keep that volume available across some infrastructure failures. But a single MinIO service instance still had its own process-level availability and recovery concerns.
+
+The alternative was to distribute MinIO itself across independent storage endpoints, using its erasure coding and object-level healing model. That moved part of the redundancy responsibility from the replicated PVC layer into the object-storage service.
+
+The distinction matters because the layers recover **different objects of state**:
+
+| Question | Single MinIO + replicated block volume | Distributed MinIO + independent disks |
+| --- | --- | --- |
+| Which layer distributes redundancy? | Block-storage replicas | Object-storage erasure sets |
+| What is copied or reconstructed? | Storage blocks belonging to a volume | Object data and parity shards |
+| Who understands the S3 object namespace? | One MinIO server | The distributed MinIO service |
+| What does an additional running Pod prove? | Little without volume and application recovery | Little without erasure-set quorum and object access |
+| Primary design cost | Volume replication, rebuild I/O and single-service recovery | Quorum, erasure parity, peer configuration and distributed healing |
+
+This was **not** a claim that Longhorn is unsuitable for MinIO in every deployment. It was a workload-specific choice about failure domains, storage overhead and which component should be authoritative during recovery.
+
+With erasure coding, one logical object is represented across storage members using data and parity shards. The exact read and write quorum, parity overhead and tolerance depend on the erasure-set configuration; they cannot be inferred merely from the number of Pods. I specifically avoided interpreting a distributed MinIO deployment as a primary/standby pair: its members participate in one shared object service.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/minio-storage-ownership.svg" target="_blank" rel="noopener noreferrer" aria-label="Compare block-replicated standalone MinIO and distributed MinIO with erasure-coded object shards">
+    <img src="/figures/journals/minio-storage-ownership.svg" alt="Left: one MinIO server owns the object API while a lower block-storage layer maintains volume replicas. Right: a distributed MinIO service places object data and parity shards across independent storage members. No actual physical topology or parity count is shown." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Two conceptual redundancy owners, not an internal deployment diagram. The drawing does not encode an actual node count, capacity, erasure-set width or failure-tolerance guarantee.</figcaption>
+</figure>
+
+The new design also had a new operational cost: peers had to agree on their distributed configuration. In a later operational incident, an environment-variable consistency error reminded me that the server processes were not independent stateless replicas. Their configuration had to describe the same distributed storage system. I treated that as a **separate runtime configuration issue**, not an explanation for every discrepancy in the earlier data copy.
+
+## Moving objects is not the same as migrating a namespace
+
+My first instinct was to think in terms of bytes: copy the contents and point the clients at the new endpoint. But the applications were not using a generic filesystem. They depended on buckets, object keys, versions, access identities, bucket configuration, and the ability to read particular artifacts later.
+
+Those are different migration surfaces.
+
+**Object payloads** can be copied by an S3-compatible client, but a large transfer can fail partway through or finish while new writes continue landing at the source.
+
+**Object metadata and versions** need special treatment. A comparison of current keys does not prove that an application using historical versions or delete markers would see the same results.
+
+**IAM and bucket configuration** are separate from the payload copy. Transferring a file successfully is not proof that an application will still have permission to read it.
+
+**Lifecycle rules** can change what survives long enough to be verified. A retention rule intended for temporary files can be disastrous if it deletes objects that still have live references.
+
+These separate contracts are why I did not consider the S3 API's apparent compatibility sufficient evidence that the destination was ready for cutover.
+
+## What failed during bulk copying
+
+I used MinIO's client tooling for the data transfer and later compared the two sides with `mc mirror` and `mc diff`. The large copy exposed errors such as gateway timeouts and client-closed-request responses. I also tracked failed transfer items rather than treating the command's overall progress indicator as a durable inventory of completed objects.
+
+A timeout has an uncomfortable ambiguity. It might mean the server never accepted an operation. It might also mean the client stopped waiting after the server had already performed part of it. The status of the HTTP call and the durable state of the object are not always the same observation.
+
+For a copy process, I therefore had to think in three layers:
+
+- **Transport:** Did the request complete from the client's point of view?
+- **Namespace:** Does the expected bucket/key/version appear in the destination listing?
+- **Content:** Can the destination serve the intended object and, where required, verify its bytes and metadata?
+
+Repeating a failed command can be appropriate if the operation is safe to retry, but a retry log alone cannot settle those three questions. I needed a way to reconcile the actual destination against the original source of truth.
+
+The problem was harder when the source remained writable. A bulk copy is not an instantaneous snapshot. A newly created object, a later overwrite and a deletion can all make the two inventories disagree even when each individual successful copy is correct. I considered bulk sync plus a final reconciliation or write-quiescence boundary as the safer cutover model; the retained record does **not** prove that such a freeze and final zero-difference check were completed.
+
+## The object that appeared only on the source
+
+The decisive observation was not an aggregate size difference. It was a concrete **source-only entry** in the `mc diff` result.
+
+For a comparison with the old deployment as the first argument, a source-only marker means the destination was missing that logical object at the time of the comparison. It does not, by itself, explain *why*.
+
+Possible causes include an earlier copy failure, a change after the bulk-copy pass, a permission or listing difference, or an independent deletion. I did not have enough evidence to collapse those possibilities into one root cause.
+
+A useful investigation therefore needs a reconciliation ledger rather than a simple “files moved” number:
+
+| Reconciliation outcome | Interpretation | What to do with that evidence |
+| --- | --- | --- |
+| **Present and matching in both** | The compared identity and chosen properties agree | Read back or checksum as required by the integrity target |
+| **Source only** | Destination lacks an expected visible object | Preserve key/version context, investigate transfer history, then copy/verify if appropriate |
+| **Destination only** | Extra destination object may be stale, newly generated or intentional | Determine provenance; do not delete automatically |
+| **Both present, different properties** | Size, version or metadata comparison needs explanation | Inspect the exact version and consider full-content verification |
+| **Incomplete multipart upload** | Upload parts exist without a finalized object | Track separately from completed object inventory and storage usage |
+| **Inaccessible or inconclusive** | Access/timeout prevents a reliable comparison | Record as unknown, not matching or missing |
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/minio-object-reconciliation.svg" target="_blank" rel="noopener noreferrer" aria-label="Open object-by-object reconciliation matrix">
+    <img src="/figures/journals/minio-object-reconciliation.svg" alt="A source versus destination object matrix. One illustrative row is source-only, the discrepancy type actually observed. Other rows show possible matching, metadata mismatch, destination-only and incomplete multipart states, explicitly marked as illustrative categories rather than observed counts." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Object identity and classification matter more than aggregate bytes. The source-only classification was observed; the other sample rows illustrate what a complete reconciliation system must distinguish.</figcaption>
+</figure>
+
+A difference between totals was a useful alarm; a source-only object was a more actionable datum. But neither observation established the final state of **every** object in the dataset.
+
+## The ETag trap in an integrity check
+
+I did not want to replace “copy succeeded” with another equally weak assertion: “ETags are equal, so all bytes are identical.”
+
+S3 ETags are not universally whole-object MD5 digests. Multipart uploads and some encryption modes change their meaning, and the same logical data can be represented with different multipart layouts. A metadata-based `mc diff` is useful for discovering differences, but it is not a full streaming read-back of every destination object.
+
+A stronger validation design would separate its levels:
+
+| Verification level | Useful evidence | Limitation |
+| --- | --- | --- |
+| **Inventory** | Bucket/key/version present on both sides | Does not verify payload bytes |
+| **Metadata** | Content length, content type, tags or other required properties | Metadata can agree while content differs |
+| **Server-reported checksums** | Comparable full-object digest, if both sides expose the same trustworthy algorithm | Multipart ETag is not always such a digest |
+| **Read-back** | Read destination data and compare a cryptographic digest with the source | Expensive at scale; needs a consistent source version |
+| **Application check** | Representative consumers can retrieve and use their required artifacts | Does not cover every historical edge case |
+
+The object identity used for comparison also matters. If bucket versioning was enabled, a key alone is not a full identity; comparing the latest visible object does not account for noncurrent versions and delete markers.
+
+For a dataset with ongoing writes, the verification manifest must also have a **defined point in time**. Otherwise even an excellent comparison algorithm is chasing a changing target.
+
+These are checks I would require before making an exhaustive integrity claim. I have not published a sanitized signed manifest or full read-back result proving zero missing or corrupted objects for this migration.
+
+## Incomplete multipart uploads belong to a different ledger
+
+The incomplete uploads I found during investigation complicated the storage totals. Multipart uploads can hold data parts before a final object exists. If the client disconnects or never completes the upload, those parts can consume storage without appearing as a normal committed object in the same way.
+
+That means two comparisons were needed:
+
+1. The set of **completed logical objects** that applications can name and retrieve.
+2. The set of **unfinished upload attempts** that can explain some used space but do not prove an object exists.
+
+The second set should not be naively added to the first. Nor should incomplete uploads be deleted solely because a migration is in progress: an in-flight upload may still belong to an active writer.
+
+The correct cleanup and expiration behavior also depends on the deployed MinIO release and configuration. I treated an incomplete multipart upload as **a separate lifecycle decision**, not as a confirmed missing-file count or a safe automatic-delete candidate.
+
+## The IAM migration was its own obstacle
+
+Copying payloads did not migrate the service identities and policies that applications used to access them.
+
+During the IAM transfer work I encountered an invalid-export/archive problem and a subsequent access-denied condition while trying to import settings. A successful console login did not by itself establish that the same identity could perform an administrative import. I investigated the archive format and authorization context rather than assuming the data-copy tool was broken.
+
+More importantly, the destination already had configuration of its own. An import was not something I could treat as a harmless blind overwrite. Before changing a live identity database, I needed to know whether the import **merged, replaced or conflicted** with existing users, service accounts and policies under the installed version.
+
+I considered preserving only selected IAM configuration and avoiding unrelated destination settings, but the retained evidence does not establish a fully verified migration of every identity. I would not endorse copying internal MinIO metadata directories directly as a general recovery recipe.
+
+The application-level acceptance criteria are more concrete than an import command's exit code: can an existing application principal read only the objects it should, can it write where expected, and do intentionally denied operations remain denied?
+
+IAM correctness and data correctness are independent. A missing object cannot be fixed with a broader policy, and a correct object copy is not useful to a consumer whose access disappeared.
+
+## Lifecycle rules are part of correctness, not housekeeping
+
+Some stored objects were long-lived user or service artifacts; others were temporary intermediates. It would have been easy to express storage reclamation as a blanket bucket TTL, but that ignores the applications still referencing those objects.
+
+I worked through lifecycle and prefix-scoped retention options. The unresolved question was **which objects could be safely discarded and after which workflow event**, not merely how to schedule deletion. If a downstream job can be retried after an extended delay, a temporary artifact might need to survive longer than the original request.
+
+Lifecycle also interacts with versioning: expiring the current version is not the same as removing all historical versions, and delete markers can change what a normal read returns. I kept lifecycle decisions distinct from the bulk migration and IAM transfer.
+
+The record supports lifecycle/TTL design and investigation. It does not establish that a complete, safe retention policy was universally applied to every migrated bucket.
+
+## What I would require at cutover
+
+The cutover decision should be based on explicit evidence, not on whether the new MinIO console opens.
+
+**Namespace inventory.** The intended buckets and key/version populations are accounted for at a defined source snapshot or write-quiescence boundary.
+
+**Object verification.** Missing and divergent objects have been reconciled; inconclusive results are tracked rather than counted as matches; representative reads succeed.
+
+**Control-plane parity.** Application access keys and policies are verified independently from bucket data, without silently relaxing permissions.
+
+**Write behavior.** New writes, overwrites, deletes, multipart finalization and application reads are tested against the intended endpoint.
+
+**Recovery path.** The source remains available for a defined fallback window until destination verification is sufficient; a rollback is a data and metadata problem, not just a DNS switch.
+
+I cannot claim that every one of these gates was passed in the original migration. The available record establishes the migration work, the diff and discrepancy investigations, but not a complete zero-difference acceptance certificate.
+
+## What was observed, and what was still open
+
+| Work or finding | Evidence boundary |
+| --- | --- |
+| Started with standalone MinIO on a Longhorn-backed persistent volume | **Operated starting architecture** |
+| Designed and deployed distributed MinIO using independent storage members | **Implemented/distributed architecture work** |
+| Transferred a large preexisting object dataset with MinIO client tooling | **Executed**; copy errors and retries were investigated |
+| Compared object counts, aggregate sizes and `mc diff` output | **Executed** |
+| Found at least one source-only logical object after the transfer | **Observed discrepancy**; exact root cause not proven |
+| Investigated incomplete multipart uploads | **Observed/investigated**; do not equate with committed objects |
+| Investigated IAM export/import errors and access permissions | **Observed/investigated**; full identity parity not verified |
+| Evaluated lifecycle and TTL behavior | **Designed/investigated**; final universal policy not verified |
+| Complete version-aware byte-level reconciliation with zero differences | **Not established by the retained evidence** |
+
+The project changed my notion of a successful storage migration. I originally needed a replacement service that could tolerate failures differently from a single server on a replicated volume. By the time the bulk copy was over, the harder question was whether the **new namespace meant the same thing to every client**.
+
+For that, no progress bar, healthy Pod, aggregate byte count or single diff pass is enough on its own. You need a stable reference point, a way to reconcile individual objects, and a decision about what to do with the cases that do not match.
+
+## References and related work
+
+- [MinIO client: `mc diff` behavior](https://docs.min.io/aistor/reference/cli/mc-diff/)
+- [MinIO client: `mc mirror` semantics](https://docs.min.io/aistor/reference/cli/mc-mirror/)
+- [MinIO: Erasure coding concepts](https://docs.min.io/aistor/operations/core-concepts/erasure-coding/)
+- [MinIO: IAM metadata import](https://docs.min.io/aistor/reference/cli/admin/mc-admin-cluster-iam/mc-admin-cluster-iam-import/)
+- [AWS S3: Multipart uploads and ETags](https://docs.aws.amazon.com/AmazonS3/latest/userguide/mpuoverview.html)
+- [AWS S3: Object integrity checks](https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity-upload.html)
+- [When a Pod Recovers but Its Data Does Not](/projects/rokaf-stateful-storage-and-recovery/)
+- [On-premises K3s platform engineering](/projects/independent-on-premises-k3s-platform-engineering/)
