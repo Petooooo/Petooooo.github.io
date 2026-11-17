@@ -54,7 +54,7 @@ I did consider a Docker-in-Docker approach as an alternative. In this environmen
 
 ### The executor image did not behave like a general-purpose CI shell
 
-One of the concrete bugs was particularly instructive. The Kubernetes Runner job tried to invoke \`/kaniko/executor\`, but the command was not available from the effective runtime environment. Rewriting the CI YAML repeatedly would not fix a missing or inaccessible executable.
+One of the concrete bugs was particularly instructive. The Kubernetes Runner job tried to invoke `/kaniko/executor`, but the command was not available from the effective runtime environment. Rewriting the CI YAML repeatedly would not fix a missing or inaccessible executable.
 
 The answer was at the image boundary: I built a small **shell-capable wrapper** that preserved Kaniko's executor files while providing the shell environment expected by the Runner job. The earlier job-image issue was resolved and the CI job began working with that wrapper.
 
@@ -64,7 +64,7 @@ It also exposed an important diagnostic ambiguity. At another point, a failing j
 
 ### Reproducibility is a closure property
 
-In a closed network, a successful Dockerfile is not enough. The builder's own base image, every \`FROM\` dependency, package manager index, certificate chain and registry permission needs to be available through the approved internal supply path.
+In a closed network, a successful Dockerfile is not enough. The builder's own base image, every `FROM` dependency, package manager index, certificate chain and registry permission needs to be available through the approved internal supply path.
 
 I separated the build prerequisites into a small inventory:
 
@@ -81,7 +81,7 @@ Some failures in this list look similar from the pipeline's final red status. Th
 
 ## I had to locate the TLS failure before changing trust
 
-The private registry used a certificate chain that was not necessarily trusted by every container or node. When a push or pull failed with an \`x509\` error, the useful question was not "How do I disable verification?" It was **who made the TLS connection and which trust store did that client use?**
+The private registry used a certificate chain that was not necessarily trusted by every container or node. When a push or pull failed with an `x509` error, the useful question was not "How do I disable verification?" It was **who made the TLS connection and which trust store did that client use?**
 
 There are at least three distinct connections:
 
@@ -137,9 +137,9 @@ Once I treated GitOps as a reconciliation loop, I stopped expecting one green st
 | Situation | GitOps-level observation | Next question |
 | --- | --- | --- |
 | Image built and uploaded, manifest still points to an earlier image | No automatic deployment follows from CI success | Was promotion to desired state performed? |
-| Argo CD reports \`OutOfSync\` | Live resources differ from desired manifests | Is sync blocked, manual, or intentionally paused? |
-| Argo CD reports \`Synced\` but the Pod cannot pull its image | Manifests can match while runtime is broken | Is node-level registry trust or artifact availability failing? |
-| Application resources are reported \`Healthy\` but requests fail | Resource-level health does not fully exercise user behavior | Do ingress, dependencies and data operations work? |
+| Argo CD reports `OutOfSync` | Live resources differ from desired manifests | Is sync blocked, manual, or intentionally paused? |
+| Argo CD reports `Synced` but the Pod cannot pull its image | Manifests can match while runtime is broken | Is node-level registry trust or artifact availability failing? |
+| Application resources are reported `Healthy` but requests fail | Resource-level health does not fully exercise user behavior | Do ingress, dependencies and data operations work? |
 | An old desired revision is reapplied | Desired state changed back | Is the older image available and schema-compatible? |
 
 The failure case I encountered repeatedly was *ownership confusion*. A Kaniko execution failure is not an Argo CD problem. A node rejecting an image's certificate is not a broken Deployment specification. A controller marking a manifest Synced does not guarantee that every application dependency is usable.

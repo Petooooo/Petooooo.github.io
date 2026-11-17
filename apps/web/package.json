@@ -5,8 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "astro dev --host 0.0.0.0",
+    "prebuild": "python3 ../../automation/scripts/validate-mdx-inline-code.py",
     "build": "astro check && astro build",
     "preview": "astro preview --host 0.0.0.0",
+    "precheck": "python3 ../../automation/scripts/validate-mdx-inline-code.py",
     "check": "astro check",
     "lint": "astro check"
   },

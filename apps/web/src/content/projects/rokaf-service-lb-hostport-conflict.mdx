@@ -16,13 +16,13 @@ status: "active"
 techStack: ["K3s", "Kubernetes", "MetalLB", "Traefik", "Linux Networking"]
 ---
 
-An unrelated entry point stopped responding immediately after I added a Kubernetes \`LoadBalancer\` Service. Its application had not been redeployed. The service I had just created was meant to receive a virtual IP, so I initially looked toward MetalLB, the Service and the endpoint Pods.
+An unrelated entry point stopped responding immediately after I added a Kubernetes `LoadBalancer` Service. Its application had not been redeployed. The service I had just created was meant to receive a virtual IP, so I initially looked toward MetalLB, the Service and the endpoint Pods.
 
 But the relevant change had happened **on the hosts, not in the application**.
 
-K3s was still running its built-in Service Load Balancer, ServiceLB (formerly Klipper). It noticed the new \`LoadBalancer\` Service and created \`svclb-*\` resources. Their Pod specifications attempted to reserve the new Service's port through \`hostPort\`—a host-level resource that the existing exposure path also depended on.
+K3s was still running its built-in Service Load Balancer, ServiceLB (formerly Klipper). It noticed the new `LoadBalancer` Service and created `svclb-*` resources. Their Pod specifications attempted to reserve the new Service's port through `hostPort`—a host-level resource that the existing exposure path also depended on.
 
-Changing the new Service to a different port avoided the immediate conflict. Removing that \`LoadBalancer\` Service removed the associated ServiceLB resources and restored the previously working entry point. That reversible sequence mattered more than a generic claim that "MetalLB and K3s do not work together."
+Changing the new Service to a different port avoided the immediate conflict. Removing that `LoadBalancer` Service removed the associated ServiceLB resources and restored the previously working entry point. That reversible sequence mattered more than a generic claim that "MetalLB and K3s do not work together."
 
 The deeper problem was unclear **ownership of external exposure**. MetalLB and ServiceLB were configured to handle aspects of the same Service type, while one of them also consumed host ports. This account deliberately omits the environment's actual endpoints, port numbers, node placement, identities and manifests.
 
@@ -36,9 +36,9 @@ Those two observations were useful because they **did not describe a universal c
 
 | Observation from the investigation | What it narrowed | What it did not prove |
 | --- | --- | --- |
-| Existing host-port access stopped after adding a new \`LoadBalancer\` Service | The new Service or a controller reacting to it could be the trigger | Which process owned the host port, by itself |
+| Existing host-port access stopped after adding a new `LoadBalancer` Service | The new Service or a controller reacting to it could be the trigger | Which process owned the host port, by itself |
 | Changing the new Service's exposed port avoided the conflict | Port-dependent behavior was involved | That VIP announcement and packet forwarding were fully correct |
-| \`svclb-*\` resources appeared and used the contested \`hostPort\` | K3s ServiceLB was an active claimant to host-port capacity | That MetalLB had itself bound that host port |
+| `svclb-*` resources appeared and used the contested `hostPort` | K3s ServiceLB was an active claimant to host-port capacity | That MetalLB had itself bound that host port |
 | A NodePort access path remained reachable | At least one independent ingress path still functioned | That the new VIP path or all backends were healthy |
 | Removing the new Service removed ServiceLB resources and restored access | The failure was reversible with the triggering resource | That every long-term configuration change had been applied |
 
@@ -46,9 +46,9 @@ The key difference from the other DNS/ClusterIP investigation is that this incid
 
 ## What ServiceLB actually created
 
-Kubernetes defines \`Service\` objects of type \`LoadBalancer\`, but it does not promise that any particular bare-metal implementation exists. K3s includes a built-in implementation so those Services can be exposed even without a cloud load balancer.
+Kubernetes defines `Service` objects of type `LoadBalancer`, but it does not promise that any particular bare-metal implementation exists. K3s includes a built-in implementation so those Services can be exposed even without a cloud load balancer.
 
-ServiceLB watches \`LoadBalancer\` Services and creates workload resources to handle them. In the K3s version used for this incident, these appeared under an \`svclb-*\` naming convention. K3s documentation now describes ServiceLB-managed Pods using a \`svc-\` prefix; names can vary by release. The important behavior is not the prefix: **the ServiceLB Pod requests a host port corresponding to the Service port**.
+ServiceLB watches `LoadBalancer` Services and creates workload resources to handle them. In the K3s version used for this incident, these appeared under an `svclb-*` naming convention. K3s documentation now describes ServiceLB-managed Pods using a `svc-` prefix; names can vary by release. The important behavior is not the prefix: **the ServiceLB Pod requests a host port corresponding to the Service port**.
 
 A host port is not a private namespace that every Service can independently reserve. A second claimant changes scheduling and packet interception possibilities for the same host and port. Depending on the actual state and controller behavior, that can show up as an unschedulable ServiceLB Pod, a port-binding problem or a changed path receiving the traffic. The original record confirms competing host-port usage and the observed loss of access; it does not establish one specific kernel-level bind error or the complete order of iptables rule installation.
 
@@ -63,19 +63,19 @@ This was the first architectural correction I needed: **creating a Kubernetes Se
 
 ## MetalLB was not binding that host port
 
-MetalLB has a different job. For a \`LoadBalancer\` Service, its controller can allocate a suitable external address, and its speakers announce reachability through the configured Layer 2 or BGP mechanism. Once traffic arrives at a node, the remaining Service forwarding and endpoint delivery belong to other components.
+MetalLB has a different job. For a `LoadBalancer` Service, its controller can allocate a suitable external address, and its speakers announce reachability through the configured Layer 2 or BGP mechanism. Once traffic arrives at a node, the remaining Service forwarding and endpoint delivery belong to other components.
 
-ServiceLB, by contrast, creates host-port-backed forwarding workloads for \`LoadBalancer\` Services. Its default behavior was inappropriate for an environment where I intended MetalLB to be the designated external load-balancer implementation.
+ServiceLB, by contrast, creates host-port-backed forwarding workloads for `LoadBalancer` Services. Its default behavior was inappropriate for an environment where I intended MetalLB to be the designated external load-balancer implementation.
 
 That distinction is easy to miss because both components seem to "provide a load balancer." Their resource ownership is not interchangeable.
 
 | Mechanism | What it primarily owns | What it does **not** prove |
 | --- | --- | --- |
-| MetalLB controller | Allocation of external addresses for eligible \`LoadBalancer\` Services | That the chosen backend answers requests |
+| MetalLB controller | Allocation of external addresses for eligible `LoadBalancer` Services | That the chosen backend answers requests |
 | MetalLB speaker | Advertisement of the assigned address to the surrounding network | That a host port is available or Service forwarding works |
 | K3s ServiceLB | ServiceLB workloads and their host-port-backed exposure mechanism | That a separate MetalLB VIP route is healthy |
-| \`NodePort\` | A node-accessible Service forwarding path | That a competing \`hostPort\` or VIP path is correct |
-| \`hostPort\` | Host port requested for a particular workload's exposure | That other Services are isolated from the same host-level port constraints |
+| `NodePort` | A node-accessible Service forwarding path | That a competing `hostPort` or VIP path is correct |
+| `hostPort` | Host port requested for a particular workload's exposure | That other Services are isolated from the same host-level port constraints |
 | Application readiness | Whether the selected application endpoint should receive traffic | That an external client can reach its entry point |
 
 The ownership problem was therefore more precise than "two load balancers competed for the same port": **one load-balancer controller claimed a host port in a cluster that already had another external exposure model and an existing dependency on that port**.
@@ -89,23 +89,23 @@ The ownership problem was therefore more precise than "two load balancers compet
 
 ## Why the obvious configuration tweak was not enough
 
-One tempting option was to set \`allocateLoadBalancerNodePorts: false\` on a \`LoadBalancer\` Service. That setting concerns allocation of the Service's Kubernetes **NodePort** values. It does not, on its own, turn off K3s ServiceLB or prevent ServiceLB from creating host-port-backed Pods.
+One tempting option was to set `allocateLoadBalancerNodePorts: false` on a `LoadBalancer` Service. That setting concerns allocation of the Service's Kubernetes **NodePort** values. It does not, on its own, turn off K3s ServiceLB or prevent ServiceLB from creating host-port-backed Pods.
 
 This was a useful distinction because a Service can have several different kinds of "port" at once:
 
 - **Service port:** the port advertised by the Kubernetes Service abstraction.
 - **Target port:** the selected application endpoint's listening port.
 - **NodePort:** a Kubernetes-assigned host-facing Service port, where enabled.
-- **\`hostPort\`:** a port requested by a Pod in the host networking context.
+- **`hostPort`:** a port requested by a Pod in the host networking context.
 - **VIP:** a virtual network address, which is an address—not a reservation of every port on every node.
 
 Treating these as synonyms would make the next change more confusing.
 
-Changing the Service's exposed port eliminated the immediate host-port overlap in the observed experiment, but that only worked around the collision. It did not settle which external load-balancer implementation should have authoritative responsibility for \`LoadBalancer\` Services.
+Changing the Service's exposed port eliminated the immediate host-port overlap in the observed experiment, but that only worked around the collision. It did not settle which external load-balancer implementation should have authoritative responsibility for `LoadBalancer` Services.
 
 ## Choosing one owner instead of defending a collection of workarounds
 
-I considered two broad models. One was to keep ServiceLB as the exposure owner and plan host-port availability and placement around it. The other was to make MetalLB the intended owner of \`LoadBalancer\` external addresses while disabling ServiceLB to stop automatic host-port claims.
+I considered two broad models. One was to keep ServiceLB as the exposure owner and plan host-port availability and placement around it. The other was to make MetalLB the intended owner of `LoadBalancer` external addresses while disabling ServiceLB to stop automatic host-port claims.
 
 Given the surrounding platform's use of MetalLB, the second model was the cleaner design target. Both K3s and MetalLB documentation explicitly discuss disabling the built-in ServiceLB when another load-balancer implementation is used.
 
@@ -116,13 +116,13 @@ This was not simply about a command-line flag. It was about reducing ambiguity:
 - A pre-existing, independently tested access path should remain available while the new exposure model is validated.
 - A failed VIP endpoint should be investigated separately at address announcement, node reception, Service forwarding and backend response layers.
 
-I agreed to the ServiceLB-disable direction during the original troubleshooting. The record after that suggests the immediate conflict appeared to settle, but it does **not** include a complete, retained before-and-after verification from every K3s server or proof that \`svclb-*\` remained absent. I therefore describe the long-term configuration as a **chosen remediation direction**, not an independently audited final rollout.
+I agreed to the ServiceLB-disable direction during the original troubleshooting. The record after that suggests the immediate conflict appeared to settle, but it does **not** include a complete, retained before-and-after verification from every K3s server or proof that `svclb-*` remained absent. I therefore describe the long-term configuration as a **chosen remediation direction**, not an independently audited final rollout.
 
 ### What would have closed the change properly
 
 A credible post-change verification would need four separate checks. First, the intended controller configuration is consistent on every relevant K3s server. Second, no unwanted ServiceLB workloads are recreated for the test Service. Third, the existing host-port entry point remains reachable. Fourth, the new VIP route answers a representative application request from the intended client network.
 
-A fifth useful check is to vary the Service's port and create/delete another harmless test Service to ensure the result is not an accidental one-time success. A \`Running\` backend or a nonempty VIP field alone would not pass that test.
+A fifth useful check is to vary the Service's port and create/delete another harmless test Service to ensure the result is not an accidental one-time success. A `Running` backend or a nonempty VIP field alone would not pass that test.
 
 These are acceptance criteria—not tests I am claiming were all completed in the original environment.
 
