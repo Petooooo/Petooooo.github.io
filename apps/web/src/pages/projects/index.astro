@@ -17,6 +17,7 @@ const rokafOrder = [
   "rokaf-clickhouse-replication-migration",
   "rokaf-identity-rbac-and-policy",
   "rokaf-networking-and-tls",
+  "rokaf-service-lb-hostport-conflict",
   "rokaf-gpu-scheduling-and-capacity",
   "rokaf-async-workers-and-idempotency"
 ];
@@ -85,7 +86,7 @@ const highlights = [
   </section>
 
   <section class="border-t border-white/10 py-12 md:py-16">
-    <SectionHeader eyebrow="ROKAF · Engineering journal" title="Systems engineering records" description="Nine detailed accounts of the engineering choices, failed assumptions and reliability trade-offs behind the platform." />
+    <SectionHeader eyebrow="ROKAF · Engineering journal" title="Systems engineering records" description="Ten detailed accounts of the engineering choices, failed assumptions and reliability trade-offs behind the platform." />
     <div class="grid gap-4 md:grid-cols-2">
       {journal.map((project) => <ProjectCard project={project} />)}
     </div>
