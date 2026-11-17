@@ -13,3 +13,6 @@ __pycache__/
 # Generated from public Petooooo/systems-notes during site builds
 apps/web/src/content/notes/external-study/
 .external/
+
+# Generated Korean translation audit; the catalog itself is tracked.
+apps/web/i18n/missing-ko.json

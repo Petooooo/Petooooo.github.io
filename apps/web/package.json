@@ -10,7 +10,10 @@
     "preview": "astro preview --host 0.0.0.0",
     "precheck": "python3 ../../automation/scripts/validate-mdx-inline-code.py",
     "check": "astro check",
-    "lint": "astro check"
+    "lint": "astro check",
+    "postbuild": "python3 ../../automation/scripts/localize-static-site.py build && python3 ../../automation/scripts/check-korean-editions.py",
+    "l10n:collect": "python3 ../../automation/scripts/localize-static-site.py collect",
+    "l10n:translate": "python3 ../../automation/scripts/localize-static-site.py translate"
   },
   "dependencies": {
     "@astrojs/mdx": "^4.3.0",
