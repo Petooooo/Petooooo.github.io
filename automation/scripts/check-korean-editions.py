@@ -11,6 +11,8 @@ import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[2]
 DIST = ROOT / "apps/web/dist"
+EDITORIALS = ROOT / "apps/web/i18n/editorial/projects"
+PUBLIC_PROJECTS = ROOT / "apps/web/src/content/projects"
 CORE_PROJECTS = [
     "rokaf-offline-gitops-delivery",
     "rokaf-service-lb-hostport-conflict",
@@ -72,7 +74,20 @@ def main():
             errors.append(f"Missing Korean lang: {loc}")
         if '<meta name="robots" content="noindex,nofollow"' not in ko:
             errors.append(f"Missing noindex: {loc}")
-        if codes(en)!=codes(ko):
+        parts=p.relative_to(DIST).parts
+        is_project=len(parts)==3 and parts[0]=="projects"
+        editorial_slug=parts[1] if is_project and (EDITORIALS/(parts[1]+".md")).exists() else None
+        if editorial_slug:
+            if f"hand-edited Korean editorial: {editorial_slug}" not in ko:
+                errors.append(f"Human-written editorial not injected: {editorial_slug}")
+            body=ko.split(f"hand-edited Korean editorial: {editorial_slug}",1)[-1]
+            if len(re.findall(r"[가-힣]",body))<450:
+                errors.append(f"Human-written article too short or missing: {editorial_slug}")
+            if chr(92)+chr(96) in body:
+                errors.append(f"Literal escaped inline backtick: {editorial_slug}")
+            if "<h2>" not in body or "<p>" not in body:
+                errors.append(f"Missing Korean prose headings/paragraphs: {editorial_slug}")
+        elif codes(en)!=codes(ko):
             errors.append(f"Code span changed during translation: {loc}")
         for m in re.finditer(r'<(?:a|img)\s+[^>]*(?:href|src)="([^"]+\.svg)"',ko):
             href=m.group(1)
@@ -89,7 +104,36 @@ def main():
         elif len(re.findall(r'[가-힣]',article.read_text()))<100:
             errors.append(f"Article text appears untranslated: {slug}")
 
-    svg_files=list((DIST/"figures/ko").rglob("*.svg"))
+    all_published=[
+        p for p in sorted(PUBLIC_PROJECTS.glob("*.mdx"))
+        if not re.search(r"^draft:\s*true\s*$",p.read_text(),re.M)
+    ]
+    for source_file in all_published:
+        slug=source_file.stem
+        handwritten=EDITORIALS/(slug+".md")
+        html_file=DIST/"projects"/slug/"kr/index.html"
+        if not handwritten.is_file():
+            errors.append(f"Published project lacks human Korean prose: {slug}")
+            continue
+        if not html_file.exists():
+            errors.append(f"Published project missing Korean page: {slug}")
+            continue
+        translated=handwritten.read_text()
+        if len(re.findall(r"[가-힣]",translated))<600:
+            errors.append(f"Human Korean prose too short: {slug}")
+        original=source_file.read_text()
+        source_figures=set(re.findall(r'<img\s+src="(\/figures\/[^"]+\.svg)"',original))
+        translated_figures=set(re.findall(r'\{\{figure\s+(\/figures\/[^\s|]+\.svg)',translated))
+        if source_figures!=translated_figures:
+            errors.append(f"Figure mismatch: {slug}, missing={source_figures-translated_figures}, extra={translated_figures-source_figures}")
+        rendered=html_file.read_text()
+        if "hand-edited Korean editorial: "+slug not in rendered:
+            errors.append(f"Expected curated Korean article body: {slug}")
+        for figure in source_figures:
+            localized=figure.replace("/figures/","/figures/ko/",1)
+            if f'src="{localized}"' not in rendered:
+                errors.append(f"Localized image not linked: {slug}: {localized}")
+        svg_files=list((DIST/"figures/ko").rglob("*.svg"))
     for p in svg_files:
         try:ET.parse(p)
         except ET.ParseError as e:errors.append(f"Invalid translated SVG: {p} ({e})")

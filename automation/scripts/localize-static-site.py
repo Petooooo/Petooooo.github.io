@@ -30,6 +30,9 @@ WEB = ROOT / "apps" / "web"
 DIST = WEB / "dist"
 CATALOG = WEB / "i18n" / "ko.json"
 OVERRIDE_FILE = WEB / "i18n" / "ko-overrides.json"
+SVG_OVERRIDE_FILE = WEB / "i18n" / "svg-ko-overrides.json"
+EDITORIAL_SOURCE = WEB / "i18n" / "editorial" / "projects"
+EDITORIAL_BUILT = WEB / ".generated" / "ko-editorials"
 NOTES_ROOTS = [ROOT / ".external" / "systems-notes", ROOT.parent / "systems-notes"]
 INTERNAL_HOSTS = {"petooooo.github.io", "www.petooooo.github.io"}
 RAW_PREFIX = "https://raw.githubusercontent.com/Petooooo/systems-notes/main/assets/"
@@ -137,6 +140,16 @@ def note_root() -> Path | None:
             return p
     return None
 
+def svg_language_catalog(catalog: dict[str, str]) -> dict[str, str]:
+    # SVG text must be diagram-specific technical Korean, not arbitrary
+    # one-token website navigation translations ("Registry" -> "Company").
+    # Human SVG glossary overrides machine translations for diagram labels.
+    localized = dict(catalog)
+    if SVG_OVERRIDE_FILE.is_file():
+        localized.update(json.loads(SVG_OVERRIDE_FILE.read_text(encoding="utf-8")))
+    return localized
+
+
 def svg_inputs(dist: Path) -> dict[str, Path]:
     files: dict[str, Path] = {}
     for p in (dist / "figures").rglob("*.svg"):
@@ -234,6 +247,25 @@ def href_to_ko(value:str, possible:set[str], svg_map:dict[str,str])->str:
     if parts.netloc: return urlunsplit((parts.scheme,parts.netloc,path,parts.query,parts.fragment))
     return urlunsplit(("", "", path,parts.query,parts.fragment))
 
+def curated_editorial_slug(source_url: str) -> str | None:
+    # The public project index remains translated through site chrome, not a
+    # document body. Individual published projects require authored Korean text.
+    parts = [part for part in source_url.strip("/").split("/") if part]
+    if len(parts) != 2 or parts[0] != "projects":
+        return None
+    slug = parts[1]
+    return slug if (EDITORIAL_SOURCE / (slug + ".md")).is_file() else None
+
+
+def localize_fragment_links(fragment: str, possible: set[str],
+                            svg_map: dict[str, str]) -> str:
+    pattern = r'(?P<before>\b(?:href|src)\s*=\s*\")(?P<url>[^\"]*)\"'
+    def rewrite(match: re.Match[str]) -> str:
+        url = href_to_ko(unescape(match.group("url")), possible, svg_map)
+        return match.group("before") + escape(url, quote=True) + chr(34)
+    return re.sub(pattern, rewrite, fragment, flags=re.I)
+
+
 class KoHTML(HTMLParser):
     def __init__(self,source_url:str,possible:set[str],svg_map:dict[str,str],
                  catalog:dict[str,str],missing:set[str],mode:str):
@@ -246,7 +278,9 @@ class KoHTML(HTMLParser):
         self.mode=mode
         self.stack=[]
         self.output=[]
-        self.skip_article=source_url.startswith("/notes/") and source_url!="/notes/"
+        self.editorial_slug=curated_editorial_slug(source_url)
+        self.skip_article=(source_url.startswith("/notes/") and source_url!="/notes/") or bool(self.editorial_slug)
+        self.editorial_depth=0
         self.prose_depth=0
         self.doc_mode=False
     def eligible(self)->bool:
@@ -274,7 +308,25 @@ class KoHTML(HTMLParser):
             raw=re.sub(r'(?P<pre>\b(?P<key>alt|aria-label|title|content)\s*=\s*(?P<quote>["\x27]))(?P<val>.*?)(?P=quote)',other_repl,raw,flags=re.I)
         return raw
     def handle_starttag(self,tag,attrs):
+        if self.editorial_depth:
+            if tag not in VOID:
+                self.editorial_depth += 1
+            return
         raw=self.get_starttag_text()
+        if self.editorial_slug and tag=="div" and any(
+            key=="class" and "prose-platform" in (val or "").split()
+            for key,val in attrs
+        ):
+            self.output.append(raw)
+            self.output.append("<!-- hand-edited Korean editorial: " + self.editorial_slug + " -->")
+            if self.mode=="build":
+                html_path=EDITORIAL_BUILT/(self.editorial_slug+".html")
+                if not html_path.is_file():
+                    raise RuntimeError(f"Missing compiled human Korean article: {html_path}")
+                frag=html_path.read_text(encoding="utf-8")
+                self.output.append(localize_fragment_links(frag,self.possible,self.svg_map))
+            self.editorial_depth=1
+            return
         self.output.append(self.repl_attr(tag,raw))
         if tag=="head":
             self.output.append('<meta name="robots" content="noindex,nofollow" />')
@@ -284,12 +336,21 @@ class KoHTML(HTMLParser):
                 if any(k=="class" and "prose-platform" in (v or "").split() for k,v in attrs):
                     self.prose_depth=len(self.stack)
     def handle_startendtag(self,tag,attrs):
+        if self.editorial_depth:
+            return
         self.output.append(self.repl_attr(tag,self.get_starttag_text()))
     def handle_endtag(self,tag):
+        if self.editorial_depth:
+            self.editorial_depth-=1
+            if not self.editorial_depth:
+                self.output.append("</div>")
+            return
         self.output.append("</"+tag+">")
         if tag in self.stack:self.stack=self.stack[:len(self.stack)-1-self.stack[::-1].index(tag)]
         if self.prose_depth and len(self.stack)<self.prose_depth:self.prose_depth=0
     def handle_data(self,data):
+        if self.editorial_depth:
+            return
         # Decode HTML entities together with adjacent prose so "Didn't" (whose
         # apostrophe Astro may emit as &#39;) translates as a whole sentence.
         # Re-escape textual content, but never escape JavaScript/CSS source.
@@ -298,9 +359,12 @@ class KoHTML(HTMLParser):
             return
         translated=translate_part(data,self.catalog,self.missing) if self.eligible() else data
         self.output.append(escape(translated,quote=False))
-    def handle_entityref(self,name):self.output.append("&"+name+";")
-    def handle_charref(self,name):self.output.append("&#"+name+";")
-    def handle_comment(self,data):self.output.append("<!--"+data+"-->")
+    def handle_entityref(self,name):
+        if not self.editorial_depth:self.output.append("&"+name+";")
+    def handle_charref(self,name):
+        if not self.editorial_depth:self.output.append("&#"+name+";")
+    def handle_comment(self,data):
+        if not self.editorial_depth:self.output.append("<!--"+data+"-->")
     def handle_decl(self,decl):self.output.append("<!"+decl+">")
     def handle_pi(self,data):self.output.append("<?"+data+">")
     def unknown_decl(self,data):self.output.append("<!["+data+"]>")
@@ -320,17 +384,19 @@ def catalog_scan(dist:Path,catalog:dict[str,str])->tuple[set[str],list[Path],dic
         processor=KoHTML(source_path_to_url(page,dist),possible,svg_map,catalog,missing,"scan")
         processor.feed(original)
         processor.close()
+    diagram_catalog=svg_language_catalog(catalog)
     for image in svg.values():
         for s in iter_svg_strings(image):
-            local_string(s,catalog,missing)
+            local_string(s,diagram_catalog,missing)
     return missing,sources,svg,possible
 
 def run_ko(dist:Path,catalog:dict[str,str],missing:set[str],
            sources:list[Path],svg:dict[str,Path],possible:set[str]):
     svg_map={key:ko_svg_path(key) for key in svg}
+    diagram_catalog=svg_language_catalog(catalog)
     for src,source in svg.items():
         dest=dist/svg_map[src].lstrip("/")
-        create_svg_ko(source,dest,catalog,missing)
+        create_svg_ko(source,dest,diagram_catalog,missing)
     if missing:raise RuntimeError(f"Missing SVG translations: {len(missing)}")
     for page in sources:
         url=source_path_to_url(page,dist)

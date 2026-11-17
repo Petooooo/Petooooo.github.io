@@ -1,50 +1,59 @@
-# Unlisted Korean editions
+# 비공개 한국어판 집필 및 배포 규칙
 
-## URL behavior
+## 기본 원칙
 
-The canonical site is English. There is **no language switcher**, no visible Korean link, and no automatic translation or language detection.
+영어가 공식 공개 원문이다. 별도의 언어 선택 버튼이나 브라우저 언어 자동 감지는 제공하지 않는다. 방문자가 주소 끝에 `/kr/`을 직접 붙이면 한국어판을 볼 수 있다. 한국어판 안의 내부 링크에서는 가능한 한 `/kr/` 경로가 유지된다. 사이트맵·RSS·공개 영문 메뉴에 한국어판을 노출하지 않는다. 한국어 페이지는 `lang="ko"`와 `noindex,nofollow`를 사용한다.
 
-To open a Korean edition, explicitly append `/kr/` to a public route, for example:
+예: `/projects/rokaf-observability-and-failure-evidence/kr/`, `/projects/bit-shift-cnn-accelerator-zynq/kr/`.
 
-- `/projects/rokaf-offline-gitops-delivery/kr/`
-- `/projects/rokaf-service-lb-hostport-conflict/kr/`
-- `/about/kr/`
-- `/cv/kr/`
+## 번역이 아니라 한국어로 다시 쓰는 글
 
-Following internal links **while on a Korean edition** keeps `/kr/` when that page exists. A visitor using a normal English URL does not see or get redirected to a Korean edition. `/kr` is intentionally unlisted in navigation, RSS, and the public sitemap. Korean generated pages use `lang=ko`, `noindex,nofollow` and an English canonical URL.
+2026년 11월 17일부터 **공개된 모든 Projects 글은 수동으로 작성한 한국어 Markdown 원고**를 가진다. 영문 HTML의 인라인 텍스트를 단어·문장 조각 단위로 이어붙이는 자동 번역은 Projects 본문에 사용하지 않는다. 이 방식은 조사와 문맥을 끊고, 문장의 부정을 뒤집거나 기술 용어를 엉뚱하게 바꾸는 문제가 있었기 때문이다.
 
-Korean editions are built static files (suitable for GitHub Pages). No browser-side calls to translation providers are made.
+영문 원본은 `apps/web/src/content/projects/<slug>.mdx`이고 한국어 원고는 `apps/web/i18n/editorial/projects/<slug>.md`이다. 두 문서의 문단 구성이 완전히 같을 필요는 없다. 한국어판에는 당시 사건을 관측한 장면, 문제를 좁힌 사고 과정, 설계 선택과 후속 검증 기준을 담는다.
 
-## Translation source of truth
+집필할 때 지킬 원칙:
 
-`apps/web/i18n/ko.json` is a checked-in source-English-to-Korean translation memory. `automation/scripts/localize-static-site.py` reads the **generated public HTML**, preserving Markdown/MDX structure, code spans, code fences, scripts, links and figures. It copies all public HTML routes with a `/kr/index.html` suffix and localizes all SVGs used by the pages. English originals are unchanged by localization.
+- 실제 경험을 첫 문단에서 보여주고, 기술 설명은 그 문제를 이해하는 데 필요할 때 도입한다.
+- `~했었다`, `이를 통해 배울 수 있었다` 같은 반복적인 관용구를 피한다. 과장된 성공담과 기술 키워드 나열도 피한다.
+- 확인한 사실, 당시의 가설, 검토한 대안, 앞으로 수행할 검증을 정확히 구분한다. 원문에 없는 해결·성과·원인·수치를 추가하지 않는다.
+- 자연스러운 한국어 문장으로 다시 쓰되 `ServiceMonitor`, `ReplicatedMergeTree`, `WAL`, `hostPort` 등 정확한 기술 개념은 필요하면 영어 표기를 유지한다.
+- 원문에 있는 핵심 수치와 비교 기준, 개인 작업 범위와 팀의 역할 구분, 보안상 비공개인 부분은 그대로 유지한다.
+- 표·인라인 코드·외부 문서 링크·관련 프로젝트 링크는 필요한 위치에 유지한다.
+- 특정 주제를 같은 네모 상자와 화살표로만 반복해서 설명하지 않는다. 문제에 적합한 매트릭스, 상태 모델, 시간축, 자원 배치·비교 그림을 사용한다.
 
-English Projects (including reviewed incident records), site pages, and public article headings/metadata are translated. Notes already written in Korean remain Korean; their SVG labels and site chrome are localized. Private/unpublished drafts are excluded because they do not appear in the English static build.
+영문 원문에 소개된 SVG를 한국어 글에서 사용하려면 **모든 해당 SVG를 포함해야 한다.** 한국어 Markdown에 다음과 같은 한 줄을 넣는다.
 
-The Korean SVGs are generated separately under `dist/figures/ko/` from the original artwork. They preserve the shapes, source figures and numerical claims; only descriptive labels and accessibility metadata are translated. Technical names and standards identifiers can remain in English.
+`{{figure /figures/journals/observability-evidence-matrix.svg | 실제 관측과 추가 점검을 구분한 그림이다.}}`
 
-## Authoring and updating translations
+렌더러가 그림과 캡션을 생성하고, 한국어판에서는 그림 주소를 `/figures/ko/...`로 변경한다. 각 SVG의 제목·도형 안 텍스트·접근성 설명은 별도로 현지화한다.
 
-When creating or changing any public article:
+## 자동 빌드와 수정 시 검토
 
-1. Edit the English MDX as usual.
-2. Build the English source before updating translations:
-   `cd apps/web && npx astro build`
-3. On a trusted **local workstation**, install an offline English→Korean Argos model in a dedicated Python environment. Run:
-   `path/to/python automation/scripts/localize-static-site.py translate`
-   from the repository root, or activate the environment and use `npm run l10n:translate` from `apps/web`.
-4. Review new Korean strings in `apps/web/i18n/ko.json`, especially title, lead, technical claims, table headings and diagrams. Preferred human-edited corrections belong in `apps/web/i18n/ko-overrides.json`, which takes priority over the machine-generated catalog. They are retained across syncs.
-5. Run `npm run build` from `apps/web`. The `postbuild` hook duplicates and translates all public routes and fails if any newly introduced translatable English text is missing from the catalog.
-6. Check a representative English and Korean page, SVG readability, all links, `lang=ko`, `noindex` and correct code blocks. Then commit source changes and translation catalog together.
+`apps/web/scripts/render-ko-editorials.mjs`는 영어 Projects 공개 원본과 한국어 글이 1:1로 대응하는지 검사하고 Markdown을 HTML로 렌더링한다. 영문에 참조된 모든 SVG가 한글 원고에도 있는지 확인한다. `automation/scripts/localize-static-site.py`는 그 HTML을 한국어 `/kr` 페이지에 삽입한다.
 
-`npm run l10n:collect` creates an **ignored** local `apps/web/i18n/missing-ko.json` report. `npm run l10n:translate` uses the installed *offline* Argos model; the GitHub Action requires only Python's standard library and the checked-in catalog.
+영문 글을 고친 뒤 한국어 원고를 업데이트하지 않고 게시하지 않도록 `apps/web/i18n/editorial/english-source-sha256.json`에 **검토한 영문 원본의 SHA-256**을 저장한다. 영문이 조금이라도 바뀌면 빌드가 실패한다. 한국어 문단과 관련 그림을 실제로 검토·수정한 다음에만 다음 명령으로 새 기준을 승인한다.
 
-**New Projects articles cannot be published successfully unless their Korean visible strings and SVG labels are included in the catalog.** The same applies to modifications to existing public articles, so Korean copies do not silently become stale.
+`cd apps/web`
 
-`automation/scripts/check-korean-editions.py` runs after localization and verifies every /kr page, every localized SVG, code-span equivalence, unlisted SEO behavior and internal image links.
+`node scripts/acknowledge-ko-editorial.mjs <project-slug>`
 
-## Quality and disclosure
+그리고 `npm run check` 및 `npm run build`를 실행한다. `postbuild` 과정에서는 공개된 모든 Projects의 한글 원고 존재 여부, 원문 그림 보존, 한국어 SVG 링크, 페이지 비노출, 인라인 코드와 정적 HTML을 검사한다. 실수로 모든 원본 해시를 자동 갱신하는 코드를 추가하지 않는다.
 
-Machine translation is a first pass, not evidence of technical correctness. Keep code, unit values and numeric results exact; review security-sensitive language and avoid disclosure of material absent from the English public page. Never translate a private draft into public output. Korean versions of investigation notes must preserve uncertainty rather than inventing a resolved incident.
+**새 글을 추가할 때**도 같은 과정을 따른다. 영어 MDX를 작성한 뒤 한국어 Markdown을 별도로 쓰고, 영문·한국어 내용과 수치·그림을 검토한 다음에만 해시 승인 및 배포한다.
 
-Do not introduce `/kr` links to the English UI, header, sitemap or feed. If this routing model changes, update this document and regression tests together.
+## 메뉴·메타데이터·Notes와 SVG
+
+홈·이력서·About·프로젝트 목록 같은 정적 페이지의 표시 문구는 `apps/web/i18n/ko-overrides.json`의 **사람이 다듬은 번역**을 사용한다. 아직 일반 사이트 설명과 메뉴의 일부에는 `ko.json` 자동 번역 메모리를 이용한다. 이 영역에도 번역 오역이 보이면 해당 키의 수동 번역을 보강해야 하며, 임의로 모든 문구를 다시 자동 번역해 기존 교정을 덮어쓰지 않는다.
+
+이미 한국어로 작성된 Notes의 원문은 번역하지 않는다. 관련 SVG의 영어 설명이 있을 때만 한국어 그림을 만든다. 한국어 그림의 기술 문구에 대한 별도 용어집은 `apps/web/i18n/svg-ko-overrides.json`이며, 혼동되기 쉬운 기술 이름을 웹 UI 일반 메뉴 번역과 분리한다.
+
+SVG를 교정할 때는 실제 크기에서 렌더링해 잘림·겹침·읽기 어려운 글씨 크기가 없는지 확인한다. 원문에 없는 수치를 한글 그림에 추가하지 않는다. 그림이 단순한 개념도인지 실제 운영 데이터인지에 대한 표시도 보존한다.
+
+## 공개 범위와 검증
+
+비공개 초안인 문서 번역 파이프라인 및 CNI·iptables 조사는 `draft: true` 상태로 유지한다. 해당 한국어판도 생성하거나 공개하지 않는다. 주소·장비·접근 정책·토큰·실제 내부 네트워크 배치 등 외부 공개가 부적절한 정보는 한국어 원고에 새로 추가하지 않는다.
+
+공개 전 검사: 영문과 한국어 URL 접근, 한국어 SVG 경로와 XML, 링크의 `/kr/` 유지, 한국어 문단의 자연스러움, 코드와 수치 보존, 검색엔진 비노출, 전체 Astro 빌드와 배포 Action 결과.
+
+**한국어판은 기계 번역 미리보기가 아니라 별도의 출판 원고로 취급한다.**

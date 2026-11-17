@@ -11,7 +11,7 @@
     "precheck": "python3 ../../automation/scripts/validate-mdx-inline-code.py",
     "check": "astro check",
     "lint": "astro check",
-    "postbuild": "python3 ../../automation/scripts/localize-static-site.py build && python3 ../../automation/scripts/check-korean-editions.py",
+    "postbuild": "node scripts/render-ko-editorials.mjs && python3 ../../automation/scripts/localize-static-site.py build && python3 ../../automation/scripts/check-korean-editions.py",
     "l10n:collect": "python3 ../../automation/scripts/localize-static-site.py collect",
     "l10n:translate": "python3 ../../automation/scripts/localize-static-site.py translate"
   },

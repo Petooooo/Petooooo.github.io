@@ -1,0 +1,21 @@
+{
+  "bit-shift-cnn-accelerator-zynq": "5afa94644077341049db4013a5cf8bb9eb8def1d85a0325659127faed9d0f014",
+  "independent-on-premises-k3s-platform-engineering": "733ef6510ed4d5066c7d43730b8f32bdbeb01051889c5201d07c9f0e8c512b32",
+  "rokaf-async-workers-and-idempotency": "eac960e6c93ab59531da241fc5b98ad5eeeab7911a6f6673038708226d54b2d9",
+  "rokaf-clickhouse-replication-migration": "d19dfd94104de8c3e5014a50b6edf8a18833351a1a3fdb7420e19c4e28d510d1",
+  "rokaf-control-plane-incident-log": "671217ebb449e6260c198629d4aa9e8c7563956086adfd7f19634197dbeba8ce",
+  "rokaf-database-ha-and-langfuse-migrations": "260607c3829ec552cabd12594d7e1af4032e3a65f9a5c6123c541727717aa654",
+  "rokaf-dns-vip-open-investigations": "3194799b599eee0c90f8c7159e9a79bb980a797d01b6ff5f5cfd2ccaa5f4dc00",
+  "rokaf-gpu-discovery-open-investigation": "4b52414af64065e9d1e2669cd5f6691d46498a72fdac4de232c77d8c00bdca7d",
+  "rokaf-gpu-scheduling-and-capacity": "87e89b0a873ab7a7d55bb826cddd9c699a480b0fb100f7fe9400792cbdd4c80c",
+  "rokaf-identity-rbac-and-policy": "999a6954fe01b08867b268c1bea236acd0f9f74a12572c5ba4131edcf4bd8127",
+  "rokaf-langfuse-v4-migration-field-notes": "c07f09c61d7681788afb9a8a45aaea49655f866feb955400e7d813bb89b0f9f1",
+  "rokaf-networking-and-tls": "b24944d0f3a2410e0bb8ffe922c7112dccfdcb4d665798cf4492cd724d7bcb99",
+  "rokaf-object-storage-migration": "6ec9db0aeac54862054676796092afb31c2ef6a11a9b2ccda90f36e5ae360c73",
+  "rokaf-observability-and-failure-evidence": "c9f9179f8fee7f8b513e8e08211b1c2b84c9551cf7cee31ef92a2ac42f09af0a",
+  "rokaf-offline-gitops-delivery": "b2ceed507643014c50befc66d3e05e4941c5d862279a1a1e399b633e0f36a45a",
+  "rokaf-private-artifacts-and-ci": "4de4d002e1362a7fbc37e8ea1c5ff30c4638cffd79e845ca0b0a60b7d07f0877",
+  "rokaf-service-lb-hostport-conflict": "e0cbad7535faf1d8eaee4c9aff0b25cc585cfbdde3f433adf7c67e80302ee9b7",
+  "rokaf-stateful-storage-and-recovery": "ab8bdb57edd832b84be4ac1fb4ca73b595dc0eb4287af3247e91f4c81ebb6f2f",
+  "tflite-micro-lifecycle-memory-planning": "3da69d122069dde15e01acadb7431cd55f7a496b1a96be7b257ceecda619afc4"
+}

@@ -16,3 +16,6 @@ apps/web/src/content/notes/external-study/
 
 # Generated Korean translation audit; the catalog itself is tracked.
 apps/web/i18n/missing-ko.json
+
+# Compiled, reproducible Korean editorial HTML fragments
+apps/web/.generated/
