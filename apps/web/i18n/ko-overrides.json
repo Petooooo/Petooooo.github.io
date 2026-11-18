@@ -626,5 +626,15 @@
   "Outline": "Outline",
   "OIDC": "OIDC",
   "Nginx": "Nginx",
-  "OAuth": "OAuth"
+  "OAuth": "OAuth",
+  "The Containers Were Running. The Services Still Needed Each Other.": "컨테이너는 실행됐지만 서비스는 아직 준비되지 않았다",
+  "The Containers Were Running. The Services Still Needed Each Other. | Jihwan Park": "컨테이너는 실행됐지만 서비스는 아직 준비되지 않았다 | 박지환",
+  "Integrating self-hosted applications meant verifying contracts between Helm values, runtime configuration, identity, SMTP, storage and registry clients—not merely counting Ready Pods.": "Ready 상태의 Pod 수보다 중요한 것은 실제 서비스 연동이다. Helm 환경변수부터 SMTP 인증 메일, 파일 저장소, Docker Registry까지 기능별로 확인했던 기록.",
+  "Multi-service integration, application configuration and runtime validation across identity, mail, object storage and private registry dependencies": "K3s 서비스 연동, Helm 설정 검증, SMTP·객체 저장소·사설 Registry 의존성 조사",
+  "Sixteen detailed accounts of the engineering choices, failed assumptions and reliability trade-offs behind the platform.": "서비스를 운영하며 마주친 장애와 설계 판단을 정리한 16편의 기술 기록이다.",
+  "Service Integration & Reliability": "서비스 연동·신뢰성",
+  "Rocket.Chat": "Rocket.Chat",
+  "Nexus3": "Nexus3",
+  "SMTP": "SMTP",
+  "Configuration": "설정"
 }

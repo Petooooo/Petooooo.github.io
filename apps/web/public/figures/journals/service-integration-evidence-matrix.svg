@@ -1,0 +1,87 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1480 850" role="img" aria-labelledby="t d"><title id="t">Self-hosted service capability evidence matrix</title><desc id="d">Across Rocket.Chat, Outline, Plane CE and Nexus3, each capability has evidence states: observed function, observed failure, partial configuration, design only or unverified. Events happened at separate times and the matrix does not claim current service health.</desc>
+<rect x="0" y="0" width="1480" height="850" rx="9" fill="#081420" stroke="#35556a"/>
+<text x="48" y="65" fill="#f0f9ff" font-size="36" font-weight="760" font-family="Arial,sans-serif">A running Pod is not a capability test</text>
+<text x="48" y="105" fill="#a6c8d9" font-size="19" font-weight="500" font-family="Arial,sans-serif">Selected historical incidents, not a live health dashboard or deployed topology.</text>
+<rect x="48" y="159" width="189" height="66" rx="9" fill="#1d3a4c" stroke="#35556a"/>
+<text x="60" y="200" fill="#e0f5fd" font-size="17" font-weight="720" font-family="Arial,sans-serif">Service</text>
+<rect x="245" y="159" width="186" height="66" rx="9" fill="#1d3a4c" stroke="#35556a"/>
+<text x="257" y="200" fill="#e0f5fd" font-size="17" font-weight="720" font-family="Arial,sans-serif">Identity</text>
+<rect x="439" y="159" width="186" height="66" rx="9" fill="#1d3a4c" stroke="#35556a"/>
+<text x="451" y="200" fill="#e0f5fd" font-size="17" font-weight="720" font-family="Arial,sans-serif">Data</text>
+<rect x="633" y="159" width="186" height="66" rx="9" fill="#1d3a4c" stroke="#35556a"/>
+<text x="645" y="200" fill="#e0f5fd" font-size="17" font-weight="720" font-family="Arial,sans-serif">Object store</text>
+<rect x="827" y="159" width="186" height="66" rx="9" fill="#1d3a4c" stroke="#35556a"/>
+<text x="839" y="200" fill="#e0f5fd" font-size="17" font-weight="720" font-family="Arial,sans-serif">Ingress / TLS</text>
+<rect x="1021" y="159" width="186" height="66" rx="9" fill="#1d3a4c" stroke="#35556a"/>
+<text x="1033" y="200" fill="#e0f5fd" font-size="17" font-weight="720" font-family="Arial,sans-serif">Email</text>
+<rect x="1215" y="159" width="224" height="66" rx="9" fill="#1d3a4c" stroke="#35556a"/>
+<text x="1227" y="200" fill="#e0f5fd" font-size="17" font-weight="720" font-family="Arial,sans-serif">User action</text>
+<rect x="48" y="235" width="189" height="108" rx="9" fill="#173041" stroke="#35556a"/>
+<text x="63" y="292" fill="#f0f9ff" font-size="21" font-weight="700" font-family="Arial,sans-serif">Rocket.Chat</text>
+<rect x="245" y="235" width="186" height="108" rx="9" fill="#382d36" stroke="#efaf9c"/>
+<text x="256" y="287" fill="#efaf9c" font-size="14" font-weight="620" font-family="Arial,sans-serif">Admin email blocked</text>
+<rect x="439" y="235" width="186" height="108" rx="9" fill="#173b3d" stroke="#78dbb8"/>
+<text x="450" y="287" fill="#78dbb8" font-size="17" font-weight="620" font-family="Arial,sans-serif">Chat usable</text>
+<rect x="633" y="235" width="186" height="108" rx="9" fill="#382d36" stroke="#efaf9c"/>
+<text x="644" y="287" fill="#efaf9c" font-size="17" font-weight="620" font-family="Arial,sans-serif">Legacy file gap</text>
+<rect x="827" y="235" width="186" height="108" rx="9" fill="#152735" stroke="#2a4253"/>
+<text x="838" y="287" fill="#708b9c" font-size="17" font-weight="400" font-family="Arial,sans-serif">—</text>
+<rect x="1021" y="235" width="186" height="108" rx="9" fill="#203c52" stroke="#9cbedc"/>
+<text x="1032" y="287" fill="#9cbedc" font-size="17" font-weight="620" font-family="Arial,sans-serif">MAIL_URL visible</text>
+<rect x="1215" y="235" width="224" height="108" rx="9" fill="#39352f" stroke="#ddbca0"/>
+<text x="1226" y="287" fill="#ddbca0" font-size="14" font-weight="620" font-family="Arial,sans-serif">Admin not verified</text>
+<rect x="48" y="354" width="189" height="108" rx="9" fill="#173041" stroke="#35556a"/>
+<text x="63" y="411" fill="#f0f9ff" font-size="21" font-weight="700" font-family="Arial,sans-serif">Outline</text>
+<rect x="245" y="354" width="186" height="108" rx="9" fill="#382d36" stroke="#efaf9c"/>
+<text x="256" y="406" fill="#efaf9c" font-size="17" font-weight="620" font-family="Arial,sans-serif">Userinfo timeout</text>
+<rect x="439" y="354" width="186" height="108" rx="9" fill="#152735" stroke="#2a4253"/>
+<text x="450" y="406" fill="#708b9c" font-size="17" font-weight="400" font-family="Arial,sans-serif">—</text>
+<rect x="633" y="354" width="186" height="108" rx="9" fill="#382d36" stroke="#efaf9c"/>
+<text x="644" y="406" fill="#efaf9c" font-size="17" font-weight="620" font-family="Arial,sans-serif">Image URL faults</text>
+<rect x="827" y="354" width="186" height="108" rx="9" fill="#173b3d" stroke="#78dbb8"/>
+<text x="838" y="406" fill="#78dbb8" font-size="17" font-weight="620" font-family="Arial,sans-serif">WebSocket 101</text>
+<rect x="1021" y="354" width="186" height="108" rx="9" fill="#152735" stroke="#2a4253"/>
+<text x="1032" y="406" fill="#708b9c" font-size="17" font-weight="400" font-family="Arial,sans-serif">—</text>
+<rect x="1215" y="354" width="224" height="108" rx="9" fill="#39352f" stroke="#ddbca0"/>
+<text x="1226" y="406" fill="#ddbca0" font-size="17" font-weight="620" font-family="Arial,sans-serif">Editing open</text>
+<rect x="48" y="473" width="189" height="108" rx="9" fill="#173041" stroke="#35556a"/>
+<text x="63" y="530" fill="#f0f9ff" font-size="21" font-weight="700" font-family="Arial,sans-serif">Plane CE</text>
+<rect x="245" y="473" width="186" height="108" rx="9" fill="#173b3d" stroke="#78dbb8"/>
+<text x="256" y="525" fill="#78dbb8" font-size="17" font-weight="620" font-family="Arial,sans-serif">Account created</text>
+<rect x="439" y="473" width="186" height="108" rx="9" fill="#173b3d" stroke="#78dbb8"/>
+<text x="450" y="525" fill="#78dbb8" font-size="14" font-weight="620" font-family="Arial,sans-serif">Workspace created</text>
+<rect x="633" y="473" width="186" height="108" rx="9" fill="#39352f" stroke="#ddbca0"/>
+<text x="644" y="525" fill="#ddbca0" font-size="17" font-weight="620" font-family="Arial,sans-serif">Browser S3 open</text>
+<rect x="827" y="473" width="186" height="108" rx="9" fill="#173b3d" stroke="#78dbb8"/>
+<text x="838" y="525" fill="#78dbb8" font-size="17" font-weight="620" font-family="Arial,sans-serif">/live recovered</text>
+<rect x="1021" y="473" width="186" height="108" rx="9" fill="#152735" stroke="#2a4253"/>
+<text x="1032" y="525" fill="#708b9c" font-size="17" font-weight="400" font-family="Arial,sans-serif">—</text>
+<rect x="1215" y="473" width="224" height="108" rx="9" fill="#173b3d" stroke="#78dbb8"/>
+<text x="1226" y="525" fill="#78dbb8" font-size="17" font-weight="620" font-family="Arial,sans-serif">Pages recovered</text>
+<rect x="48" y="592" width="189" height="108" rx="9" fill="#173041" stroke="#35556a"/>
+<text x="63" y="649" fill="#f0f9ff" font-size="21" font-weight="700" font-family="Arial,sans-serif">Nexus3</text>
+<rect x="245" y="592" width="186" height="108" rx="9" fill="#152735" stroke="#2a4253"/>
+<text x="256" y="644" fill="#708b9c" font-size="17" font-weight="400" font-family="Arial,sans-serif">—</text>
+<rect x="439" y="592" width="186" height="108" rx="9" fill="#2b2c42" stroke="#aaaed5"/>
+<text x="450" y="644" fill="#aaaed5" font-size="17" font-weight="620" font-family="Arial,sans-serif">PVC considered</text>
+<rect x="633" y="592" width="186" height="108" rx="9" fill="#2b2c42" stroke="#aaaed5"/>
+<text x="644" y="644" fill="#aaaed5" font-size="14" font-weight="620" font-family="Arial,sans-serif">S3 blob evaluated</text>
+<rect x="827" y="592" width="186" height="108" rx="9" fill="#2b2c42" stroke="#aaaed5"/>
+<text x="838" y="644" fill="#aaaed5" font-size="14" font-weight="620" font-family="Arial,sans-serif">UI / Docker split</text>
+<rect x="1021" y="592" width="186" height="108" rx="9" fill="#152735" stroke="#2a4253"/>
+<text x="1032" y="644" fill="#708b9c" font-size="17" font-weight="400" font-family="Arial,sans-serif">—</text>
+<rect x="1215" y="592" width="224" height="108" rx="9" fill="#382d36" stroke="#efaf9c"/>
+<text x="1226" y="644" fill="#efaf9c" font-size="17" font-weight="620" font-family="Arial,sans-serif">Push x509 / 404</text>
+<rect x="48" y="744" width="14" height="14" rx="9" fill="#78dbb8" stroke="#78dbb8"/>
+<text x="73" y="758" fill="#c4dbe6" font-size="16" font-weight="540" font-family="Arial,sans-serif">Observed working</text>
+<rect x="508" y="744" width="14" height="14" rx="9" fill="#efaf9c" stroke="#efaf9c"/>
+<text x="533" y="758" fill="#c4dbe6" font-size="16" font-weight="540" font-family="Arial,sans-serif">Observed failure</text>
+<rect x="968" y="744" width="14" height="14" rx="9" fill="#9cbedc" stroke="#9cbedc"/>
+<text x="993" y="758" fill="#c4dbe6" font-size="16" font-weight="540" font-family="Arial,sans-serif">Config seen</text>
+<rect x="48" y="786" width="14" height="14" rx="9" fill="#ddbca0" stroke="#ddbca0"/>
+<text x="73" y="800" fill="#c4dbe6" font-size="16" font-weight="540" font-family="Arial,sans-serif">Unverified</text>
+<rect x="508" y="786" width="14" height="14" rx="9" fill="#aaaed5" stroke="#aaaed5"/>
+<text x="533" y="800" fill="#c4dbe6" font-size="16" font-weight="540" font-family="Arial,sans-serif">Design / evaluated</text>
+<rect x="968" y="786" width="14" height="14" rx="9" fill="#708b9c" stroke="#708b9c"/>
+<text x="993" y="800" fill="#c4dbe6" font-size="16" font-weight="540" font-family="Arial,sans-serif">No evidence</text>
+</svg>

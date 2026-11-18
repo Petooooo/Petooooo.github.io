@@ -1,0 +1,144 @@
+---
+title: "The Containers Were Running. The Services Still Needed Each Other."
+description: "Integrating self-hosted applications meant verifying contracts between Helm values, runtime configuration, identity, SMTP, storage and registry clients—not merely counting Ready Pods."
+date: "2026-11-18"
+draft: false
+reviewed: true
+reviewStatus: "reviewed"
+sensitivity: sanitized
+category: "Systems Engineering"
+area: "Service Integration & Reliability"
+tags: ["K3s", "Helm", "Rocket.Chat", "SMTP", "Nexus", "MinIO", "Traefik", "MongoDB", "Configuration"]
+type: "implementation-note"
+role: "Multi-service integration, application configuration and runtime validation across identity, mail, object storage and private registry dependencies"
+period: "2026"
+status: "active"
+techStack: ["K3s", "Helm", "Rocket.Chat", "Nexus3", "MinIO", "MongoDB", "Traefik", "SMTP"]
+---
+
+At some point, counting running Pods stopped telling me very much. A chat application could open and accept messages while its administrator could not complete an email verification. A private registry could have a working management interface while Docker clients still failed to push an image. A service could reach an object-storage endpoint, yet an attachment request still failed at the certificate or object-key boundary.
+
+I had been migrating and integrating independently managed services into a closed-network K3s platform. The work included Rocket.Chat, Nexus, GitLab, Outline, Plane and shared infrastructure such as MongoDB and MinIO. Kubernetes made these components easier to place and operate together, but it did not make the agreements **between** them disappear.
+
+The most interesting question became less about whether a container started and more about **which dependency contract a user action actually exercised**. A login, a file upload, a Docker push and an email verification all crossed different combinations of identity, network, storage and application configuration.
+
+This account concentrates on the cross-service cases for which I have concrete observations. It does not present Penpot or Uptime Kuma as completed integrations; I do not have enough preserved incident evidence for that. Internal hosts, real ports, credentials, account data and deployment-specific topology are deliberately omitted.
+
+## The chat service worked—until administration needed email
+
+Rocket.Chat was already useful as a messaging application. The problem became more consequential when an administrative action required a verification code by email. I had enabled OAuth-related settings, and further administrative changes led to an email-code verification step. The SMTP path was not working, so I could not complete that workflow in the usual way.
+
+An earlier error said:
+
+`You have not provided a mail URL`
+
+That sounded like a missing environment variable. I was configuring `MAIL_URL` for the Rocket.Chat process and wanted the URL with authentication details to come from a Kubernetes Secret rather than be embedded as a plaintext value in Helm settings.
+
+Initially, different checks gave contradictory-looking evidence. The intended variable was present in the configuration I was considering, but an environment inspection did not show it where I expected. Later I ran Node directly and inspected `process.env.MAIL_URL`: **the running Node process could see a mail URL**, including the authenticated form I was testing.
+
+This was a more precise result than "SMTP is configured." It meant that at least one process-level configuration check had passed. It did not establish that Rocket.Chat could establish an SMTP session, authenticate to the mail server, send the verification message or deliver it to the recipient.
+
+The sequence exposed a useful distinction:
+
+| Layer | What I needed to inspect | Meaning of a successful observation |
+| --- | --- | --- |
+| Helm values | The field understood by this exact chart version | The user-supplied configuration exists |
+| Rendered Deployment | Container `env` or `valueFrom.secretKeyRef` | Kubernetes receives the intended variable reference |
+| Application runtime | Node's `process.env.MAIL_URL` | The process has the setting |
+| SMTP network and protocol | Name resolution, TCP, SMTP authentication and server response | The mail service accepts the request |
+| User workflow | An actual verification email arrives and works | The administrative action is usable |
+
+I had real evidence for the runtime variable, but not a complete verified delivery and administrator-unlock sequence. The lesson was not to treat those five rows as interchangeable.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/service-integration-config-evidence.svg" target="_blank" rel="noopener noreferrer" aria-label="Open the Rocket.Chat configuration evidence layers from Helm to the email verification workflow">
+    <img src="/figures/journals/service-integration-config-evidence.svg" alt="A cross-section of Rocket.Chat mail configuration. Helm values, rendered workload env, Node runtime, SMTP exchange, and user email verification have independent proof obligations; runtime visibility is observed, whereas complete email delivery and administrator recovery were not verified." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Seeing a mail URL in Node's runtime environment is a meaningful checkpoint, not a substitute for a delivered email. The diagram does not contain real mail addresses, ports, credentials or Secrets.</figcaption>
+</figure>
+
+## One wrong Helm key can make every downstream check misleading
+
+The Helm values were a practical part of the investigation. Different charts—and even subcharts of the same release—used differently named environment variable fields. In one case, the application chart used `extraEnv` while `extraEnvVars` belonged to the PostgreSQL primary subchart. Looking at a syntactically valid `values.yaml` was therefore insufficient.
+
+The question was whether the chart actually consumed the key and produced the intended workload specification. I started checking chart templates, rendered manifests and the live Deployment rather than assuming a setting was effective because it appeared in YAML.
+
+For any configuration with a Secret, there was an additional complication. A Secret can exist in Kubernetes without the workload referencing it. A Deployment can reference a Secret correctly while the application still has an invalid SMTP URL or certificate trust problem. Restarting a container does not repair a missing connection between those contracts.
+
+Kubernetes Secret usage also does not mean the value is harmless to expose. The goal was to avoid putting mail credentials in published values and logs, restrict access to the resource, and validate the presence of the setting without printing the actual URL in an operations report.
+
+I did not solve every Rocket.Chat mail issue during the recorded session. Later I also saw excessively frequent notification emails, which raised a separate question about notification scheduling and user preferences once outbound mail was in play. That observation is not evidence that the earlier verification-code issue was fixed, nor that a single specific notification setting was the root cause.
+
+The bigger failure mode was subtle: an integration can become required for a critical administrative workflow even though the rest of the product appears healthy. In this case, mail was not merely a nice-to-have notification channel.
+
+## Storage reused the same components, but not the same contract
+
+MinIO served as an object-storage platform for multiple applications. It was tempting to regard a reachable MinIO endpoint as a reusable guarantee. In practice, each application made a different promise about how it would find and access its files.
+
+For Rocket.Chat, older attachments had to preserve their relationship with GridFS file IDs, upload records and the `AmazonS3.path` key. A working new S3 upload could coexist with a historical attachment that could not be retrieved. That investigation is covered separately in [the GridFS-to-MinIO migration record](/projects/rokaf-chat-attachments-object-storage/).
+
+In another integration, I corrected a Traefik `ServersTransport` resource lookup by placing the resource in the MinIO namespace where the referencing route could find it. That removed the **"transport not found"** error. But file uploads still returned `400` with a self-signed-certificate message. A routing resource being found did not establish TLS trust end to end.
+
+The technical distinction matters: `ServersTransport` affects Traefik's upstream connection behavior in its documented context. It does not automatically make a browser trust a separate file-serving certificate or cause an application runtime to trust an internal CA. Different callers may validate different server names and certificates.
+
+The evidence here supports a repaired **resource-reference error**, followed by an unresolved **certificate-related application failure**. It does not support a claim that switching namespaces fixed the upload feature.
+
+## A registry has at least two doors
+
+Nexus introduced another integration mistake I learned to avoid. Its management UI and the Docker Registry API were not interchangeable endpoints.
+
+The administrative UI could be served on one port, while Docker repositories used separately configured HTTP or HTTPS connectors. In Kubernetes that meant different Service ports, target ports, ingress rules and client-facing TLS identities. A successful browser visit to the UI was not a Docker push test.
+
+I considered exposing the UI and Docker API through distinct node-facing ports and restricting which node would admit those connections. The port numbers and node identifiers are not needed to understand the problem, and the final node-specific exposure policy was not a proof of end-to-end client behavior.
+
+The actual Docker workflow introduced its own evidence: an image had to be tagged for the intended registry endpoint, pushed with a trusted certificate, and pulled back by a client configured to reach the same endpoint. Errors such as `x509` and `404` were part of the troubleshooting. Those failures could involve certificate trust, repository connector selection, URL shape, proxy routing or authentication; they were not settled by seeing Nexus's homepage.
+
+The storage decision underneath Nexus was separate again. I evaluated using MinIO as an S3-compatible blob store while keeping application state on persistent storage. Even if the object store is reachable, repository metadata, blob storage configuration and the client-facing registry protocol still need their own checks. I do not claim that an S3 backing store automatically provided Nexus HA or a complete registry disaster-recovery test.
+
+The platform also had a bootstrap dependency I had to consider: a registry that is the only source of its own image may be unavailable just when it needs to be recreated. I documented that as a separate [offline image supply and GitOps problem](/projects/rokaf-offline-gitops-delivery/). It is a design and recovery constraint, not a claim that every recovery drill succeeded.
+
+## I stopped defining readiness as one Boolean
+
+The same underlying pattern appeared across other applications.
+
+- Plane CE could serve a first-run page while API paths were routed incorrectly. Account/Workspace creation later worked after routing corrections; Pages' live connection was a separate `/live` fix. The extra Nginx and storage paths did not have the same verification result. [Plane investigation](/projects/rokaf-plane-ce-bootstrap-routing/).
+- Outline's realtime WebSocket returned `101` after proxy changes, yet the GitLab `/oauth/userinfo` request later timed out and some Windows clients still reported file access problems. One protocol upgrade was not complete application health. [Outline investigation](/projects/rokaf-internal-app-auth-and-tls/).
+- MongoDB was not simply "connected" because a Service existed. The application's ability to resolve replica-set members, discover a Primary when needed and read or update its own records was another contract. The replica-set and migration cases are documented in [the database record](/projects/rokaf-database-ha-and-langfuse-migrations/).
+
+These were not all failures at the same moment, and they should not be presented as a single deployment incident. I found it more useful to organize them into a **service-by-capability evidence matrix**. It lets an operator mark something as configured, observed working, observed failing or not yet validated without inventing a whole-platform success percentage.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/service-integration-evidence-matrix.svg" target="_blank" rel="noopener noreferrer" aria-label="Open a service integration evidence matrix showing independent identity, data, storage, network and notification contracts">
+    <img src="/figures/journals/service-integration-evidence-matrix.svg" alt="Evidence matrix for self-hosted services: Rocket.Chat, Outline, Plane, Nexus and storage dependencies against identity, database, object storage, ingress, email and functional checks. Colors/labels distinguish directly observed behavior, an investigated failure, a design choice and an unverified contract; it is not a monitoring dashboard." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>These are selected episodes from different dates, not a snapshot of current availability. Empty cells are intentionally not converted into claims of success or failure.</figcaption>
+</figure>
+
+A matrix is not a substitute for an incident trace. It is a way to decide **which trace to collect next**. If authentication works but attachments do not, the next request should be a file lookup, not another login. If the Pod is Ready but verification email is missing, I need the rendered env, runtime settings, SMTP exchange and delivery confirmation—not another Kubernetes readiness probe.
+
+## What would count as an integrated service?
+
+I would now define a small functional contract for each new service before calling its deployment complete:
+
+| Contract | Example of an end-to-end check |
+| --- | --- |
+| Identity | A real user can sign in and reach the intended application role |
+| Database | A change persists across a refresh/restart and is read back correctly |
+| Object storage | Upload, retrieve and, where necessary, restore a known historical object |
+| Ingress and TLS | The intended client reaches the correct route with the expected certificate identity |
+| Notification | An administrative verification or alert reaches its recipient when required |
+| Observability | The relevant request and failure can be correlated to logs or metrics without relying on a green Pod alone |
+
+This is a checklist I formed from the incidents, **not a statement that every cell was verified for every service**. Where integrations were only discussed or partially tested, the published evidence remains limited.
+
+In retrospect, Kubernetes had solved a different problem from the one I was trying to prove. It could arrange workloads, restart containers and connect Services. It could not know that a user's verification code needed SMTP, that a browser was opening a different file host, or that a Docker client did not trust the connector's certificate.
+
+Once I started treating each of those behaviors as its own contract, debugging became less about changing every part of the stack and more about finding the exact boundary that had not yet passed its functional test.
+
+## References
+
+- [Rocket.Chat — Configure Email](https://docs.rocket.chat/docs/configure-email)
+- [Rocket.Chat — Kubernetes deployment configuration](https://docs.rocket.chat/docs/deploy-with-kubernetes)
+- [Helm — Chart values and templates](https://helm.sh/docs/topics/charts/)
+- [Sonatype — Docker repository connectors](https://support.sonatype.com/hc/en-us/articles/115013153887-Docker-Repository-Configuration-and-Client-Connection)
+- [Sonatype — Blob stores](https://help.sonatype.com/en/blob-stores.html)

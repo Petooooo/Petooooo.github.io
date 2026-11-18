@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1500 860" role="img" aria-labelledby="t d"><title id="t">MAIL_URL evidence does not establish SMTP delivery</title><desc id="d">Five proof layers from Helm to real administrator mail. The Node runtime value was observed; SMTP delivery and completed email verification were not proven. Conceptual table without internal details.</desc>
+<rect x="0" y="0" width="1500" height="860" rx="10" fill="#081420" stroke="#38596a"/>
+<text x="54" y="64" font-family="Arial,sans-serif" font-size="36" font-weight="750" fill="#f4fbff">The mail URL existed. Did the email arrive?</text>
+<text x="54" y="105" font-family="Arial,sans-serif" font-size="19" font-weight="500" fill="#acc9d8">Configuration, network delivery and user workflow need separate evidence.</text>
+<text x="74" y="174" font-family="Arial,sans-serif" font-size="17" font-weight="750" fill="#8fb8c9">CONFIGURATION</text>
+<text x="338" y="174" font-family="Arial,sans-serif" font-size="17" font-weight="750" fill="#8fb8c9">WHAT TO CHECK</text>
+<text x="902" y="174" font-family="Arial,sans-serif" font-size="17" font-weight="750" fill="#8fb8c9">EVIDENCE</text>
+<text x="1228" y="174" font-family="Arial,sans-serif" font-size="17" font-weight="750" fill="#8fb8c9">PROOF</text>
+<rect x="54" y="202" width="1392" height="98" rx="10" fill="#153042" stroke="#38596a"/>
+<rect x="54" y="202" width="8" height="98" rx="10" fill="#d1b39a" stroke="#d1b39a"/>
+<text x="74" y="254" font-family="Arial,sans-serif" font-size="22" font-weight="670" fill="#e9f6ff">Helm values</text>
+<text x="338" y="254" font-family="Arial,sans-serif" font-size="19" font-weight="500" fill="#c9dfe8">Chart consumes extraEnv?</text>
+<rect x="897" y="226" width="267" height="52" rx="10" fill="#2d3d4b" stroke="#d1b39a"/>
+<text x="925" y="260" font-family="Arial,sans-serif" font-size="19" font-weight="670" fill="#d1b39a">Investigated</text>
+<text x="1227" y="258" font-family="Arial,sans-serif" font-size="17" font-weight="500" fill="#c9dfe8">Value in YAML</text>
+<rect x="54" y="316" width="1392" height="98" rx="10" fill="#102838" stroke="#38596a"/>
+<rect x="54" y="316" width="8" height="98" rx="10" fill="#d1b39a" stroke="#d1b39a"/>
+<text x="74" y="368" font-family="Arial,sans-serif" font-size="22" font-weight="670" fill="#e9f6ff">Rendered Pod</text>
+<text x="338" y="368" font-family="Arial,sans-serif" font-size="19" font-weight="500" fill="#c9dfe8">env / secretKeyRef exists</text>
+<rect x="897" y="340" width="267" height="52" rx="10" fill="#2d3d4b" stroke="#d1b39a"/>
+<text x="925" y="374" font-family="Arial,sans-serif" font-size="19" font-weight="670" fill="#d1b39a">Check required</text>
+<text x="1227" y="372" font-family="Arial,sans-serif" font-size="17" font-weight="500" fill="#c9dfe8">Actual manifest</text>
+<rect x="54" y="430" width="1392" height="98" rx="10" fill="#153042" stroke="#38596a"/>
+<rect x="54" y="430" width="8" height="98" rx="10" fill="#8ae6c5" stroke="#8ae6c5"/>
+<text x="74" y="482" font-family="Arial,sans-serif" font-size="22" font-weight="670" fill="#e9f6ff">Node runtime</text>
+<text x="338" y="482" font-family="Arial,sans-serif" font-size="19" font-weight="500" fill="#c9dfe8">process.env.MAIL_URL</text>
+<rect x="897" y="454" width="267" height="52" rx="10" fill="#194e45" stroke="#8ae6c5"/>
+<text x="925" y="488" font-family="Arial,sans-serif" font-size="19" font-weight="670" fill="#8ae6c5">Observed</text>
+<text x="1227" y="486" font-family="Arial,sans-serif" font-size="17" font-weight="500" fill="#c9dfe8">Value visible</text>
+<rect x="54" y="544" width="1392" height="98" rx="10" fill="#102838" stroke="#38596a"/>
+<rect x="54" y="544" width="8" height="98" rx="10" fill="#d1b39a" stroke="#d1b39a"/>
+<text x="74" y="596" font-family="Arial,sans-serif" font-size="22" font-weight="670" fill="#e9f6ff">SMTP exchange</text>
+<text x="338" y="596" font-family="Arial,sans-serif" font-size="19" font-weight="500" fill="#c9dfe8">TCP / authentication / mail</text>
+<rect x="897" y="568" width="267" height="52" rx="10" fill="#2d3d4b" stroke="#d1b39a"/>
+<text x="925" y="602" font-family="Arial,sans-serif" font-size="19" font-weight="670" fill="#d1b39a">Unverified</text>
+<text x="1227" y="600" font-family="Arial,sans-serif" font-size="17" font-weight="500" fill="#c9dfe8">SMTP accepted</text>
+<rect x="54" y="658" width="1392" height="98" rx="10" fill="#153042" stroke="#38596a"/>
+<rect x="54" y="658" width="8" height="98" rx="10" fill="#d1b39a" stroke="#d1b39a"/>
+<text x="74" y="710" font-family="Arial,sans-serif" font-size="22" font-weight="670" fill="#e9f6ff">Admin workflow</text>
+<text x="338" y="710" font-family="Arial,sans-serif" font-size="19" font-weight="500" fill="#c9dfe8">Code received and used</text>
+<rect x="897" y="682" width="267" height="52" rx="10" fill="#2d3d4b" stroke="#d1b39a"/>
+<text x="925" y="716" font-family="Arial,sans-serif" font-size="19" font-weight="670" fill="#d1b39a">Unverified</text>
+<text x="1227" y="714" font-family="Arial,sans-serif" font-size="17" font-weight="500" fill="#c9dfe8">Action completed</text>
+<rect x="54" y="797" width="1392" height="43" rx="10" fill="#193242" stroke="#38596a"/>
+<text x="76" y="824" font-family="Arial,sans-serif" font-size="17" font-weight="500" fill="#b4d1dc">The runtime check was real. Successful delivery and administrator recovery remained unverified.</text>
+</svg>
