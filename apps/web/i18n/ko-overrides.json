@@ -617,5 +617,14 @@
   "Plane CE: A Login Screen, a Redirect Loop, and the Routes Behind Them | Jihwan Park": "Plane CE 로그인은 왜 계속 처음으로 돌아갔을까 | 박지환",
   "Reverse Proxy": "Reverse Proxy",
   "Self-hosted application integration, ingress troubleshooting and initial instance configuration": "Plane CE 초기 설정과 Ingress 라우팅 장애 조사, 사용자·Workspace 등록 검증",
-  "WebSocket": "WebSocket"
+  "WebSocket": "WebSocket",
+  "The Wiki Loaded, but Login and Editing Took Different Routes": "위키는 열리는데 편집과 로그인이 멈췄다",
+  "The Wiki Loaded, but Login and Editing Took Different Routes | Jihwan Park": "위키는 열리는데 편집과 로그인이 멈췄다 | 박지환",
+  "Following Outline's GitLab sign-in, reverse-proxied WebSocket, certificate trust and file requests across independent network boundaries.": "Outline에서 GitLab 로그인을 연결하면서 만난 Timeout과 WebSocket, 클라이언트 인증서, 이미지 접근 문제를 각각의 요청 경계로 나눠 살펴본 기록.",
+  "Outline collaboration proxy debugging, GitLab identity-provider access investigation, TLS and client-specific attachment diagnostics": "Outline WebSocket 복구, GitLab 인증 연결 조사, 클라이언트별 인증서·첨부파일 문제 진단",
+  "Fifteen detailed accounts of the engineering choices, failed assumptions and reliability trade-offs behind the platform.": "플랫폼을 운영하며 마주친 장애와 설계 판단을 정리한 15편의 기술 기록이다.",
+  "Outline": "Outline",
+  "OIDC": "OIDC",
+  "Nginx": "Nginx",
+  "OAuth": "OAuth"
 }

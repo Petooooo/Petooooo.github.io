@@ -1,0 +1,135 @@
+---
+title: "The Wiki Loaded, but Login and Editing Took Different Routes"
+description: "Following Outline's GitLab sign-in, reverse-proxied WebSocket, certificate trust and file requests across independent network boundaries."
+date: "2026-11-18"
+draft: false
+reviewed: true
+reviewStatus: "reviewed"
+sensitivity: sanitized
+category: "Systems Engineering"
+area: "Networking & Reliability"
+tags: ["Outline", "GitLab", "OIDC", "OAuth", "DNS", "TLS", "Nginx", "WebSocket", "MinIO"]
+type: "implementation-note"
+role: "Outline collaboration proxy debugging, GitLab identity-provider access investigation, TLS and client-specific attachment diagnostics"
+period: "2026"
+status: "active"
+techStack: ["Outline", "GitLab", "K3s", "Traefik", "Nginx", "WebSocket", "TLS", "MinIO"]
+---
+
+The wiki opened in a browser, and for a while that was reassuring. Then a document stopped responding to edits. Some images seemed to upload but were gone after a refresh. On another day, signing in through GitLab failed before the user could reach the wiki at all.
+
+These were incidents around **Outline, the self-hosted collaborative knowledge base**, that I worked through in a closed-network environment in early 2026. It was tempting to put them under one broad diagnosis—"Outline is broken behind the proxy." But the application had several independent conversations in flight: a browser talking to Outline, Outline calling GitLab for identity information, a browser upgrading a connection for collaborative editing, and the browser retrieving attachment URLs.
+
+Each could fail while the others appeared healthy. The challenge was to identify **who initiated a request, which trust boundary it crossed, and which observation counted as a working result**. The following account separates confirmed changes from investigations that I never closed with a complete end-to-end test.
+
+The diagrams are conceptual. They intentionally omit internal addresses, node layouts, CA names, real identities, tokens, storage buckets and operational proxy configurations.
+
+## The realtime connection was the first misleading success
+
+On February 3, 2026, the Outline interface was reachable through an Nginx reverse proxy, but the collaboration channel did not work as expected. I saw an unsuccessful realtime connection returning HTTP `400`.
+
+The fix I investigated was not a new database or a different login provider. It was how Nginx handled the WebSocket handshake. The relevant configuration work included using HTTP/1.1 where necessary, forwarding `Upgrade` and `Connection`, handling Outline's `/realtime` requests and adjusting buffering and timeouts for a persistent connection.
+
+After that change, the browser's WebSocket handshake returned **`101 Switching Protocols`**. That was a much stronger signal than an ordinary `200` from the main page: the server had agreed to switch protocols, and the connection had passed the upgrade boundary.
+
+Outline's hosting documentation explicitly notes that apparently uneditable documents can indicate missing WebSocket proxying. Nginx's documentation also explains why `Upgrade` must be forwarded deliberately: it is a hop-by-hop header, not one that a reverse proxy passes automatically.
+
+A `101` response establishes the upgrade handshake, however, **not a complete application-level editing test on every client**. That distinction became important immediately.
+
+## A certificate fix did not make every client behave the same
+
+Some Windows PCs still behaved differently from others. Editing would occasionally stop responding, and images that seemed to have been added could disappear when the page refreshed. The realtime connection was no longer the obvious failure: it had already been observed working.
+
+Browser developer tools on affected machines showed certificate-related messages. Installing the relevant certificate on a client cleared that reported class of certificate warning. But the investigation did not end there. Image requests could still show `ERR_NAME_NOT_RESOLVED` or `ERR_BLOCKED_BY_ORB`, and Nginx logs contained HTTP `401` responses.
+
+Those observations do not all mean the same thing:
+
+- `ERR_NAME_NOT_RESOLVED` points to a name the client could not resolve. For an image URL, I needed to inspect the **actual hostname the browser tried**, not simply whether the wiki's main hostname worked.
+- A certificate warning concerns whether the client trusts the server identity presented for a particular name. Trusting one certificate does not make an unrelated hostname resolvable.
+- `401` is an HTTP authorization result. It can be associated with cookies, sessions or a protected resource; the status alone does not tell which specific check failed.
+- `ERR_BLOCKED_BY_ORB` is a browser-side signal about a response being blocked. It is not proof that a MinIO object is missing or that the WebSocket went down.
+
+The attachment path introduced another possible boundary. The Outline page and a generated file URL do not necessarily share a host, a scheme, a certificate or even the same path through a proxy. Outline's storage documentation discusses S3-compatible backends and cross-origin access, but that general documentation cannot tell me which one of these requests failed in my environment without a captured request/response pair.
+
+I could say that **the WebSocket handshake had recovered** and **a client certificate warning had been addressed**. I could not truthfully claim that every affected Windows PC now saved changes reliably or that the image and `401` failures had one proven root cause.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/outline-client-boundaries.svg" target="_blank" rel="noopener noreferrer" aria-label="Open a matrix of independent Outline client, WebSocket, GitLab and attachment trust boundaries">
+    <img src="/figures/journals/outline-client-boundaries.svg" alt="Evidence matrix contrasting the observed WebSocket 101, client certificate warning, unresolved image DNS errors, Nginx 401 and GitLab userinfo timeouts. Browser and backend request owners differ; results are not collapsed into a single healthy/unhealthy state." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>A browser has more than one trust boundary. The recorded 101 and the certificate intervention were not evidence that attachment reads, sessions or the identity-provider path all worked.</figcaption>
+</figure>
+
+## GitLab authentication failed on a different side of the browser
+
+Later, on February 23, the conspicuous failure was **GitLab sign-in**. Outline reported a problem while trying to reach the provider's `/oauth/userinfo` endpoint. The server-side log included `ValidateSSOAccessTask` and a `connect ETIMEDOUT` error, while the application surfaced a Bad Gateway-style failure.
+
+At first this appeared to affect a particular user. The scope widened when other users began encountering it and attempts to reach the GitLab HTTPS endpoint from several servers also failed. That observation mattered because it made a user-specific role or account misconfiguration a less satisfying first explanation.
+
+I had also seen name-resolution failures such as `EAI_AGAIN` during identity-provider troubleshooting. An address-resolution error and a TCP connection timeout belong to different stages, even though both may appear to the user as "login failed."
+
+It helped to trace the OAuth/OIDC sequence rather than treat the login button as one request.
+
+The browser visits the wiki and is sent to the GitLab authorization endpoint. After authorization, a callback returns to Outline. But Outline must also perform its own server-side exchanges, including a token and/or user-information request, depending on its configuration. A browser successfully viewing GitLab's login page **does not prove that the Outline process can reach GitLab's backend endpoints**.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/outline-oidc-request-sequence.svg" target="_blank" rel="noopener noreferrer" aria-label="Open an OAuth sequence showing the separate browser redirects, Outline callback, token and userinfo requests, and recorded timeout boundary">
+    <img src="/figures/journals/outline-oidc-request-sequence.svg" alt="Three-lane sequence: browser, Outline backend and GitLab identity provider. Browser authorization redirection is separate from backend token and userinfo requests; ETIMEDOUT is marked at the server-to-provider userinfo boundary and later redirect URI mismatch as a separate configuration concern." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>The sequence distinguishes which side initiates each request. It does not imply that the exact preceding steps succeeded for every failed login attempt, or that a single network root cause was proven.</figcaption>
+</figure>
+
+The useful question was no longer simply whether GitLab was "up." It was whether the Outline runtime could resolve the provider name, establish a TCP connection, validate TLS and receive the expected OAuth response. These were separate checkpoints. A `connect ETIMEDOUT` is not an invalid client secret, an expired session or a malformed redirect URI. It is evidence that a connection attempt failed within its allotted time, though the log alone does not identify the failed network component.
+
+Because checks from multiple servers also failed, I widened the investigation beyond one Outline Pod. The preserved notes do **not** establish an exact network-level cause or a later successful end-to-end OAuth recovery for that incident, so I do not present one.
+
+## Changing the public address exposed a different OAuth constraint
+
+In a separate June 2026 attempt, I changed the public callback address for Outline's OIDC integration. GitLab returned **"The redirect URI included is not valid."**
+
+That error sits at a different boundary from February's `ETIMEDOUT`. The callback URL advertised by Outline, the one sent in the authorization request and the redirect URI registered for the GitLab application must be consistent. A change of scheme, host, port or callback path can make an otherwise reachable authentication provider reject the request.
+
+The route form involved was `/auth/oidc.callback`. I leave the actual addresses and ports out of this account. The important fact was that I had changed the application's public origin, which meant its identity-provider registration also needed to be treated as configuration state.
+
+I also encountered a hostname-resolution question after changing that access path. These were investigated issues, not evidence that the earlier GitLab timeout and the later invalid redirect had the same cause.
+
+Outline's OIDC hosting guide describes automatic issuer discovery as well as explicit authorization, token and userinfo endpoints. Those are useful reference boundaries, but they do not replace version-specific confirmation of the installed configuration. The GitLab documentation likewise treats redirect URI registration as an explicit application setting.
+
+The record does not establish a final successful login after this particular callback change. It would be a mistake to blend it into the earlier WebSocket repair and call all authentication problems solved.
+
+## The status codes were answers to different questions
+
+One of the more useful things to keep from the investigation was a small classification of what each observation could—and could not—establish.
+
+| Evidence | What it supported | What it did not prove |
+| --- | --- | --- |
+| Outline homepage loads | Browser can retrieve the main interface | GitLab authentication, collaborative editing or file retrieval |
+| Realtime `400` → `101` | WebSocket upgrade handshake was restored | Every document edit was saved or all clients worked |
+| Installing a client certificate cleared a warning | That client could trust the relevant presented certificate | All image names, origins, sessions and file permissions are correct |
+| Image `ERR_NAME_NOT_RESOLVED` | Browser cannot resolve the URL's host | Missing data in the object store |
+| Nginx `401` | A protected request was not authorized | The precise cookie/session or upstream cause |
+| GitLab `/oauth/userinfo` `ETIMEDOUT` | Outline-to-provider connection did not complete in time | Incorrect login credentials or a single established network root cause |
+| Invalid redirect URI | Provider rejected the callback registration/request pairing | The same cause as an endpoint timeout |
+
+This also changed how I thought about the earlier certificate problems. An internally trusted CA can matter in several different places: the user's browser validating the wiki, the Outline backend validating the GitLab identity provider, and the browser validating a separate file-serving endpoint. A change that fixes one of these does not necessarily fix the others.
+
+The closed network made these dependencies more visible, but the failure modes are ordinary HTTP, DNS, TLS and application protocol problems. They are not specific to any particular cluster or organization.
+
+## What remained open
+
+The WebSocket upgrade and the client certificate intervention had observable effects. The GitLab userinfo timeout, affected-PC attachment failures and later callback problem did not have a preserved, fully verified completion record.
+
+A stronger future verification would pair observations with the actual caller: test the provider name and HTTPS handshake **from Outline's runtime**, inspect the OAuth callback URL as the provider sees it, test WebSocket upgrades in the browser and follow a failing image request to its full host, response and authorization context. After that, reproduce a save and image reload on an affected client, not just a successful `101` handshake.
+
+The lesson was not that every failure needed a new proxy rule. It was that the same web application can involve several unrelated request paths, each with its own client and trust store. I had fixed one protocol boundary, narrowed another through client certificates, and found remaining failures whose causes needed different evidence.
+
+I would rather leave those boundaries visible than flatten the story into a single "SSO and TLS fixed" deployment note.
+
+## References
+
+- [Outline — OIDC hosting configuration](https://docs.getoutline.com/s/hosting/doc/oidc-8CPBm6uC0I)
+- [Outline — Hosting troubleshooting](https://docs.getoutline.com/s/hosting/doc/troubleshooting-HXckrzCqDJ)
+- [Outline — Nginx reverse proxy](https://docs.getoutline.com/s/hosting/doc/nginx-6htaRboR57)
+- [Outline — File storage](https://docs.getoutline.com/s/hosting/doc/file-storage-N4M0T6Ypu7)
+- [Nginx — WebSocket proxying](https://nginx.org/en/docs/http/websocket.html)
+- [GitLab — OAuth identity provider](https://docs.gitlab.com/integration/oauth_provider/)

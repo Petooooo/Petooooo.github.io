@@ -1,6 +1,6 @@
 {
   "bit-shift-cnn-accelerator-zynq": "5afa94644077341049db4013a5cf8bb9eb8def1d85a0325659127faed9d0f014",
-  "independent-on-premises-k3s-platform-engineering": "4b2fe0e6f36f61ce113b5e255aed34087aff233763def93e455f866cbb6d4d7a",
+  "independent-on-premises-k3s-platform-engineering": "4fbb3371d09af61f3d24ff5b8f3c823613137671b4bb38e43bd003f8f3027a20",
   "rokaf-async-workers-and-idempotency": "eac960e6c93ab59531da241fc5b98ad5eeeab7911a6f6673038708226d54b2d9",
   "rokaf-chat-attachments-object-storage": "07b0bf21de4cd294ba04b71aaaa280f915c052e56eae172d832ec6e906dee668",
   "rokaf-clickhouse-replication-migration": "d19dfd94104de8c3e5014a50b6edf8a18833351a1a3fdb7420e19c4e28d510d1",
@@ -10,6 +10,7 @@
   "rokaf-gpu-discovery-open-investigation": "4b52414af64065e9d1e2669cd5f6691d46498a72fdac4de232c77d8c00bdca7d",
   "rokaf-gpu-scheduling-and-capacity": "87e89b0a873ab7a7d55bb826cddd9c699a480b0fb100f7fe9400792cbdd4c80c",
   "rokaf-identity-rbac-and-policy": "999a6954fe01b08867b268c1bea236acd0f9f74a12572c5ba4131edcf4bd8127",
+  "rokaf-internal-app-auth-and-tls": "6e4aa7ac5d28e2943bceec6632bbfaef016dac2f42f6463b24564e76275c14e2",
   "rokaf-langfuse-v4-migration-field-notes": "c07f09c61d7681788afb9a8a45aaea49655f866feb955400e7d813bb89b0f9f1",
   "rokaf-networking-and-tls": "b24944d0f3a2410e0bb8ffe922c7112dccfdcb4d665798cf4492cd724d7bcb99",
   "rokaf-object-storage-migration": "6ec9db0aeac54862054676796092afb31c2ef6a11a9b2ccda90f36e5ae360c73",
