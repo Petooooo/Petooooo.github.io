@@ -1,123 +1,98 @@
 ---
-title: "Langfuse v4 Upgrade: What the Migration State Actually Said"
-description: "In-progress migration diary: Step 2 timeout with completed chunks, ClickHouse/Keeper state, insufficient space and a later Step 6 JSON/date failure."
+title: "The Migration Timed Out. The Work Had Already Moved On."
+description: "How a Langfuse v4 upgrade moved from a misleading Step 2 timeout through ClickHouse and state-handling problems to verified historical and new-data reads, events_only cutover and final cleanup."
 date: "2026-11-15"
+updated: "2026-11-18"
 draft: false
 reviewed: true
+reviewStatus: "reviewed"
 sensitivity: sanitized
 category: "Engineering Investigation"
 area: "Database Migration"
 tags: ["Langfuse", "PostgreSQL", "ClickHouse", "Keeper", "Data Migration"]
 type: "troubleshooting"
-role: "ROKAF infrastructure troubleshooting and engineering investigation"
-period: "Jul 2025–Present"
-status: "building"
-techStack: ["Langfuse", "PostgreSQL", "ClickHouse", "Keeper", "Data Migration"]
+role: "Langfuse v4 migration, database state investigation, cutover and functional validation"
+period: "2026"
+status: "active"
+techStack: ["Langfuse", "PostgreSQL", "ClickHouse", "Keeper", "Helm"]
 ---
 
-I kept running into a dangerous assumption while upgrading Langfuse: **a failed status badge and a failed data operation are not the same statement**. The clearest example was a background rewrite step that reported a timeout even though the persisted migration state contained evidence that the underlying work had progressed.
+I was migrating Langfuse to v4 when a step reported `Timeout error.` My first reading was that a long-running job had failed. But when I inspected its persistent state in PostgreSQL, the result was different: the phase was `completed`, with nine completed chunks and zero failed chunks.
+
+The UI and the progress record were describing different things. One was the response that a caller had waited for; the other was evidence left by the work itself. Before retrying anything, I needed to know which lifetime had actually ended.
+
+This is not the story of an upgrade abandoned at that timeout. I continued the migration. **By November 17, 2026, Steps 1–5 were complete, Langfuse was running in `events_only` mode, and checks of historical and newly written data had passed.** Looking back, the important part of the work was how I got from an ambiguous failure message to a result that I could test.
+
+## A running application was not the whole migration
+
+The upgrade touched application code and several kinds of persistent state: PostgreSQL for progress and metadata, ClickHouse for analytics data, and Keeper for the coordination required by replicated tables. An image update or a successful Helm rollout did not automatically convert old Traces and Observations into structures the new application could use.
+
+Historical data backfills had their own work to finish, and those writes needed a writable destination with enough free space. Rather than call the rollout one operation, I treated data transformation, application behavior, and cleanup as separate milestones.
 
 <figure className="project-concept-figure">
-  <a href="/figures/journals/langfuse-migration-evidence.svg" target="_blank" rel="noopener noreferrer" aria-label="Open investigation diagram">
-    <img src="/figures/journals/langfuse-migration-evidence.svg" alt="Four independent checks—worker response, persisted migration phase, ClickHouse/Keeper health and storage space—must agree before a migration is called complete." loading="lazy" decoding="async" />
+  <a href="/figures/journals/langfuse-migration-evidence.svg" target="_blank" rel="noopener noreferrer" aria-label="Open the two-track Step 2 evidence and later Langfuse v4 verification timeline">
+    <img src="/figures/journals/langfuse-migration-evidence.svg" alt="An evidence timeline separates the caller's Step 2 timeout from the database record of nine completed and zero failed chunks; later checks show completion of migration Steps 1–5 and historical/new data verification." loading="lazy" decoding="async" />
   </a>
-  <figcaption>Four independent checks—worker response, persisted migration phase, ClickHouse/Keeper health and storage space—must agree before a migration is called complete. Generalized hypothesis map; it does not disclose the internal infrastructure topology.</figcaption>
+  <figcaption>Two different observations of Step 2, followed by later validation and cleanup. The diagram illustrates evidence boundaries, not the private deployment topology or the exact duration of each stage.</figcaption>
 </figure>
 
-## The upgrade was more than one component
+## Step 2: the caller stopped waiting before the recorded work said it was done
 
-The process involved changes to Langfuse application code and supporting stateful systems, including **PostgreSQL, ClickHouse and Keeper**, with multiple migration phases and data rewrites. I had already moved through an earlier upgrade before starting the v4 path.
+Step 2 involved backfilling and sorting existing Observations into the migration's intermediate `observations_pid_tid_sorting` table. The apparent failure needed more than another look at the UI.
 
-The real risk was coupling: a migration may need to insert data into a new analytics schema while a coordinator is unstable or storage space is insufficient. Retrying blindly can increase both I/O and uncertainty about partially completed work.
-
-## Step 2: Timeout error, but phase completed
-
-At one point Step 2 reported **`Timeout error.`**. Looking at the migration record gave a different picture:
-
-| Evidence | Recorded value |
+| Observation | Recorded value |
 | --- | --- |
-| User-facing step status | `failed` / timeout message |
-| Persisted phase | `completed` |
-| Completed work chunks | **9** |
-| Failed work chunks | **0** |
+| Caller-visible status | Failed, `Timeout error.` |
+| PostgreSQL migration phase | `completed` |
+| Completed chunks | **9** |
+| Failed chunks | **0** |
 
-This does not by itself prove every downstream read is correct. It does show why I should not simply restart the step or assume its data transformation did not happen. I treated the timeout as a **caller/worker observation** and the persisted chunk counts as **background-operation evidence**.
+These values did not prove that every transformed record was already usable by the new application. They did establish that treating the operation as *nine failed chunks* would be wrong. A timeout in the request path was not a rollback of committed background work.
 
-The next question was whether follow-on operations saw the rewritten data and whether the application considered the migration usable, not whether a spinner had turned green.
+I checked the durable state before taking the retry path. With that distinction understood, a subsequent retry resolved the step and I moved forward. That was not permission to blindly rerun every backfill on every timeout; the persisted bookkeeping mattered.
 
-## ClickHouse/Keeper and read-only state
+## Other errors required other evidence
 
-Another part of the upgrade involved **read-only ClickHouse behavior** and coordination/leader concerns. I investigated Keeper health and replication state rather than assuming a writable database could be restored by restarting one application container.
+During the broader upgrade, I also had to investigate ClickHouse replicas entering a read-only state. A healthy application Pod did not establish whether the database could write, and Keeper coordination state had to be considered separately.
 
-At a different point, a remote insert reported **insufficient space**, introducing a hard resource constraint. Even if the migration logic is correct, a data rewrite needs enough temporary and target capacity to complete.
+At another point, a remote insert hit insufficient storage capacity. A data rewrite can require additional target and temporary space beyond the size of the original dataset. Repeating the same insert while the capacity constraint remains is not meaningful recovery.
 
-These incidents led me to separate three questions: **is the coordinator functional?**, **is the replica writable?**, and **is the destination sufficiently provisioned?**
+An earlier investigation also recorded a JSON/date conversion error in persisted migration-state handling. That old note used the label “Step 6,” but I cannot establish that its numbering referred to the same five-step procedure later completed. I retain it as a distinct debugging episode, **not** as evidence that an additional mandatory sixth step was still failing after the final cutover.
 
-## Step 6: Persisted state serialization
+It would be convenient to call these all one upgrade problem with one fix. They were different failure boundaries: request lifetime, stored job state, replication and coordination, available disk capacity, and state parsing. I kept them apart rather than inventing one root cause.
 
-During the later v4 phase I encountered a **JSON/date handling error** in a migration state query. That shifted the investigation from storage coordination to **how background migration code represented and parsed persisted state**.
+## What changed before I called the migration complete
 
-A failure here does not mean that earlier ClickHouse replica or storage work is irrelevant. It means that the migration pipeline has crossed into another independent failure mode.
+After Step 2, I continued through the later migration work. Steps 3–4 covered v4 event-data backfill and validation. I did not use their completion alone as the final proof; I also checked historical data access and new data creation and retrieval in the application.
 
-## A migration can have multiple, conflicting status reports
+The recorded final checkpoint on **November 17, 2026** was:
 
-One lesson from the Step 2 investigation was that **four different kinds of truth** coexist during a background migration.
+| Boundary | Verified state |
+| --- | --- |
+| Helm chart / Langfuse app | **2.1.3 / 4.46.0** |
+| Write mode | **`events_only`** |
+| Migration procedure | **Steps 1–5 completed** |
+| Historical and new data | **Validation passed** |
+| Final cleanup | Intermediate `observations_pid_tid_sorting` table cleaned up |
 
-| Source | What it says | What it cannot prove alone |
+The last cleanup deserves its own sentence. Step 5 removed an intermediate table used for migration; it did **not** mean deleting the original `traces` and `observations` tables. I wanted the earlier migration steps and functional checks accounted for before treating that cleanup as safe.
+
+This later result changes the conclusion of my early field notes. It is accurate to say I completed the recorded migration procedure and verified the historical and new-data paths in the chosen mode. It would be inaccurate to inflate those checks into an exhaustive audit of every legacy edge case or a fully tested disaster-recovery exercise.
+
+## Which kind of completion did I actually observe?
+
+I used several sources of truth at different points. Each answered a narrower question than the phrase “migration successful” suggests.
+
+| Evidence | What it establishes | What it cannot establish alone |
 | --- | --- | --- |
-| HTTP response or UI badge | Whether the caller received a timely response | Whether the background worker completed |
-| Persistent progress table | Which phases and chunks have recorded progress | Whether every destination row is usable |
-| Analytics/storage health | Whether ClickHouse/Keeper and volumes can accept work | Whether migration code interpreted every row correctly |
-| Functional application test | Whether the current application can read/write | Whether every old historical edge case was exercised |
+| UI or HTTP status | Whether the caller got a timely response | Whether the background job committed its work |
+| Durable phase and chunks | Which work was recorded as finished | Whether every destination record is correct |
+| ClickHouse and Keeper state | Whether a sampled data/coordination path is writable | Whether the new application understands all old data |
+| Functional read/write tests | Whether tested historical and new-data paths work | Every historical edge case or future failure scenario |
+| Cleanup checkpoint | Whether the temporary migration table was removed | A universal data-integrity guarantee |
 
-These sources may disagree temporarily. For Step 2 I observed the caller-facing timeout while the persisted progress record showed completed state, **nine completed chunks and zero failed chunks**. The correct next action was to investigate the consistency of those reports, not automatically repeat every chunk.
+At the beginning I was tempted to equate a timeout with failure. At the end I had a much better question: **what was already durable when the request stopped, and what still needed to be read back before I could call it finished?**
 
-### A timeout is not a rollback
+The migration did reach its verified operational checkpoint. The lesson is not that timeouts are harmless; it is that a timeout is insufficient evidence for what happened to durable data. Only the later checks gave me grounds to say the work was complete within the scope I had actually tested.
 
-A client may stop waiting while a database query or worker continues. That possibility is why durable migration state matters. In some applications a job lease or heartbeat would distinguish an active worker from an abandoned attempt; in others the background migration state machine is the more reliable source.
-
-I did not assume that the exact row counts alone proved success. The decision still needed follow-on reads and writes.
-
-## Different failures need different remedies
-
-I tried to avoid lumping the upgrade's symptoms into one “migration problem.”
-
-| Symptom | Failure layer | Reason an unrelated fix would not help |
-| --- | --- | --- |
-| `Timeout error.` | Caller/worker timing | Replacing storage may not alter the timeout boundary |
-| Phase marked completed | Migration bookkeeping | Restarting from zero may duplicate completed work |
-| ClickHouse read-only | Replica/coordination state | Application image retry cannot elect a coordinator |
-| Insufficient destination space | Storage capacity | Re-running INSERT without headroom repeats failure |
-| JSON/date handling error | State parsing and migration code | Keeper health alone cannot repair type handling |
-
-This decomposition made the sequence easier to reason about. It is also why I avoided changing multiple stateful components at the same time when trying to establish a cause.
-
-## A controlled verification checklist
-
-Once the underlying services are healthy, I would verify the migration through independent milestones:
-
-1. The persisted migration phase matches the expected transition.
-2. No chunks remain failed or stuck in a running state.
-3. Replica/coordinator health allows consistent reads and writes.
-4. Destination storage has adequate free space.
-5. Representative historical traces/observations can be queried.
-6. A new trace/observation can be written and retrieved.
-7. Background tasks continue to make progress after the application restart.
-
-I have not published evidence that every one of these final checks passed for the complete v4 rollout. The case should therefore remain a **field note of verified intermediate states and unresolved final validation**, rather than an invented completion report.
-
-## Why this matters for storage research
-
-The migration combined application schema assumptions, coordination metadata and physical storage limits. A write-heavy data transformation can fail for reasons far below its SQL code. The distinction resembles a broader OS question: **what guarantees does each layer provide, and where must correctness be verified after interruption?**
-
-That question connects this operational record to my interest in crash consistency, persistent writes and filesystem recovery.
-
-## What I know and what I still need to check
-
-**Confirmed from the recorded investigation:** the Step 2 mismatch between timeout and persisted phase/chunks; separate insufficient-space symptoms; ClickHouse/Keeper read-only/coordination problems; a later Step 6 JSON/date error.
-
-**Still requiring full end-to-end verification:** whether every migration stage ultimately completed, how the final application reads historical data, and whether new writes and background jobs behaved correctly after the upgrade.
-
-I will not convert this into a “v4 migration complete” claim until those checks exist. The current record is useful precisely because it preserves what was known at each stage.
-
-[Broader database HA article](/projects/rokaf-database-ha-and-langfuse-migrations/) · [ROKAF overview](/projects/independent-on-premises-k3s-platform-engineering/).
+**Related records:** [Database HA and migration states](/projects/rokaf-database-ha-and-langfuse-migrations/) · [ClickHouse replicated-table migration](/projects/rokaf-clickhouse-replication-migration/) · [Stateful storage and recovery](/projects/rokaf-stateful-storage-and-recovery/).

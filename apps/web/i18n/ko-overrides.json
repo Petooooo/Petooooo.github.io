@@ -660,5 +660,9 @@
   "Closed-network registry and Kubernetes-executor CI integration, builder/runtime TLS investigation and image bootstrap design": "폐쇄망 Nexus·Kaniko CI 구축, Runner와 CA 경계 조사, 이미지 부트스트랩 설계",
   "Container Registry": "Container Registry",
   "MinIO": "MinIO",
-  "Traefik": "Traefik"
+  "Traefik": "Traefik",
+  "The Migration Timed Out. The Work Had Already Moved On.": "Timeout이 떠도 데이터 작업까지 멈춘 것은 아니었다",
+  "The Migration Timed Out. The Work Had Already Moved On. | Jihwan Park": "Timeout이 떠도 데이터 작업까지 멈춘 것은 아니었다 | 박지환",
+  "How a Langfuse v4 upgrade moved from a misleading Step 2 timeout through ClickHouse and state-handling problems to verified historical and new-data reads, events_only cutover and final cleanup.": "Langfuse v4 이전 과정에서 Step 2 Timeout과 영속 상태의 차이를 확인하고, 과거·신규 데이터 검증과 events_only 전환, 임시 테이블 정리까지 마친 기록.",
+  "Langfuse v4 migration, database state investigation, cutover and functional validation": "Langfuse v4 데이터 이전, 진행 상태 조사, events_only 전환 및 실제 읽기·쓰기 검증"
 }
