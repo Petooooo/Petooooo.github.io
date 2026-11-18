@@ -185,13 +185,20 @@ def create_svg_ko(source: Path, output: Path, catalog: dict[str,str], missing: s
     ET.register_namespace("", "http://www.w3.org/2000/svg")
     ET.register_namespace("xlink", "http://www.w3.org/1999/xlink")
     tree = ET.parse(source)
+    # Apply deliberately curated SVG glossary entries even to short UI labels
+    # (e.g. "NO", "fix") that normal prose detection rightly preserves.
+    literal_overrides = json.loads(SVG_OVERRIDE_FILE.read_text(encoding="utf-8")) if SVG_OVERRIDE_FILE.is_file() else {}
     for el in tree.iter():
         tag = el.tag.rsplit("}", 1)[-1]
         if tag in {"text","tspan","title","desc"} and el.text:
             original = el.text.strip()
-            translated = local_string(original,catalog,missing)
+            forced = literal_overrides.get(original) if not english_text(original) else None
+            translated = forced if forced is not None else local_string(original,catalog,missing)
             if translated != original:
-                el.text = translate_part(el.text,catalog,missing)
+                if forced is not None:
+                    el.text = el.text.replace(original,translated,1)
+                else:
+                    el.text = translate_part(el.text,catalog,missing)
                 if tag in {"text","tspan"}:
                     # Retain the same geometry while ensuring glyph availability.
                     family=el.attrib.get("font-family","")
