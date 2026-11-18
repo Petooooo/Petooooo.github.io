@@ -1,136 +1,100 @@
 ---
-title: "Tracing a Request Through Traefik, MetalLB and Private TLS"
-description: "The debugging choices behind separating DNS, service endpoints, load balancer behavior, ingress routing and certificate selection."
+title: "Traefik Served the Wrong Certificate Before the Route Ran"
+description: "Following real K3s access failures across IP-based TLS, ServiceLB host-port claims, WebSocket upgrades and unresolved DNS/VIP questions—without mistaking one recovered path for an entire healthy network."
 date: "2026-11-15"
+updated: "2026-11-19"
 draft: false
 reviewed: true
+reviewStatus: "reviewed"
 sensitivity: sanitized
 category: "Systems Engineering"
 area: "Networking & TLS"
-tags: ["K3s", "Traefik", "MetalLB", "TLS", "DNS", "Networking"]
+tags: ["K3s", "Traefik", "MetalLB", "TLS", "DNS", "WebSocket", "ServiceLB"]
 type: "implementation-note"
-role: "Ingress, service exposure and internal certificate troubleshooting"
-period: "Jul 2025–Present"
+role: "Private HTTPS exposure, Traefik certificate-selection debugging, LoadBalancer port investigation and request-path analysis"
+period: "2025–2026"
 status: "active"
-techStack: ["K3s", "Traefik", "MetalLB", "TLS", "DNS", "Networking"]
+techStack: ["K3s", "Traefik", "MetalLB", "Kubernetes Service", "TLS", "Nginx"]
 ---
 
-When an internal application fails to open in a browser, the symptom is deceptively simple: **“the service is down.”** In practice, I had to learn how many different components could produce an identical-looking failure. The request might never resolve in DNS, reach the wrong IP, be redirected by a load balancer, negotiate the wrong certificate, or arrive at an Ingress rule with no usable endpoints.
+I opened an internal HTTPS endpoint and got a browser warning: `NET::ERR_CERT_AUTHORITY_INVALID`. I had already supplied a certificate and configured the Traefik `IngressRoute`, so I first returned to the HTTP route. But the certificate the browser received was not the one I had intended. It was `TRAEFIK DEFAULT CERT`.
 
-On our on-premises K3s platform I worked with **Traefik, Kubernetes Services, NodePort/hostPort, MetalLB and internal certificate trust**. My goal was not to add layers for their own sake; it was to make service exposure more consistent and debuggable.
+The error occurred before the route could help me. Traefik had to present a certificate during the TLS handshake, before it could inspect the HTTP request path. Looking at the route again was not the same as looking at the connection that failed.
+
+That incident became a useful reference for other access problems I encountered on a closed-network K3s platform. At a different time, adding a `LoadBalancer` Service interrupted an existing host-port entry point. With Outline, the homepage loaded but a realtime WebSocket connection initially failed. DNS and MetalLB VIP reachability raised other questions I could not fully close. To a user they all looked like variations on “the service is down”; they required different evidence.
+
+## The certificate was selected before the HTTP path existed
+
+The environment could not assume that every service would be given a DNS hostname. Some endpoints had to be accessed by IP address and port. That made two details particularly important: whether the issued certificate's **subject alternative names covered the requested IP**, and whether Traefik **actually selected that certificate** for the connection.
+
+I had already considered HTTP rules such as `PathPrefix('/')`. Changing an HTTP path matcher did not replace a default certificate that had already been sent. Adding a `Host(...)` condition did not turn an IP-only TLS request into a DNS-name-based SNI handshake either. The TLS certificate decision preceded the HTTP routing decision.
+
+I inspected the certificate presented on the actual access path using `openssl s_client` and `openssl x509`, comparing its subject, issuer and fingerprint with the intended certificate. This was more informative than knowing that the certificate Secret existed somewhere in Kubernetes. A Secret that is not selected does not help the client.
+
+The configuration I settled on included an appropriate IP SAN and Traefik's `TLSStore default` for the default certificate selection. I could then inspect whether the endpoint presented the intended certificate instead of `TRAEFIK DEFAULT CERT`. That observation is different from proving that every workstation already trusted the issuing private CA. **Certificate selection, endpoint identity and client trust** are separate checks.
 
 <figure className="project-concept-figure">
-  <a href="/figures/journals/network-request-path.svg" target="_blank" rel="noopener noreferrer" aria-label="Open technical diagram">
-    <img src="/figures/journals/network-request-path.svg" alt="A client request passes through name resolution, service exposure, TLS negotiation, ingress routing, Kubernetes endpoints and application readiness." loading="lazy" decoding="async" />
+  <a href="/figures/journals/network-request-path.svg" target="_blank" rel="noopener noreferrer" aria-label="Open the incident-based diagnostic matrix for Traefik, ServiceLB, WebSocket and unresolved DNS/VIP paths">
+    <img src="/figures/journals/network-request-path.svg" alt="Incident evidence matrix: wrong default certificate at TLS selection, a ServiceLB host-port claim after a LoadBalancer change, WebSocket HTTP 400 to 101 after proxy changes, and unresolved DNS, VIP and CNI investigations." loading="lazy" decoding="async" />
   </a>
-  <figcaption>A client request passes through name resolution, service exposure, TLS negotiation, ingress routing, Kubernetes endpoints and application readiness. Conceptual model; no internal access policy, topology or resource inventory is shown.</figcaption>
+  <figcaption>Different failures required different observations. Certificate selection, the host-port conflict and the WebSocket upgrade were observed; DNS/VIP/CNI root causes were not all established. This is not a real deployment diagram.</figcaption>
 </figure>
 
-## 1. A single HTTP failure can originate in six places
+## A new LoadBalancer Service interrupted a different endpoint
 
-I started separating the request path, because changing configuration at the wrong layer frequently made an incident longer.
+Another incident initially pointed me toward the wrong component. I added a `LoadBalancer` Service so MetalLB could provide an external VIP. I had not redeployed the previously accessible application, yet its host-port-based entry point stopped responding.
 
-| Stage | What it can tell me | Typical misleading symptom |
-| --- | --- | --- |
-| DNS | Does the name resolve to the intended destination? | “Ingress is broken,” when the name points elsewhere |
-| VIP or node endpoint | Is the destination being advertised and reachable? | Browser timeout with healthy Pods |
-| TCP/TLS | Is the handshake successful and certificate trusted? | Certificate warning despite apparently correct HTTP routing |
-| Traefik | Does the selected entry point and router match the request? | Unexpected backend response |
-| Kubernetes Service | Are the ports and endpoints correct? | 502/503 while application processes are running |
-| Application | Is it ready and serving its intended protocol? | Pod is `Running` but request fails |
+A separate NodePort route still worked, while the newly expected VIP path initially returned connection refused. That difference mattered. It did not look like evidence that every Pod or every Service had gone down.
 
-The table was not just a checklist: it changed the order in which I investigated a problem. For instance, if a TLS handshake returns the default certificate, editing an HTTP path rule is often irrelevant.
+K3s was still running its built-in ServiceLB. The new `LoadBalancer` object triggered `svclb-*` resources whose Pods requested a `hostPort` already used by the existing exposure path. Changing the new Service port avoided the overlap; deleting the Service removed its ServiceLB resources and restored the earlier access. These are stronger observations than a vague statement that “MetalLB broke the network.”
 
-## 2. The TLS detail I wish I had recognized sooner
+MetalLB's address allocation and advertisement are not the same action as ServiceLB's host-port allocation. One component was intended to provide an externally reachable address; another controller was also consuming a scarce host-level resource. I moved toward disabling ServiceLB in that MetalLB-based setup, and later observed the same conflict no longer occurring. I cannot turn that into a claim that every node and future Service passed an audited rollout or long-term failover test.
 
-An HTTP router only receives a request **after TLS negotiation**. The server must choose and present its certificate before an application sees the HTTP `Host` header or URL path. This is why an IngressRoute may route correctly after a warning while the certificate remains unexpected.
+The complete change–conflict–rollback record belongs in the [ServiceLB host-port investigation](/projects/rokaf-service-lb-hostport-conflict/). Here it answers a broader question: **which controller acquired a resource when I added an apparently unrelated Service?**
 
-I worked through Traefik entry-point configuration, private trust chains, HTTPS configuration and certificate-name matching. For private registries, the relevant clients also included **image builders and container runtimes**, which do not necessarily share the same certificate store as a browser.
+## The wiki loaded while its realtime protocol failed
 
-I came to ask two separate questions: **Does the client trust the issuer?** and **Does the presented certificate identify the endpoint the client requested?** Solving the first without the second still leaves a failure.
+Outline presented a third kind of ambiguity. The wiki page loaded through a reverse proxy, yet collaborative editing was not working properly. The relevant proxy investigation involved Nginx in front of Outline, not merely Traefik's main HTTP routing.
 
-## 3. MetalLB and the problem of a moving frontend
+An early realtime request returned HTTP `400`. I investigated how Nginx forwarded the hop-by-hop `Upgrade` and `Connection` headers, the `/realtime` path, HTTP/1.1 and connection timeout/buffering behavior. After those changes, the WebSocket handshake returned **`101 Switching Protocols`**.
 
-Load-balancer VIP behavior introduced another layer of ambiguity. An intermittent endpoint could be caused by advertisement behavior, network asymmetry, node readiness, or the service behind the endpoint. I investigated possible **VIP instability** and related symptoms, but I did not always have enough evidence to assign one final root cause.
+That response established that the upgrade handshake had crossed the protocol boundary. It did not prove that every edit was durably saved on every client. Some Windows machines still showed certificate warnings or separate image-loading failures. I had also seen image-host DNS errors and HTTP `401` responses. An application homepage, its WebSocket, an attachment URL and an authenticated request are not one connection with one fate.
 
-This made me distinguish between what was observable—**a reachability change**—and what was only a hypothesis—such as address advertisement shifting unexpectedly. I wanted to correlate service endpoint health, node-level reachability and load-balancer state before proposing a permanent fix.
+GitLab authentication involved another initiator again. Outline's backend had to contact GitLab's identity endpoints, and troubleshooting included `EAI_AGAIN` and `ETIMEDOUT` at different stages. A browser being able to display a GitLab login page does not prove that the Outline process can resolve or connect to the provider's userinfo endpoint. The confirmed `101` improvement could not stand in for a complete SSO or attachment recovery.
 
-## 4. CoreDNS is infrastructure, not an invisible utility
+## Which external port was I actually testing?
 
-I also encountered a reliability question around **CoreDNS availability**. DNS failures can make otherwise healthy services appear broken, especially when service discovery is embedded in application startup, database dependencies or background job execution.
+The access models I used had overlapping terminology but different owners:
 
-One concern was **reliance on too little DNS redundancy**. The relevant decision is not simply to increase replicas blindly, but to check placement, node fault domains, resource pressure, upstream resolution and whether the affected applications actually use cluster DNS as expected.
+| Boundary | What I needed to distinguish |
+| --- | --- |
+| `ClusterIP` | An in-cluster Service destination, not an external address by itself |
+| `NodePort` | A node-facing Service port and its forwarding path |
+| `hostPort` | A host-port claim associated with a Pod |
+| `LoadBalancer` | An external Service entry point whose implementation matters |
+| Traefik `IngressRoute` | HTTP(S) routing after an appropriate entry point and TLS decision |
+| `IngressRouteTCP` | TCP routing for a configured entry point; investigating it is not proof of deployment success |
 
-## 5. Why I compared NodePort and hostPort
+That distinction mattered with Nexus too. Its management UI and Docker Registry API had different access requirements. The UI loading did not establish that `/v2/` requests, TLS identity, credentials and repository permissions all worked. I considered TCP routing for some entry points; I do not claim every proposed `IngressRouteTCP` configuration was ultimately validated.
 
-NodePort, hostPort and load-balancer Services change **which component owns the listening port and how the request reaches the Pod**. I studied their trade-offs when deciding where Traefik or other entry points should terminate incoming traffic.
+The same `x509` text can come from different clients. A browser opening a service, K3s containerd pulling an image, and Kaniko pushing one need not share a trust store. I stopped treating “the certificate is installed” as sufficient evidence without saying **where** it was installed and **which request** failed.
 
-The operational pain is that every extra path increases the number of things that can be misconfigured. The better design is the one whose **packet path and failure modes I can explain**, not necessarily the one with the shortest manifest.
+## The DNS and VIP questions I left open
 
-## 6. TLS negotiation happens before HTTP routing
+Not every investigation ended with a similarly reversible fix. CoreDNS reliability and intermittent MetalLB VIP reachability required more evidence. During a separate internal Service investigation, some Pods struggled to reach CoreDNS or a `ClusterIP` path. Flannel interfaces and some NAT rules existed, yet that alone could not establish how each packet passed through Service forwarding, `iptables` or `conntrack`.
 
-The distinction between the TLS handshake and HTTP routing became a useful mental model. A server may select a certificate based on the requested server name and the configured TLS entry point **before it sees the HTTP path**.
+I also considered whether Docker and K3s rules could interfere on the same host. That remained a hypothesis, not a confirmed explanation for every Pod-to-Service failure. It would be particularly misleading to claim that disabling ServiceLB solved later CNI, resolver and VIP anomalies. The port-contention incident and the open datapath questions crossed different failure boundaries.
 
-Consequently:
+Where I lacked a synchronized client request, DNS answer, VIP advertisement state and endpoint observation, I kept the cause open rather than writing a clean but unsupported “fixed MetalLB” conclusion.
 
-- A wrong certificate cannot always be corrected by editing an HTTP router rule.
-- A trusted certificate issuer and a matching certificate name are separate checks.
-- A browser, a container image builder and a container runtime can use different trust stores.
-- A successful connection to a VIP does not mean the correct ingress router is selected.
+## The client became my starting point
 
-This helped me avoid changing several unrelated layers at once.
+When investigating another connection failure, I now begin by asking **who made the request**. Was it a browser, a Pod, containerd, Kaniko, or a backend application calling another service? From which host or network path? Only after that can I usefully interpret a DNS error, TLS warning, connection refusal, HTTP response or missing application behavior.
 
-### SAN, issuer and name matching
+The next questions follow the specific request: Did its name resolve? Was the destination reachable? What certificate did the TLS handshake actually present? Which entry point and router handled the request? Were the intended Service endpoints ready? Did the application complete a representative operation?
 
-| Property | Question | Typical failure category |
-| --- | --- | --- |
-| Issuer/trust | Does the client trust the certificate chain? | Unknown certificate authority |
-| Subject alternative name | Does the certificate identify the requested host/IP? | Name mismatch |
-| TLS configuration | Does the entry point choose the intended certificate? | Default certificate selection |
-| HTTP routing | Does the path/host match the intended router? | Wrong service or route |
-| Backend readiness | Are there usable endpoints? | 502/503 or no response |
+I did not run every one of those checks during every incident. They are the boundaries I learned to preserve in the record. The default-certificate episode was about certificate selection. The LoadBalancer episode was about host-port ownership. The WebSocket episode was about an HTTP protocol upgrade. The CNI and VIP questions remained partly open.
 
-These checks apply to internal service endpoints and private registries, but each client may maintain trust differently.
+**“The network is down” described what someone experienced, not where the fault lived.** The useful work was to follow a request far enough to say where the evidence changed, without turning an assumption about the next layer into a fact.
 
-## 7. Why Service, NodePort, hostPort and VIP are not interchangeable
-
-They can all participate in exposing a workload, yet they select different boundaries of responsibility.
-
-| Exposure method | What it exposes | Trade-off |
-| --- | --- | --- |
-| ClusterIP Service | Stable in-cluster destination | Usually not directly reachable from outside the cluster |
-| NodePort | Service through a port on nodes | Node reachability and port use |
-| hostPort | Pod port bound through a host networking mechanism | Placement constraints and host port conflicts |
-| LoadBalancer Service | Service entry point backed by a load-balancer implementation | External advertisement/routing must also work |
-| Traefik ingress | HTTP(S) routing, TLS termination, rules | Requires valid entry points and backend Services |
-
-For a constrained cluster the best choice was not necessarily the one with the shortest Kubernetes manifest. I wanted a request path whose ownership and failure conditions I could follow.
-
-## 8. A client-centered diagnostic sequence
-
-For a sanitized reproducible environment, I would collect a minimal matrix of observations:
-
-1. Resolve the name and record which address was returned.
-2. Test whether the selected destination accepts a connection.
-3. Inspect the certificate selected during TLS negotiation.
-4. Confirm the intended ingress router matches the request.
-5. Inspect the Service and its ready endpoints.
-6. Send a representative request to the application and verify its response.
-
-Changing the DNS record, the MetalLB advertisement, the ingress route and the application in a single attempt would make cause attribution almost impossible.
-
-### Availability and path symmetry
-
-The same URL can behave differently from two clients because they traverse different DNS caches, routers, firewalls or node paths. Comparing vantage points is useful, but it needs to be deliberate. A connection succeeding from one node cannot by itself rule out network asymmetry elsewhere.
-
-## 9. Failure-domain questions that remained
-
-I was particularly interested in whether CoreDNS redundancy and MetalLB behavior had become **shared failure domains** for otherwise unrelated services. Yet having one resolver Pod or seeing a VIP transition is not enough to conclude that either caused a specific outage.
-
-A future investigation would correlate client request timestamps with resolver and endpoint observations and would explicitly record when a hypothesis did not fit the evidence. That discipline matters more than claiming a neat root cause for every connectivity symptom.
-
-## What I kept in my notebook
-
-I kept unresolved questions about VIP behavior and DNS as open investigations instead of writing a misleading “fixed MetalLB” headline. The things I could verify were which layer was behaving differently and which hypotheses were still plausible.
-
-**Related:** [ServiceLB host-port contention incident](/projects/rokaf-service-lb-hostport-conflict/) · [networking/DNS incident notebook](/projects/rokaf-dns-vip-open-investigations/) · [private artifact CI](/projects/rokaf-private-artifacts-and-ci/) · [K3s platform overview](/projects/independent-on-premises-k3s-platform-engineering/).
+**Related records:** [ServiceLB and MetalLB host-port contention](/projects/rokaf-service-lb-hostport-conflict/) · [Outline WebSocket and identity-provider paths](/projects/rokaf-internal-app-auth-and-tls/) · [DNS/VIP open investigation](/projects/rokaf-dns-vip-open-investigations/) · [Nexus/Kaniko certificate boundaries](/projects/rokaf-private-artifacts-and-ci/).

@@ -667,5 +667,9 @@
   "Langfuse v4 migration, database state investigation, cutover and functional validation": "Langfuse v4 데이터 이전, 진행 상태 조사, events_only 전환 및 실제 읽기·쓰기 검증",
   "A Healthy Database Pod Was Not Enough": "Pod가 살아 있어도 데이터베이스를 쓸 수 있는 건 아니었다",
   "A Healthy Database Pod Was Not Enough | Jihwan Park": "Pod가 살아 있어도 데이터베이스를 쓸 수 있는 건 아니었다 | 박지환",
-  "MongoDB, PostgreSQL/Pgpool, ClickHouse/Keeper and Langfuse incidents where replicas, routing, stored progress and actual reads told different stories.": "MongoDB와 Pgpool, ClickHouse, Langfuse를 운영하며 Replica 상태와 연결 경로, 진행 기록, 실제 데이터 조회가 서로 달랐던 경험을 기록했다."
+  "MongoDB, PostgreSQL/Pgpool, ClickHouse/Keeper and Langfuse incidents where replicas, routing, stored progress and actual reads told different stories.": "MongoDB와 Pgpool, ClickHouse, Langfuse를 운영하며 Replica 상태와 연결 경로, 진행 기록, 실제 데이터 조회가 서로 달랐던 경험을 기록했다.",
+  "Traefik Served the Wrong Certificate Before the Route Ran": "라우팅은 맞았는데 Traefik은 다른 인증서를 보여줬다",
+  "Traefik Served the Wrong Certificate Before the Route Ran | Jihwan Park": "라우팅은 맞았는데 Traefik은 다른 인증서를 보여줬다 | 박지환",
+  "Following real K3s access failures across IP-based TLS, ServiceLB host-port claims, WebSocket upgrades and unresolved DNS/VIP questions—without mistaking one recovered path for an entire healthy network.": "IP 기반 HTTPS 인증서 문제와 ServiceLB의 호스트 포트 충돌, WebSocket 연결 오류를 따라가며 같은 접속 실패라도 원인이 달랐던 경험을 기록했다. DNS와 VIP의 미해결 문제도 구분했다.",
+  "Private HTTPS exposure, Traefik certificate-selection debugging, LoadBalancer port investigation and request-path analysis": "폐쇄망 HTTPS 서비스 노출, Traefik 인증서 선택 오류, LoadBalancer 호스트 포트 충돌과 요청 경로 조사"
 }
