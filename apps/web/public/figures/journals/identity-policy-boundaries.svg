@@ -1,1 +1,56 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 590" role="img" aria-label="Identity and authorization belong to different layers"><rect width="1280" height="590" rx="20" fill="#0b1220"/><path d="M42 123H1238" stroke="#35506a" stroke-width="1"/><defs><marker id="arr" markerWidth="9" markerHeight="9" refX="8" refY="4" orient="auto"><path d="M1 1L8 4L1 7" fill="none" stroke="#72d5ec" stroke-width="1.8"/></marker></defs><text x="42" y="57" font-family="Inter,Arial,sans-serif" font-size="30" fill="#f5faff" font-weight="750" >Identity and authorization belong to different layers</text><text x="42" y="93" font-family="Inter,Arial,sans-serif" font-size="17" fill="#a9becf" font-weight="400" >The cluster API, login session and application object are not the same resource</text><rect x="43" y="184" width="378" height="292" rx="15" fill="#192b42" stroke="#76c9e4" stroke-width="1.7"/><text x="65" y="230" font-family="Inter,Arial,sans-serif" font-size="22" fill="#eef8fc" font-weight="700" >Kubernetes API</text><path d="M65 250H399" stroke="#496375"/><text x="65" y="293" font-family="Inter,Arial,sans-serif" font-size="16" fill="#b6ccd9" font-weight="500" >ServiceAccount identity</text><text x="65" y="325" font-family="Inter,Arial,sans-serif" font-size="16" fill="#b6ccd9" font-weight="500" >Role / RoleBinding</text><text x="65" y="357" font-family="Inter,Arial,sans-serif" font-size="16" fill="#b6ccd9" font-weight="500" >Verb + namespace scope</text><text x="65" y="389" font-family="Inter,Arial,sans-serif" font-size="16" fill="#b6ccd9" font-weight="500" >Deploy/observe ≠ admin</text><rect x="451" y="184" width="378" height="292" rx="15" fill="#1a3039" stroke="#67ad9d" stroke-width="1.7"/><text x="473" y="230" font-family="Inter,Arial,sans-serif" font-size="22" fill="#eef8fc" font-weight="700" >Application sign-in</text><path d="M473 250H807" stroke="#496375"/><text x="473" y="293" font-family="Inter,Arial,sans-serif" font-size="16" fill="#b6ccd9" font-weight="500" >GitLab OAuth2</text><text x="473" y="325" font-family="Inter,Arial,sans-serif" font-size="16" fill="#b6ccd9" font-weight="500" >Keycloak / OIDC option</text><text x="473" y="357" font-family="Inter,Arial,sans-serif" font-size="16" fill="#b6ccd9" font-weight="500" >Token / user session</text><text x="473" y="389" font-family="Inter,Arial,sans-serif" font-size="16" fill="#b6ccd9" font-weight="500" >Login ≠ authorization</text><rect x="859" y="184" width="378" height="292" rx="15" fill="#1a3039" stroke="#67ad9d" stroke-width="1.7"/><text x="881" y="230" font-family="Inter,Arial,sans-serif" font-size="22" fill="#eef8fc" font-weight="700" >Domain access</text><path d="M881 250H1215" stroke="#496375"/><text x="881" y="293" font-family="Inter,Arial,sans-serif" font-size="16" fill="#b6ccd9" font-weight="500" >OpenFGA / ReBAC</text><text x="881" y="325" font-family="Inter,Arial,sans-serif" font-size="16" fill="#b6ccd9" font-weight="500" >User – team – object</text><text x="881" y="357" font-family="Inter,Arial,sans-serif" font-size="16" fill="#b6ccd9" font-weight="500" >Owner / editor / viewer</text><text x="881" y="389" font-family="Inter,Arial,sans-serif" font-size="16" fill="#b6ccd9" font-weight="500" >Model and integration work</text><text x="42" y="556" font-family="Inter,Arial,sans-serif" font-size="16" fill="#a7bdd1" font-weight="450" >Protect Kubernetes resources with RBAC; handle object-level permissions in the application domain.</text><text x="1238" y="556" font-family="Inter,Arial,sans-serif" font-size="13" fill="#7294a8" font-weight="500" text-anchor="end">CONCEPTUAL · NOT A DEPLOYMENT TOPOLOGY</text></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1320 775" role="img" aria-label="Matrix separating observed Kubernetes and registry permissions, an OAuth connection failure, and a proposed document relationship model">
+  <rect width="1320" height="775" rx="22" fill="#0b1422"/>
+  <text x="45" y="61" fill="#eff8ff" font-family="Inter,Arial,sans-serif" font-weight="740" font-size="31">A permission belongs to the request, not the platform</text>
+  <text x="45" y="100" fill="#aac4d3" font-family="Inter,Arial,sans-serif" font-size="18">Different principals, protected resources and enforcement points</text>
+  <path d="M45 124H1275" stroke="#385169" stroke-width="1.4"/>
+  <text x="62" y="168" fill="#8fb8ca" font-family="Inter,Arial,sans-serif" font-size="15" letter-spacing="1.4">REQUESTED ACTION</text>
+  <text x="377" y="168" fill="#8fb8ca" font-family="Inter,Arial,sans-serif" font-size="15" letter-spacing="1.4">CALLER / DESTINATION</text>
+  <text x="742" y="168" fill="#8fb8ca" font-family="Inter,Arial,sans-serif" font-size="15" letter-spacing="1.4">DECISION BOUNDARY</text>
+  <text x="1046" y="168" fill="#8fb8ca" font-family="Inter,Arial,sans-serif" font-size="15" letter-spacing="1.4">EVIDENCE LEVEL</text>
+  <rect x="45" y="185" width="1230" height="116" rx="13" fill="#172b40" stroke="#496e8b" stroke-width="1.4"/>
+  <rect x="45" y="185" width="6" height="116" rx="3" fill="#76bde7"/>
+  <path d="M357 203V284 M722 203V284 M1027 203V284" stroke="#405b72" stroke-width="1.3"/>
+  <text x="62" y="227" fill="#f2f8fd" font-family="Inter,Arial,sans-serif" font-size="22" font-weight="700">Create a CI job Pod</text>
+  <text x="62" y="267" fill="#aabed0" font-family="Inter,Arial,sans-serif" font-size="17">Kubernetes API operation</text>
+  <text x="377" y="227" fill="#eef8fe" font-family="Inter,Arial,sans-serif" font-size="20" font-weight="680">Runner ServiceAccount</text>
+  <text x="377" y="267" fill="#abc2d4" font-family="Inter,Arial,sans-serif" font-size="17">Runner → Kubernetes API</text>
+  <text x="742" y="227" fill="#ecf8fd" font-family="Inter,Arial,sans-serif" font-size="19" font-weight="680">Role + RoleBinding</text>
+  <text x="742" y="267" fill="#a8bed1" font-family="Inter,Arial,sans-serif" font-size="16">Resource / verb / namespace</text>
+  <text x="1046" y="227" fill="#b8ddf2" font-family="Inter,Arial,sans-serif" font-size="17" font-weight="680">CI integration used</text>
+  <text x="1046" y="267" fill="#a2bacc" font-family="Inter,Arial,sans-serif" font-size="15">Not a full RBAC audit</text>
+  <rect x="45" y="319" width="1230" height="116" rx="13" fill="#172d37" stroke="#4f8b83" stroke-width="1.4"/>
+  <rect x="45" y="319" width="6" height="116" rx="3" fill="#6fcbb3"/>
+  <path d="M357 337V418 M722 337V418 M1027 337V418" stroke="#416967" stroke-width="1.3"/>
+  <text x="62" y="361" fill="#f1faf6" font-family="Inter,Arial,sans-serif" font-size="22" font-weight="700">Push a built image</text>
+  <text x="62" y="401" fill="#adcfc6" font-family="Inter,Arial,sans-serif" font-size="17">Registry operation</text>
+  <text x="377" y="361" fill="#e9fbf3" font-family="Inter,Arial,sans-serif" font-size="20" font-weight="680">Kaniko → Nexus</text>
+  <text x="377" y="401" fill="#adcec5" font-family="Inter,Arial,sans-serif" font-size="17">Builder's registry client</text>
+  <text x="742" y="361" fill="#ecfaf5" font-family="Inter,Arial,sans-serif" font-size="19" font-weight="680">Registry authentication</text>
+  <text x="742" y="401" fill="#a8cfc3" font-family="Inter,Arial,sans-serif" font-size="16">Repository write scope</text>
+  <text x="1046" y="361" fill="#b0e9d8" font-family="Inter,Arial,sans-serif" font-size="17" font-weight="680">CI integration used</text>
+  <text x="1046" y="401" fill="#a0c8bc" font-family="Inter,Arial,sans-serif" font-size="15">Separate from RBAC</text>
+  <rect x="45" y="453" width="1230" height="116" rx="13" fill="#2a2d3b" stroke="#917ca9" stroke-width="1.4"/>
+  <rect x="45" y="453" width="6" height="116" rx="3" fill="#b89bde"/>
+  <path d="M357 471V552 M722 471V552 M1027 471V552" stroke="#666076" stroke-width="1.3"/>
+  <text x="62" y="495" fill="#f8f1fe" font-family="Inter,Arial,sans-serif" font-size="22" font-weight="700">Sign in to the wiki</text>
+  <text x="62" y="535" fill="#c5bbd7" font-family="Inter,Arial,sans-serif" font-size="17">Identity, not document access</text>
+  <text x="377" y="495" fill="#f3f0ff" font-family="Inter,Arial,sans-serif" font-size="20" font-weight="680">Outline → GitLab API</text>
+  <text x="377" y="535" fill="#c9c0da" font-family="Inter,Arial,sans-serif" font-size="17">Backend OAuth request</text>
+  <text x="742" y="495" fill="#f4f0fb" font-family="Inter,Arial,sans-serif" font-size="19" font-weight="680">OAuth / connectivity</text>
+  <text x="742" y="535" fill="#c7bed7" font-family="Inter,Arial,sans-serif" font-size="16">Before object authorization</text>
+  <text x="1046" y="495" fill="#dcc5f5" font-family="Inter,Arial,sans-serif" font-size="17" font-weight="680">ETIMEDOUT seen</text>
+  <text x="1046" y="535" fill="#c5b5d8" font-family="Inter,Arial,sans-serif" font-size="15">Not a policy deny</text>
+  <rect x="45" y="587" width="1230" height="116" rx="13" fill="#2c2d32" stroke="#a18a63" stroke-width="1.4" stroke-dasharray="5 4"/>
+  <rect x="45" y="587" width="6" height="116" rx="3" fill="#e5b972"/>
+  <path d="M357 605V686 M722 605V686 M1027 605V686" stroke="#66604f" stroke-width="1.3"/>
+  <text x="62" y="629" fill="#fcf5e8" font-family="Inter,Arial,sans-serif" font-size="22" font-weight="700">Edit one document</text>
+  <text x="62" y="669" fill="#d0c5b0" font-family="Inter,Arial,sans-serif" font-size="17">Object-level authorization</text>
+  <text x="377" y="629" fill="#fcf6e9" font-family="Inter,Arial,sans-serif" font-size="20" font-weight="680">User / team → document</text>
+  <text x="377" y="669" fill="#d0c5b0" font-family="Inter,Arial,sans-serif" font-size="17">Application domain</text>
+  <text x="742" y="629" fill="#fcf5e8" font-family="Inter,Arial,sans-serif" font-size="19" font-weight="680">App roles / OpenFGA idea</text>
+  <text x="742" y="669" fill="#d0c5b0" font-family="Inter,Arial,sans-serif" font-size="16">Owner / editor / viewer</text>
+  <text x="1046" y="629" fill="#f3d8a1" font-family="Inter,Arial,sans-serif" font-size="17" font-weight="680">Model explored</text>
+  <text x="1046" y="669" fill="#d6c5a2" font-family="Inter,Arial,sans-serif" font-size="15">No full rollout claim</text>
+  <text x="45" y="753" fill="#8ba9bb" font-family="Inter,Arial,sans-serif" font-size="14">Conceptual permission boundaries. No accounts, cluster roles, real policies or internal resource names are shown.</text>
+  <text x="1275" y="753" fill="#7d99a8" font-family="Inter,Arial,sans-serif" font-size="13" text-anchor="end">OBSERVED / EXPLORED</text>
+</svg>

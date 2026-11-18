@@ -671,5 +671,9 @@
   "Traefik Served the Wrong Certificate Before the Route Ran": "라우팅은 맞았는데 Traefik은 다른 인증서를 보여줬다",
   "Traefik Served the Wrong Certificate Before the Route Ran | Jihwan Park": "라우팅은 맞았는데 Traefik은 다른 인증서를 보여줬다 | 박지환",
   "Following real K3s access failures across IP-based TLS, ServiceLB host-port claims, WebSocket upgrades and unresolved DNS/VIP questions—without mistaking one recovered path for an entire healthy network.": "IP 기반 HTTPS 인증서 문제와 ServiceLB의 호스트 포트 충돌, WebSocket 연결 오류를 따라가며 같은 접속 실패라도 원인이 달랐던 경험을 기록했다. DNS와 VIP의 미해결 문제도 구분했다.",
-  "Private HTTPS exposure, Traefik certificate-selection debugging, LoadBalancer port investigation and request-path analysis": "폐쇄망 HTTPS 서비스 노출, Traefik 인증서 선택 오류, LoadBalancer 호스트 포트 충돌과 요청 경로 조사"
+  "Private HTTPS exposure, Traefik certificate-selection debugging, LoadBalancer port investigation and request-path analysis": "폐쇄망 HTTPS 서비스 노출, Traefik 인증서 선택 오류, LoadBalancer 호스트 포트 충돌과 요청 경로 조사",
+  "The Runner, the Login, and the Document Needed Different Permissions": "CI 작업과 로그인, 문서 수정은 서로 다른 권한이 필요했다",
+  "The Runner, the Login, and the Document Needed Different Permissions | Jihwan Park": "CI 작업과 로그인, 문서 수정은 서로 다른 권한이 필요했다 | 박지환",
+  "Why a K3s CI job, a Kaniko registry push, GitLab OAuth sign-in and a document-level policy could not be solved by one administrator role.": "GitLab Runner의 Kubernetes 작업, Kaniko의 Registry Push, GitLab 로그인과 문서별 권한을 운영하며 같은 관리자 권한으로 해결할 수 없었던 경계를 기록했다.",
+  "K3s and CI access boundaries, GitLab OAuth integration, and application-level authorization design investigation": "K3s·CI의 권한 경계, GitLab OAuth 연동과 애플리케이션 객체별 인가 설계 검토"
 }
