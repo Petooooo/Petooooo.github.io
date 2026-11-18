@@ -20,7 +20,7 @@ K3s는 이런 서비스의 공통 실행 환경을 제공했지만 모든 책임
 
 | 주제 | 기록 |
 | --- | --- |
-| 이미지 공급 | [폐쇄망 이미지와 Kaniko CI](/projects/rokaf-private-artifacts-and-ci/) — 베이스 이미지, Runner 실행 환경, Registry 권한과 TLS |
+| 이미지 공급 | [Registry가 멈추자 필요한 이미지도 가져오지 못했다](/projects/rokaf-private-artifacts-and-ci/) — Kaniko 실행 환경, Registry CA, S3 Blob Store와 복구 이미지의 순환 의존성 |
 | 배포 조정 | [GitOps의 두 제어 루프](/projects/rokaf-offline-gitops-delivery/) — 빌드 성공과 Kubernetes 상태 동기화의 차이 |
 | Longhorn 복구 | [Replica를 하나로 줄였더니 Healthy가 됐다](/projects/rokaf-stateful-storage-and-recovery/) — Unknown·Stopped Replica, Attach 장애와 데이터 검증의 차이 |
 | 객체 저장소 | [MinIO 이전과 객체 차이 검증](/projects/rokaf-object-storage-migration/) — 전송, IAM, Lifecycle, 누락 객체 |

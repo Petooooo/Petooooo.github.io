@@ -1,136 +1,154 @@
 ---
-title: "From Offline Images to a Reproducible CI Pipeline"
-description: "The build executor, registry authentication, internal CA and bootstrap decisions behind running Kaniko and Nexus3 without public network access."
-date: "2026-11-15"
+title: "The Cluster Needed Images from a Registry It Could Not Reach"
+description: "Kaniko's misleading missing-executor errors, Runner selection, three certificate trust boundaries, Nexus blob storage, and a private registry's recovery dependency."
+date: "2026-11-18"
 draft: false
 reviewed: true
+reviewStatus: "reviewed"
 sensitivity: sanitized
 category: "Systems Engineering"
 area: "Supply Chain & CI"
-tags: ["K3s", "Nexus3", "GitLab Runner", "Kaniko", "TLS", "CI/CD"]
+tags: ["K3s", "Nexus3", "GitLab Runner", "Kaniko", "TLS", "Container Registry", "CI/CD"]
 type: "implementation-note"
-role: "Private registry, CI pipeline integration, build and delivery troubleshooting"
-period: "Jul 2025–Present"
+role: "Closed-network registry and Kubernetes-executor CI integration, builder/runtime TLS investigation and image bootstrap design"
+period: "2026"
 status: "active"
-techStack: ["K3s", "Nexus3", "GitLab Runner", "Kaniko", "TLS", "CI/CD"]
+techStack: ["K3s", "Nexus3", "GitLab Runner", "Kaniko", "MinIO", "Traefik", "TLS"]
 ---
 
-I wanted a pipeline in which a change could move from Git to an image in our private registry and finally into an internal service **without relying on a successful call to the public internet**. This sounds like ordinary CI/CD until the environment cannot simply fetch a missing base image, package, certificate chain, or build tool.
+I had built a path for source code to become a container image without asking a public registry for help. GitLab Runner started a build in Kubernetes, Kaniko built the image, and Nexus kept the artifact inside the network. That made ordinary deployments much easier to manage.
 
-The platform had a GitLab Runner, an internal Nexus3 service and K3s workloads. I was responsible for making their interactions actually work. My first concern was **reproducibility**: an image that built yesterday must not fail tomorrow merely because an upstream `latest` tag moved or a public package repository disappeared.
+But when Nexus and cluster DNS were unavailable during a later incident, some Pods could not pull the images they needed to come back. Even `IfNotPresent` was not enough to rescue every workload. The recovery mechanism I had counted on depended on services that were themselves down.
+
+This was not the first time an apparently small CI failure had sent me looking at the wrong layer. I had previously seen `/kaniko/executor: No such file or directory` even though the intended image contained the binary. A different failure occurred before Kaniko could run at all: Kubernetes rejected the job image's registry certificate. Nexus itself could also show a working administrative UI while Docker clients were still failing at a different connector.
+
+These were separate investigations spanning early 2026, not a single outage with a tidy fix. What links them is a question I kept returning to: **which component must already work before this step can even begin?**
+
+The original private addresses, port assignments, registry paths, credentials and node identities are omitted. I distinguish confirmed changes from proposals and from recovery scenarios that were never fully exercised.
+
+## The first contract was the job's actual runtime
+
+I used a GitLab Runner with the **Kubernetes executor** rather than requiring a privileged Docker daemon for every build. A job image still had to satisfy two different consumers: GitLab Runner's script execution and Kaniko's image-building executable.
+
+In January, one of the first failures was blunt:
+
+`exec: "sh": executable file not found in $PATH`
+
+The bare Kaniko executor image did not provide the shell expected by the job environment. I built a small, shell-capable **wrapper image** that included a shell and preserved the `/kaniko` executor files. After that change the previously failing Kaniko CI job began to execute. This was a concrete fix to the image/runtime contract, not a change in Nexus permissions.
+
+The next failure appeared at a different boundary: a Docker-configuration file variable was unset when the script tried to copy it. The script could now run, but it did not yet have the registry credentials/configuration delivered in the form it expected. Making an executable available and giving that executable the right credentials are independent accomplishments.
+
+In February, the missing-executor symptom returned after server restarts. The intended image showed `/kaniko/executor` when examined interactively, while the failing job claimed the path was missing. A missing path in a log was no longer sufficient evidence that the image lacked the file.
+
+The decisive question became: **which Runner, executor and filesystem actually ran this job?**
+
+During a March investigation, the environment reported a hostname and filesystem consistent with a different execution context from the Kubernetes job image I expected. The Runner identifiers also did not match the intended setup. The Helm values did not pin jobs with the expected `runners.tags` / `runUntagged` policy, leaving selection ambiguous. That was a strong reason to investigate Runner assignment rather than rebuild Kaniko yet again.
+
+I do not have a preserved comprehensive audit proving every subsequent job landed on the correct Runner. The evidence supports an earlier wrapper-image fix **and** a later Runner-selection/environment investigation. Those two episodes should not be collapsed into one permanent "Kaniko binary missing" root cause.
+
+| What I saw | What I had to identify first | Supported outcome |
+| --- | --- | --- |
+| `sh` missing | Whether Runner could execute a script in this image | Shell-capable wrapper got the job running |
+| `/kaniko/executor` missing after restart | Actual Runner, executor, container and mounts | Environment mismatch investigated; universal fix not proved |
+| Empty Docker-config file variable | Whether a File-type CI variable existed in that job | Missing runtime configuration identified |
+| Push fails after build starts | Destination TLS, credential and repository scope | Separate registry investigation needed |
+
+GitLab's Kubernetes-executor documentation and Kaniko's debug-image guidance explain why an image suitable for executing a binary does not necessarily satisfy a CI runner's shell contract. These are general mechanisms; the actual Runner selection remains an operational fact to check on each failed job.
+
+## An x509 error can occur before Kaniko exists
+
+I encountered registry-certificate problems at more than one stage. It was tempting to say "Kaniko does not trust the CA" whenever a CI job contained an `x509` error, but that diagnosis only makes sense if Kaniko had actually started and was making the connection.
+
+In one March failure, the x509 verification error appeared while Kubernetes was **pulling the CI job image**, before the Kaniko script had begun. A certificate added inside the Kaniko image could not help: the node's container runtime needed to pull that image in order to start the container.
+
+A different connection occurred after the build began, when Kaniko pushed the resulting image to Nexus. In that case the **builder container's trust store** mattered. I had addressed a build/push certificate problem by preparing a CA-aware builder image; that did not imply that every K3s node also trusted the same CA.
+
+There was a third caller: a workstation or another machine using Docker to log in, pull or push. Docker maintained its own trust configuration for registry endpoints. An HTTPS connection could fail because the signing root was unknown, or because the certificate did not contain the IP address or DNS name actually used by the client.
 
 <figure className="project-concept-figure">
-  <a href="/figures/journals/ci-dependency-map.svg" target="_blank" rel="noopener noreferrer" aria-label="Open diagram full size">
-    <img src="/figures/journals/ci-dependency-map.svg" alt="The closed-network build depends on an executor, verified base images, private package sources, registry permissions and a functioning deployment target." loading="lazy" decoding="async" />
+  <a href="/figures/journals/registry-tls-trust-boundaries.svg" target="_blank" rel="noopener noreferrer" aria-label="Open a matrix of separate registry TLS validation boundaries for node image pull, Kaniko push and developer Docker clients">
+    <img src="/figures/journals/registry-tls-trust-boundaries.svg" alt="Three-row TLS trust boundary matrix. K3s/containerd pulling a CI image happens before the Pod exists; Kaniko image push uses the builder container's CA trust; a workstation Docker client uses its own registry CA configuration. Identity via certificate SAN is checked independently. A green result in one row does not prove the others." loading="lazy" decoding="async" />
   </a>
-  <figcaption>The closed-network build depends on an executor, verified base images, private package sources, registry permissions and a functioning deployment target. This is a conceptual illustration, not an internal deployment diagram.</figcaption>
+  <figcaption>The connection initiator determines which CA bundle needs attention. The diagram distinguishes observed failure layers from a full end-to-end test, not real registry endpoints.</figcaption>
 </figure>
 
-## 1. Why the usual build recipe was not enough
+I also worked through a certificate-generation issue in which a Java certificate parser rejected duplicate extensions. That reinforced the need to verify the actual certificate chain and Subject Alternative Names rather than assuming a generated keystore was correct. A useful test order was: inspect the certificate and verify its issuer, confirm the requested identity is in the SAN, then test the intended caller. A Docker `/v2/` probe returning `401 Unauthorized` may mean HTTPS reached a protected registry API; an `x509` failure occurred earlier, before application authorization.
 
-In a connected environment, a Dockerfile can fetch its base image and the package manager can resolve dependencies as needed. In a restricted network, every dependency becomes an explicit **supply-chain input**. I therefore approached image building in separate stages: prepare compatible source images in a connected setting, transfer them through an approved path, mirror them internally, and build against fixed image references.
+K3s documents node-specific registry trust through `registries.yaml`, including a CA file, while Docker clients have their own endpoint-scoped CA mechanism. This is why I would not solve certificate problems by disabling verification globally: it hides the exact trust boundary that is still broken.
 
-I preferred **fixed tags or digests** over `latest` for the parts that would otherwise be difficult to reproduce. A build's success depends not only on the Dockerfile but on the builder image, CA trust, package mirror content and destination registry privileges.
+## The Nexus homepage was not the registry protocol
 
-| Component | The question I asked |
-| --- | --- |
-| Runner | Which Kubernetes executor and job image actually starts the work? |
-| Kaniko | Is `/kaniko/executor` present, executable and compatible with the job entry point? |
-| Base images | Is every stage reachable from an internal source? |
-| Package manager | Does the internal mirror contain the precise packages the lockfile requires? |
-| Nexus3 | Can the job authenticate **and** push to the intended hosted repository path? |
-| Runtime | Can K3s nodes verify certificates and pull the final image? |
+Nexus had another distinction that was easy to miss. The management UI and Docker Registry API could be exposed through different connectors and ports. I wanted a small, controlled external surface: one route for the UI, another for the Docker API, and restricted node exposure rather than every Kubernetes node accepting all traffic.
 
-## 2. The build environment that looked correct but was not
+This led me through Helm Service configuration, connector listeners, NodePort and TCP routing choices. But making the UI load was not equivalent to making a Docker client's `/v2/` request reach the correct repository. A `404` after a proxy or connector change was a reason to inspect the request's destination and URL mapping; an `x509` error pointed at a different, earlier trust problem.
 
-At one stage I encountered a job image that appeared suitable for Kaniko but did not expose the expected `/kaniko/executor` at runtime. It was easy to assume that the pipeline syntax or the runner itself was wrong. Instead, the immediate diagnostic question was much smaller: **what binary and entry point were actually present in the container?**
+I also investigated a case where one repository could be pushed to while another returned `401`. Reaching Nexus proved the network path was alive, but it did not establish that the active credential had the right repository-scoped privileges. A working username does not imply authorization for every hosted Docker repository or every image path.
 
-I inspected the packaged executor path and image behavior, then adjusted the build image packaging and entry-point handling before focusing on registry pushes. This was a useful reminder that an orchestration error may originate **inside the image**, before any infrastructure-level permission is involved.
+I did not retain final, independently verified push/pull results for every connector, repository and client. The useful success criterion would have been a complete **tag → login → push → digest verification → pull** for the specific endpoint, then the same test from the actual Kubernetes nodes. The observed error codes alone do not constitute that test.
 
-A related dependency problem appeared with a frontend build: a workspace-based Storybook image failed with errors such as `storybook: not found` and `spawn ENOENT`. The first useful distinction was between an unavailable network mirror and dependencies that had simply **not been installed into the image's effective workspace**. Those require different fixes; retrying the registry would not restore a missing local CLI.
+The site’s earlier [service-integration record](/projects/rokaf-self-hosted-services-integration/) covers the UI/API distinction more briefly. Here it matters because a pipeline can be correctly built and still have no usable artifact destination.
 
-## 3. A 401 response was not necessarily a bad password
+## MinIO could hold blob data without becoming Nexus's entire state
 
-Later, one repository pushed images while another failed with a **401**, despite similar CI configuration. Because the transport reached the registry, I treated that as different from a TLS handshake failure.
+I wanted Nexus binary artifacts on a shared S3-compatible store while its application state remained on persistent storage. The Helm values needed to enable persistence; the chart also brought operational helper-image dependencies such as `bashImage` that had to be available inside the isolated network.
 
-I compared the successful and failing contexts across **destination path, job variables, builder Docker configuration and repository permissions**. Nexus3 has separate concepts of identity, Docker registry token exchange, and repository-scoped grants. A credential can be valid but lack the correct push action for one image path.
+For the object-store integration I enabled **path-style S3 addressing** against MinIO. The observed endpoint then resolved correctly, and objects were created in the chosen bucket under a prefix incorporating the Blob Store's name. This was real evidence that Nexus wrote objects through the configured MinIO path.
 
-That distinction was especially important when the target image name included nested repository components. Instead of immediately granting broad administrative rights to make the error disappear, I considered which token, path and repository permission were actually being exercised. The investigation also taught me to avoid printing secrets while checking which variable was effective in a job.
+It was not evidence of a fully tested **Nexus high-availability** design. A functional S3 Blob Store does not make Nexus metadata, scheduled tasks, database state and connector configuration independently recoverable. Moving the binary payload changes its storage failure domain; it does not automatically make every other part stateless.
 
-## 4. TLS and node placement were separate failure planes
+Nor did I establish by benchmark that MinIO-backed blob reads were faster than local HDD in this specific deployment. Storage latency, concurrency, object size, erasure coding and network overhead mattered. I was constrained to hardware with spinning disks for that placement, so "use a fast SSD" was not an available shortcut.
 
-Internal HTTPS required the clients involved in build and deployment to recognize the private CA and the identity on the certificate. The builder, container runtime and developer workstation can have different trust stores. An image push failing on certificate verification is not the same problem as a registry authorization error.
+The practical question became what to restore together. If the object store survived but Nexus metadata was inconsistent with it, the registry could still fail to serve an artifact. Conversely, a healthy UI and metadata database would be of little use if the Blob Store were inaccessible. I treated `persistence.enabled`, the object store and the Docker connector as three different operational contracts.
 
-I also observed that a pipeline could behave differently depending on **which worker node received the job**. Connectivity and policy at the host layer mattered even though the YAML was unchanged. Node placement was useful to isolate a failing environment; it was not a substitute for understanding the connectivity asymmetry.
+## The cycle I could not restart my way out of
 
-## 5. The bootstrap problem that made me rethink recovery
+A later incident put these dependencies in a more uncomfortable light. When Nexus and CoreDNS were unavailable at the same time, some workloads encountered image-pull failures during recovery. I had expected `imagePullPolicy: IfNotPresent` to help, but that policy only allows reuse when the requested image is actually present and usable **on the node trying to start the Pod**. It is not a shared-cluster cache, an artifact backup or a guarantee after rescheduling.
 
-A registry hosted by the same platform it supplies can become a circular dependency: the registry service needs an image to recover, but the only image source is the unavailable registry. I investigated separating a **minimal bootstrap source** from the general artifact supply so essential services would not depend exclusively on themselves.
+The failure mode is straightforward:
 
-The design decision is subtle: more replication of a single dependency is not the same as removing that dependency from the **recovery path**. This led me to think about what must already exist before the first job, first container pull or first rebuild can succeed.
+- A node needs a critical platform image.
+- The configured image reference points to Nexus.
+- Nexus is unavailable, and the normal DNS/registry path may also be unavailable.
+- Nexus's own recovery Pod or its dependencies may need an image from that unavailable source.
 
-## 6. Reconstructing the actual dependency graph
+<figure className="project-concept-figure">
+  <a href="/figures/journals/registry-bootstrap-cycle-cut.svg" target="_blank" rel="noopener noreferrer" aria-label="Open a circular registry recovery dependency and independent bootstrap cut">
+    <img src="/figures/journals/registry-bootstrap-cycle-cut.svg" alt="A circular dependency diagram rendered as two nested loops. The observed risk is that K3s, DNS and registry recovery needs images from Nexus while Nexus is unavailable. The proposed cut is a minimal independently supplied set of critical images, preloaded to suitable nodes or served by a separate bootstrap source. The alternate route is labeled evaluated, not verified by a full drill." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>The failure was about **availability of the artifact during recovery**, not only the replica count of the registry. An independent bootstrap source is a design option; a completed disaster-recovery exercise is not claimed.</figcaption>
+</figure>
 
-The most useful exercise was to ask what **must already be working** before a new image can be built and deployed. In a connected environment that dependency graph is often hidden by package registries and public image mirrors. In a closed network it becomes an operational requirement.
+I evaluated keeping a **small, independent inventory of recovery images**, using node-local preloads or a bootstrap source that did not depend on the failing Nexus instance. K3s supports importing images into its containerd store, but the exact cache placement and recovery procedure still need to be tested on the actual nodes. I also considered a separate minimal registry; placing that registry inside the same cluster without independently available dependencies would just move the cycle.
 
-| Artifact | Producer/source | Needed by | Failure if missing |
-| --- | --- | --- | --- |
-| Builder image | Approved image preparation process | GitLab Runner job | The job cannot start its own build tooling |
-| Kaniko executor | Content of the actual builder image | Build script | Command not found / non-executable path |
-| Base image | Private image repository | Dockerfile stage | Build cannot resolve the parent layer |
-| Dependency packages | Internal package mirror/cache | Application build step | Tool or package unavailable |
-| Internal CA trust | Approved certificate distribution | Builder and runtime | TLS handshake or verification failure |
-| Registry authorization | Nexus repository policy and job credential | Image push | Token exchange or push denied |
-| Target image | Completed CI job | K3s runtime | Image pull or startup failure |
+This is a dependency **cut**, not automatically a high-availability solution. A second registry that depends on the same DNS, storage or control-plane failure domain may still be unavailable when needed. I cannot claim that the complete alternative recovered the cluster in a simulated simultaneous failure; the preserved evidence establishes the outage symptoms and the architecture I evaluated in response.
 
-The table also shows why a successful job on one runner could not prove that every worker node or runtime had the same dependencies available.
+## I began checking where the failure occurred before choosing a fix
 
-### Why I separated packaging from authorization
+The incidents changed the order in which I investigated a failed CI run:
 
-The Kaniko executor issue was resolved by inspecting **the actual contents and entry point of the image**, not by expanding CI permissions. I treated the missing executable as a packaging defect. Later, registry authorization problems belonged to another layer entirely.
-
-This sounds obvious in retrospect, but without a dependency graph an operator can spend hours changing tokens when the binary itself does not exist—or rebuilding images when the request actually reached Nexus but was denied.
-
-## 7. A reproducibility checklist
-
-For a representative, non-sensitive CI pipeline I would record:
-
-1. **Source revision:** the Git commit or reproducible source package.
-2. **Builder identity:** exact image reference or digest and known executor path.
-3. **Dependency closure:** all base stages, OS packages and application packages resolvable internally.
-4. **Credential scope:** the job can perform only required registry actions.
-5. **Trust chain:** the builder trusts the registry certificate and the runtime separately trusts the image source.
-6. **Result:** image digest and the workload revision that consumed it.
-7. **Recovery input:** a minimal set of images/configuration that exists independently of the service being recovered.
-
-This is a **design checklist derived from the experience**, not a published copy of the actual operational pipeline.
-
-## 8. Why a registry error cannot be one diagnosis
-
-| Symptom | Likely boundary | Evidence I would request |
+| Observation | First boundary to inspect | What it does **not** prove |
 | --- | --- | --- |
-| `/kaniko/executor` missing | Builder image packaging | Executable existence and image metadata |
-| Package manager cannot find a tool | Dependency installation/mirror | Lockfile, workspace and installed packages |
-| TLS unknown issuer | Trust root | Presented certificate and trusted issuer set |
-| Certificate name mismatch | Endpoint identity | Requested host/IP versus SAN |
-| Registry returns HTTP 401 | Authentication/authorization | Token exchange, repository path and scoped action |
-| Some runners work, others fail | Node/network/environment | Controlled placement comparison |
-| Registry recovery depends on itself | Bootstrap architecture | Minimal dependency path without registry |
+| `sh` unavailable in a Kaniko job | Actual job image / Runner script contract | Nexus permissions are broken |
+| `/kaniko/executor` missing although image contains it | Runner selection, runtime filesystem and mounts | Binary missing in every environment |
+| `x509` while pulling job image | K3s node/containerd and registry certificate | Kaniko itself has started |
+| `x509` during Kaniko push | Builder CA and endpoint certificate identity | Every node trusts the same CA |
+| `401` from Docker registry | Auth token, scope, repository permissions | Wrong password is the only cause |
+| `404` on registry route | Connector/path mapping and requested API | Nexus metadata is necessarily lost |
+| UI and object writes work | Administrative path and configured S3 blob access | Docker push/pull and recovery have passed |
+| `IfNotPresent` but pull still fails | Exact image presence on selected node, DNS, registry path | Cluster-wide cached images exist |
 
-For the repository-specific 401 cases, I would not label every instance fully resolved unless the exact repo permissions and active job credentials had been correlated. **Reaching the registry, authenticating successfully and being authorized to push are three distinct milestones.**
+If I were packaging the system again, I would preserve the identity of the **source revision, builder image, base images, internal package mirror, registry certificate, published image digest and the manifest that consumes it**. That is a reproducibility inventory, not a claim that all of those identities were automatically promoted by the GitOps controller.
 
-## 9. What I would measure in a future isolated lab
+A build succeeding does not automatically update desired state. The companion [offline GitOps record](/projects/rokaf-offline-gitops-delivery/) examines that separate promotion and reconciliation boundary.
 
-A small testbed could deliberately remove one dependency at a time and record whether a clean build succeeds. The controlled variables would include builder digest, base image availability, CA trust, write permission and runner placement. A comparable result should specify which dependency was changed, how the job failed, and whether it recovered after restoring that dependency.
+I had started by thinking of Nexus as a destination for Docker images. I ended up thinking of it as a service the whole cluster might need before it could repair itself. **The most serious problem was not that a Push failed; it was that a recovery step could ask an unavailable dependency to supply the very image needed to restore that dependency.**
 
-I would use this to test a concrete reliability question: **Can an essential platform component be restored without depending on the same component's own repository endpoint?**
+## References
 
-That question is more durable than any individual image name or CI tool version.
-
-## What changed in my approach
-
-I stopped treating an image-push failure as one generic CI problem and instead classified **packaging, package availability, authentication, authorization, TLS trust, node connectivity and bootstrap availability**. That made the diagnostic sequence more disciplined and made the overall delivery process easier to reason about.
-
-The public record does not include internal endpoints or production credentials. A few repository-specific 401 cases were still being narrowed down when I recorded them; where I had a confirmed fix I distinguish it from cases where I had only isolated the likely layer.
-
-**Related records:** [Offline GitOps and Argo CD delivery decisions](/projects/rokaf-offline-gitops-delivery/) · [networking and certificate trust](/projects/rokaf-networking-and-tls/) · [ROKAF platform overview](/projects/independent-on-premises-k3s-platform-engineering/).
+- [GitLab Runner — Kubernetes executor](https://docs.gitlab.com/runner/executors/kubernetes/)
+- [Kaniko — Debug image and executor](https://github.com/GoogleContainerTools/kaniko)
+- [K3s — Private registry CA and mirrors](https://docs.k3s.io/installation/private-registry)
+- [K3s — Image import](https://docs.k3s.io/add-ons/import-images)
+- [Sonatype — Docker Repository Connector](https://support.sonatype.com/hc/en-us/articles/115013153887-Docker-Repository-Configuration-and-Client-Connection)
+- [Sonatype — Docker Authentication](https://help.sonatype.com/en/docker-authentication.html)
+- [Sonatype — Blob Stores](https://help.sonatype.com/en/blob-stores.html)

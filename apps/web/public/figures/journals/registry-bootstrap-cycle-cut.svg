@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1580 930" role="img" aria-labelledby="t d"><title id="t">A registry recovery loop, and the independent input that cuts it</title><desc id="d">Two contrasting dependency-ring diagrams. Left, the observed risk: Kubernetes needs images to start Nexus and CoreDNS, while those images may only be available from Nexus and DNS is unavailable. ImagePullPolicy IfNotPresent does not guarantee node-local cache presence. Right, a proposed bootstrap cut inserts a node-local preloaded critical image set or an independent source. The proposed recovery was not verified by a full drill.</desc>
+<defs><marker id="arr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0 0L6 3L0 6Z" fill="#e3a5a3"/></marker><marker id="good" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0 0L6 3L0 6Z" fill="#86dfbc"/></marker></defs>
+<rect x="0" y="0" width="1580" height="930" rx="0" fill="#081420" stroke="#081420" stroke-width="1.6"/>
+<text x="58" y="69" font-size="36" font-weight="760" font-family="Inter,Noto Sans KR,Arial,sans-serif" fill="#f3faff" text-anchor="start">What pulls the image that restarts the registry?</text>
+<text x="58" y="108" font-size="19" font-weight="500" font-family="Inter,Noto Sans KR,Arial,sans-serif" fill="#a8c8da" text-anchor="start">Nexus and cluster DNS can fail together; a pull policy is not a recovery image supply.</text>
+<path d="M58 130H1522" fill="none" stroke="#315267" stroke-width="1" stroke-linecap="round"  />
+<rect x="54" y="157" width="717" height="651" rx="18" fill="#142a3b" stroke="#516b7d" stroke-width="1.6"/>
+<rect x="801" y="157" width="725" height="651" rx="18" fill="#122d32" stroke="#4f817a" stroke-width="1.6"/>
+<text x="80" y="203" font-size="20" font-weight="750" font-family="Inter,Noto Sans KR,Arial,sans-serif" fill="#efb5b1" text-anchor="start">OBSERVED FAILURE RISK</text>
+<text x="827" y="203" font-size="20" font-weight="750" font-family="Inter,Noto Sans KR,Arial,sans-serif" fill="#9ae0c4" text-anchor="start">PROPOSED DEPENDENCY CUT</text>
+<circle cx="415" cy="475" r="187" fill="#263341" stroke="#b9838e" stroke-width="2"/>
+<circle cx="1160" cy="475" r="187" fill="#1c3939" stroke="#69a995" stroke-width="2"/>
+<path d="M415 287A188 188 0 0 1 600 441" stroke="#e8a9ac" stroke-width="7" stroke-linecap="round" fill="none" marker-end="url(#arr)"/>
+<path d="M594 525A188 188 0 0 1 252 549" stroke="#e8a9ac" stroke-width="7" stroke-linecap="round" fill="none" marker-end="url(#arr)"/>
+<path d="M245 417A188 188 0 0 1 393 287" stroke="#e8a9ac" stroke-width="7" stroke-linecap="round" fill="none" marker-end="url(#arr)"/>
+<path d="M1160 287A188 188 0 0 1 1345 441" stroke="#78d4af" stroke-width="7" stroke-linecap="round" fill="none" marker-end="url(#good)"/>
+<path d="M1343 527L1320 552" stroke="#78d4af" stroke-width="7" stroke-linecap="round" fill="none" marker-end="url(#good)"/>
+<path d="M1060 602H1271" stroke="#86dfbc" stroke-width="2.5" stroke-dasharray="8 8" fill="none"/>
+<text x="1093" y="638" font-size="17" font-weight="750" font-family="Inter,Noto Sans KR,Arial,sans-serif" fill="#9ae0c4" text-anchor="start">CYCLE CUT</text>
+<path d="M985 452A188 188 0 0 1 1135 288" stroke="#78d4af" stroke-width="7" stroke-linecap="round" fill="none" marker-end="url(#good)"/>
+<text x="415" y="429" font-size="30" font-weight="760" font-family="Inter,Noto Sans KR,Arial,sans-serif" fill="#fff2f1" text-anchor="middle">NEXUS</text>
+<text x="415" y="462" font-size="23" font-weight="740" font-family="Inter,Noto Sans KR,Arial,sans-serif" fill="#efa9ad" text-anchor="middle">unavailable</text>
+<text x="415" y="499" font-size="18" font-weight="530" font-family="Inter,Noto Sans KR,Arial,sans-serif" fill="#e4dce3" text-anchor="middle">DNS + image pull</text>
+<text x="415" y="527" font-size="18" font-weight="530" font-family="Inter,Noto Sans KR,Arial,sans-serif" fill="#e4dce3" text-anchor="middle">depend on it</text>
+<text x="1160" y="424" font-size="25" font-weight="770" font-family="Inter,Noto Sans KR,Arial,sans-serif" fill="#e1fff1" text-anchor="middle">INDEPENDENT</text>
+<text x="1160" y="457" font-size="25" font-weight="770" font-family="Inter,Noto Sans KR,Arial,sans-serif" fill="#e1fff1" text-anchor="middle">IMAGE SUPPLY</text>
+<text x="1160" y="493" font-size="19" font-weight="550" font-family="Inter,Noto Sans KR,Arial,sans-serif" fill="#a8dec9" text-anchor="middle">preload / separate</text>
+<text x="1160" y="524" font-size="19" font-weight="550" font-family="Inter,Noto Sans KR,Arial,sans-serif" fill="#a8dec9" text-anchor="middle">bootstrap source</text>
+<rect x="97" y="661" width="630" height="107" rx="12" fill="#342b39" stroke="#aa8994" stroke-width="1.6"/>
+<text x="116" y="701" font-size="18" font-weight="750" font-family="Inter,Noto Sans KR,Arial,sans-serif" fill="#f2b2ba" text-anchor="start">RECOVERY BLOCKED</text>
+<text x="116" y="732" font-size="17" font-weight="500" font-family="Inter,Noto Sans KR,Arial,sans-serif" fill="#e8d6de" text-anchor="start">The missing image cannot be pulled from a down registry.</text>
+<rect x="842" y="661" width="641" height="107" rx="12" fill="#233d3e" stroke="#68a994" stroke-width="1.6"/>
+<text x="866" y="701" font-size="18" font-weight="760" font-family="Inter,Noto Sans KR,Arial,sans-serif" fill="#a3e5c9" text-anchor="start">DESIGN OPTION · NOT DRILL-VERIFIED</text>
+<text x="866" y="732" font-size="17" font-weight="500" font-family="Inter,Noto Sans KR,Arial,sans-serif" fill="#dbf4e8" text-anchor="start">Critical artifacts are available without relying on Nexus.</text>
+<rect x="55" y="828" width="1470" height="59" rx="10" fill="#1c3342" stroke="#3d6477" stroke-width="1.6"/>
+<text x="79" y="865" font-size="18" font-weight="500" font-family="Inter,Noto Sans KR,Arial,sans-serif" fill="#c8e0ed" text-anchor="start">IfNotPresent checks availability on the selected node. It does not create a cluster-wide backup.</text>
+<text x="56" y="919" font-size="14" font-weight="500" font-family="Inter,Noto Sans KR,Arial,sans-serif" fill="#8eafbd" text-anchor="start">The circles describe dependencies, not the actual node placement, high-availability topology or a measured recovery time.</text>
+</svg>

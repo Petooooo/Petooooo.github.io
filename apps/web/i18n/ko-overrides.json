@@ -653,5 +653,12 @@
   "Heartbeat": "Heartbeat",
   "Retries": "재시도",
   "Pika": "Pika",
-  "Python": "Python"
+  "Python": "Python",
+  "The Cluster Needed Images from a Registry It Could Not Reach": "Registry가 멈추자 필요한 이미지도 가져오지 못했다",
+  "The Cluster Needed Images from a Registry It Could Not Reach | Jihwan Park": "Registry가 멈추자 필요한 이미지도 가져오지 못했다 | 박지환",
+  "Kaniko's misleading missing-executor errors, Runner selection, three certificate trust boundaries, Nexus blob storage, and a private registry's recovery dependency.": "Kaniko 실행 파일 오류와 Runner 선택, 사설 CA, Nexus의 S3 Blob Store, 그리고 Registry의 복구 이미지가 또 Registry에 의존했던 문제를 정리했다.",
+  "Closed-network registry and Kubernetes-executor CI integration, builder/runtime TLS investigation and image bootstrap design": "폐쇄망 Nexus·Kaniko CI 구축, Runner와 CA 경계 조사, 이미지 부트스트랩 설계",
+  "Container Registry": "Container Registry",
+  "MinIO": "MinIO",
+  "Traefik": "Traefik"
 }

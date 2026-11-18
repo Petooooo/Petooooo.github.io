@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1560 920" role="img" aria-labelledby="t d"><title id="t">Registry TLS is checked by three independent clients</title><desc id="d">Diagnostic evidence matrix for three distinct TLS connections. Before the CI job begins K3s containerd pulls the job image and uses node registry CA configuration; during a running build Kaniko pushes using the builder's own CA bundle; a Docker workstation checks its own endpoint-scoped CA trust. Certificate identity/SAN applies to each client. These are not a single shared trust store.</desc>
+<rect x="0" y="0" width="1560" height="920" rx="0" fill="#081420" stroke="#081420" stroke-width="1.5"/>
+<text x="54" y="65" fill="#f2faff" font-size="35" font-weight="750" font-family="Inter,Noto Sans KR,Arial,sans-serif">The same x509 error can belong to different clients</text>
+<text x="54" y="105" fill="#a9c9d8" font-size="19" font-weight="500" font-family="Inter,Noto Sans KR,Arial,sans-serif">Locate the initiator before changing a certificate or bypassing verification.</text>
+<path d="M54 137H1504" fill="none" stroke="#32596f" stroke-width="1" stroke-linecap="round"/>
+<rect x="54" y="173" width="280" height="74" rx="10" fill="#1d3a4e" stroke="#476e83" stroke-width="1.5"/>
+<text x="71" y="220" fill="#dff0fa" font-size="18" font-weight="750" font-family="Inter,Noto Sans KR,Arial,sans-serif">WHEN</text>
+<rect x="345" y="173" width="339" height="74" rx="10" fill="#1d3a4e" stroke="#476e83" stroke-width="1.5"/>
+<text x="362" y="220" fill="#dff0fa" font-size="18" font-weight="750" font-family="Inter,Noto Sans KR,Arial,sans-serif">TLS CLIENT</text>
+<rect x="696" y="173" width="400" height="74" rx="10" fill="#1d3a4e" stroke="#476e83" stroke-width="1.5"/>
+<text x="713" y="220" fill="#dff0fa" font-size="18" font-weight="750" font-family="Inter,Noto Sans KR,Arial,sans-serif">TRUST STORE TO INSPECT</text>
+<rect x="1108" y="173" width="397" height="74" rx="10" fill="#1d3a4e" stroke="#476e83" stroke-width="1.5"/>
+<text x="1125" y="220" fill="#dff0fa" font-size="18" font-weight="750" font-family="Inter,Noto Sans KR,Arial,sans-serif">WHAT A FAILURE PROVES</text>
+<rect x="54" y="262" width="1451" height="137" rx="12" fill="#322e3a" stroke="#486a7f" stroke-width="1.5"/>
+<rect x="54" y="262" width="11" height="137" rx="5" fill="#eeb5a3" stroke="#eeb5a3" stroke-width="1.5"/>
+<text x="78" y="306" fill="#eeb5a3" font-size="18" font-weight="760" font-family="Inter,Noto Sans KR,Arial,sans-serif">BEFORE JOB STARTS</text>
+<text x="362" y="315" fill="#f0f9ff" font-size="22" font-weight="690" font-family="Inter,Noto Sans KR,Arial,sans-serif">K3s / containerd</text>
+<text x="716" y="315" fill="#d9eefa" font-size="21" font-weight="630" font-family="Inter,Noto Sans KR,Arial,sans-serif">Node registry CA / SAN</text>
+<text x="1128" y="313" fill="#edf2f8" font-size="18" font-weight="540" font-family="Inter,Noto Sans KR,Arial,sans-serif">Image pull x509; Kaniko not running</text>
+<path d="M336 282V379" fill="none" stroke="#426678" stroke-width="1.5" stroke-linecap="round"/>
+<path d="M686 282V379" fill="none" stroke="#426678" stroke-width="1.5" stroke-linecap="round"/>
+<path d="M1098 282V379" fill="none" stroke="#426678" stroke-width="1.5" stroke-linecap="round"/>
+<text x="78" y="368" fill="#a8c7d6" font-size="17" font-weight="520" font-family="Inter,Noto Sans KR,Arial,sans-serif">Pod has not started</text>
+<rect x="54" y="416" width="1451" height="137" rx="12" fill="#1b3448" stroke="#486a7f" stroke-width="1.5"/>
+<rect x="54" y="416" width="11" height="137" rx="5" fill="#8bcbe1" stroke="#8bcbe1" stroke-width="1.5"/>
+<text x="78" y="460" fill="#8bcbe1" font-size="18" font-weight="760" font-family="Inter,Noto Sans KR,Arial,sans-serif">DURING IMAGE BUILD</text>
+<text x="362" y="469" fill="#f0f9ff" font-size="22" font-weight="690" font-family="Inter,Noto Sans KR,Arial,sans-serif">Kaniko builder</text>
+<text x="716" y="469" fill="#d9eefa" font-size="21" font-weight="630" font-family="Inter,Noto Sans KR,Arial,sans-serif">Builder CA bundle / SAN</text>
+<text x="1128" y="467" fill="#edf2f8" font-size="18" font-weight="540" font-family="Inter,Noto Sans KR,Arial,sans-serif">Push x509; node pull may be fine</text>
+<path d="M336 436V533" fill="none" stroke="#426678" stroke-width="1.5" stroke-linecap="round"/>
+<path d="M686 436V533" fill="none" stroke="#426678" stroke-width="1.5" stroke-linecap="round"/>
+<path d="M1098 436V533" fill="none" stroke="#426678" stroke-width="1.5" stroke-linecap="round"/>
+<text x="78" y="522" fill="#a8c7d6" font-size="17" font-weight="520" font-family="Inter,Noto Sans KR,Arial,sans-serif">Pod is running</text>
+<rect x="54" y="570" width="1451" height="137" rx="12" fill="#1e3938" stroke="#486a7f" stroke-width="1.5"/>
+<rect x="54" y="570" width="11" height="137" rx="5" fill="#a5ddc2" stroke="#a5ddc2" stroke-width="1.5"/>
+<text x="78" y="614" fill="#a5ddc2" font-size="18" font-weight="760" font-family="Inter,Noto Sans KR,Arial,sans-serif">FROM DOCKER CLIENT</text>
+<text x="362" y="623" fill="#f0f9ff" font-size="22" font-weight="690" font-family="Inter,Noto Sans KR,Arial,sans-serif">Workstation Docker</text>
+<text x="716" y="623" fill="#d9eefa" font-size="21" font-weight="630" font-family="Inter,Noto Sans KR,Arial,sans-serif">Docker endpoint CA / SAN</text>
+<text x="1128" y="621" fill="#edf2f8" font-size="18" font-weight="540" font-family="Inter,Noto Sans KR,Arial,sans-serif">Client x509; other paths independent</text>
+<path d="M336 590V687" fill="none" stroke="#426678" stroke-width="1.5" stroke-linecap="round"/>
+<path d="M686 590V687" fill="none" stroke="#426678" stroke-width="1.5" stroke-linecap="round"/>
+<path d="M1098 590V687" fill="none" stroke="#426678" stroke-width="1.5" stroke-linecap="round"/>
+<text x="78" y="676" fill="#a8c7d6" font-size="17" font-weight="520" font-family="Inter,Noto Sans KR,Arial,sans-serif">Different machine</text>
+<rect x="54" y="738" width="1451" height="116" rx="14" fill="#1b3345" stroke="#62849a" stroke-width="1.5"/>
+<text x="81" y="779" fill="#f3f8fd" font-size="22" font-weight="710" font-family="Inter,Noto Sans KR,Arial,sans-serif">A /v2/ HTTP 401 is not an x509 handshake failure</text>
+<text x="81" y="817" fill="#c0dce8" font-size="19" font-weight="500" font-family="Inter,Noto Sans KR,Arial,sans-serif">After TLS succeeds, repository auth and connector path are separate tests.</text>
+<text x="55" y="895" fill="#94b3c3" font-size="15" font-weight="500" font-family="Inter,Noto Sans KR,Arial,sans-serif">A successful test for one caller does not mean that the other callers trust the same root CA or endpoint name.</text>
+</svg>
