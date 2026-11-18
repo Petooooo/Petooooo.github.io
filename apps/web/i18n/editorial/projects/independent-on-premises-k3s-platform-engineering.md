@@ -35,7 +35,7 @@ K3s는 이런 서비스의 공통 실행 환경을 제공했지만 모든 책임
 | 외부 접속 | [ServiceLB와 호스트 포트 충돌](/projects/rokaf-service-lb-hostport-conflict/) — VIP 주소와 포트 자원의 소유권 |
 | GPU | [스케줄링과 실제 가용 용량](/projects/rokaf-gpu-scheduling-and-capacity/) — Time-slicing, MIG, VRAM, 복구 시 배치 |
 | 관측성 | [사라진 메트릭의 원인 추적](/projects/rokaf-observability-and-failure-evidence/) — Prometheus WAL과 DCGM Exporter 배치 |
-| 비동기 처리 | [RabbitMQ와 멱등성](/projects/rokaf-async-workers-and-idempotency/) — 메시지 재전송과 작업 결과의 중복 방지 |
+| RabbitMQ Worker | [Worker는 계속 처리하는데 메시지가 다시 돌아왔다](/projects/rokaf-async-workers-and-idempotency/) — Shovel 메시지 이전, Heartbeat 장애와 Claim·Lease 기반 작업 복구 |
 
 원인이 끝까지 확정되지 않았던 조사도 따로 남겼다. [Langfuse v4 마이그레이션](/projects/rokaf-langfuse-v4-migration-field-notes/)에서는 Timeout이 떠도 내부 진행 상태가 완료일 수 있다는 것을 확인했고, [DNS와 VIP 문제](/projects/rokaf-dns-vip-open-investigations/)에서는 하나의 증상에 여러 경로가 관여할 수 있다는 한계를 남겼다. [GPU 리소스 발견](/projects/rokaf-gpu-discovery-open-investigation/)과 [Control Plane 장애](/projects/rokaf-control-plane-incident-log/)도 마찬가지로 관측과 가설을 구분해 정리했다.
 

@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1560 973" role="img" aria-labelledby="t d"><title id="t">Failure windows change when a job is durably claimed before acknowledgement</title><desc id="d">A decision matrix compares the earlier long-running unacknowledged delivery model with a later durable claim then acknowledgement model. Rows are failure windows; columns describe late acknowledgement outcomes, new ownership and the proof required. The new model transfers recovery to a lease reconciler and idempotent stage checks. Scenarios are conceptual, not a production outage timeline.</desc>
+<rect x="0" y="0" width="1560" height="973" rx="0" fill="#081420" stroke="#081420" stroke-width="1.2"/>
+<text x="51" y="66" fill="#f1f9fe" font-size="35" font-weight="760" font-family="Inter,Noto Sans KR,Arial,sans-serif">The Ack moved. The recovery owner changed.</text>
+<text x="51" y="105" fill="#a6c8d8" font-size="19" font-weight="500" font-family="Inter,Noto Sans KR,Arial,sans-serif">An earlier consumer and a later claimed-stage worker have different failure windows.</text>
+<rect x="52" y="146" width="249" height="67" rx="9" fill="#1d394b" stroke="#52758a" stroke-width="1.2"/>
+<text x="69" y="189" fill="#d9edf7" font-size="17" font-weight="750" font-family="Inter,Noto Sans KR,Arial,sans-serif">FAILURE WINDOW</text>
+<rect x="311" y="146" width="357" height="67" rx="9" fill="#1d394b" stroke="#52758a" stroke-width="1.2"/>
+<text x="328" y="189" fill="#d9edf7" font-size="17" font-weight="750" font-family="Inter,Noto Sans KR,Arial,sans-serif">OLD · LATE ACK</text>
+<rect x="679" y="146" width="489" height="67" rx="9" fill="#1d394b" stroke="#52758a" stroke-width="1.2"/>
+<text x="696" y="189" fill="#d9edf7" font-size="17" font-weight="750" font-family="Inter,Noto Sans KR,Arial,sans-serif">NEW · CLAIM THEN ACK</text>
+<rect x="1179" y="146" width="329" height="67" rx="9" fill="#1d394b" stroke="#52758a" stroke-width="1.2"/>
+<text x="1196" y="189" fill="#d9edf7" font-size="17" font-weight="750" font-family="Inter,Noto Sans KR,Arial,sans-serif">REQUIRED EVIDENCE</text>
+<rect x="52" y="225" width="249" height="113" rx="9" fill="#142d3f" stroke="#89bfd4" stroke-width="1.2"/>
+<rect x="311" y="225" width="357" height="113" rx="9" fill="#142d3f" stroke="#3d6074" stroke-width="1.2"/>
+<rect x="679" y="225" width="489" height="113" rx="9" fill="#193849" stroke="#628b97" stroke-width="1.2"/>
+<rect x="1179" y="225" width="329" height="113" rx="9" fill="#203546" stroke="#4a7085" stroke-width="1.2"/>
+<text x="71" y="267" fill="#f2faff" font-size="21" font-weight="730" font-family="Inter,Noto Sans KR,Arial,sans-serif">Before claim</text>
+<text x="71" y="300" fill="#b4ced9" font-size="16" font-weight="510" font-family="Inter,Noto Sans KR,Arial,sans-serif">Command has arrived</text>
+<text x="329" y="281" fill="#cedfeb" font-size="18" font-weight="530" font-family="Inter,Noto Sans KR,Arial,sans-serif">Unacked delivery remains</text>
+<text x="700" y="280" fill="#d8efed" font-size="18" font-weight="610" font-family="Inter,Noto Sans KR,Arial,sans-serif">No durable ownership yet</text>
+<text x="1198" y="282" fill="#89bfd4" font-size="17" font-weight="650" font-family="Inter,Noto Sans KR,Arial,sans-serif">Stable job identity</text>
+<rect x="52" y="351" width="249" height="113" rx="9" fill="#102b3b" stroke="#a5bdd5" stroke-width="1.2"/>
+<rect x="311" y="351" width="357" height="113" rx="9" fill="#102b3b" stroke="#3d6074" stroke-width="1.2"/>
+<rect x="679" y="351" width="489" height="113" rx="9" fill="#193849" stroke="#628b97" stroke-width="1.2"/>
+<rect x="1179" y="351" width="329" height="113" rx="9" fill="#203546" stroke="#4a7085" stroke-width="1.2"/>
+<text x="71" y="393" fill="#f2faff" font-size="21" font-weight="730" font-family="Inter,Noto Sans KR,Arial,sans-serif">Claim stored</text>
+<text x="71" y="426" fill="#b4ced9" font-size="16" font-weight="510" font-family="Inter,Noto Sans KR,Arial,sans-serif">Before RabbitMQ Ack</text>
+<text x="329" y="407" fill="#cedfeb" font-size="18" font-weight="530" font-family="Inter,Noto Sans KR,Arial,sans-serif">No separate stage claim</text>
+<text x="700" y="406" fill="#d8efed" font-size="16" font-weight="610" font-family="Inter,Noto Sans KR,Arial,sans-serif">Claim exists; delivery still unacked</text>
+<text x="1198" y="408" fill="#a5bdd5" font-size="15" font-weight="650" font-family="Inter,Noto Sans KR,Arial,sans-serif">Atomic claim / unique owner</text>
+<rect x="52" y="477" width="249" height="113" rx="9" fill="#142d3f" stroke="#d1b18e" stroke-width="1.2"/>
+<rect x="311" y="477" width="357" height="113" rx="9" fill="#142d3f" stroke="#3d6074" stroke-width="1.2"/>
+<rect x="679" y="477" width="489" height="113" rx="9" fill="#25383f" stroke="#628b97" stroke-width="1.2"/>
+<rect x="1179" y="477" width="329" height="113" rx="9" fill="#203546" stroke="#4a7085" stroke-width="1.2"/>
+<text x="71" y="519" fill="#f2faff" font-size="21" font-weight="730" font-family="Inter,Noto Sans KR,Arial,sans-serif">Ack delivered</text>
+<text x="71" y="552" fill="#b4ced9" font-size="16" font-weight="510" font-family="Inter,Noto Sans KR,Arial,sans-serif">Before output exists</text>
+<text x="329" y="533" fill="#cedfeb" font-size="18" font-weight="530" font-family="Inter,Noto Sans KR,Arial,sans-serif">Usually still unacked</text>
+<text x="700" y="532" fill="#d8efed" font-size="16" font-weight="610" font-family="Inter,Noto Sans KR,Arial,sans-serif">Broker message gone; lease owns recovery</text>
+<text x="1198" y="534" fill="#d1b18e" font-size="15" font-weight="650" font-family="Inter,Noto Sans KR,Arial,sans-serif">Stale lease / bounded retry</text>
+<rect x="52" y="603" width="249" height="113" rx="9" fill="#102b3b" stroke="#e1b5a0" stroke-width="1.2"/>
+<rect x="311" y="603" width="357" height="113" rx="9" fill="#102b3b" stroke="#3d6074" stroke-width="1.2"/>
+<rect x="679" y="603" width="489" height="113" rx="9" fill="#25383f" stroke="#628b97" stroke-width="1.2"/>
+<rect x="1179" y="603" width="329" height="113" rx="9" fill="#203546" stroke="#4a7085" stroke-width="1.2"/>
+<text x="71" y="645" fill="#f2faff" font-size="21" font-weight="730" font-family="Inter,Noto Sans KR,Arial,sans-serif">Output written</text>
+<text x="71" y="678" fill="#b4ced9" font-size="16" font-weight="510" font-family="Inter,Noto Sans KR,Arial,sans-serif">Before completion event</text>
+<text x="329" y="659" fill="#cedfeb" font-size="18" font-weight="530" font-family="Inter,Noto Sans KR,Arial,sans-serif">Crash can redeliver work</text>
+<text x="700" y="658" fill="#d8efed" font-size="16" font-weight="610" font-family="Inter,Noto Sans KR,Arial,sans-serif">Reconcile existing artifact on retry</text>
+<text x="1198" y="660" fill="#e1b5a0" font-size="15" font-weight="650" font-family="Inter,Noto Sans KR,Arial,sans-serif">Stable object key / state check</text>
+<rect x="52" y="729" width="249" height="113" rx="9" fill="#142d3f" stroke="#8fddc3" stroke-width="1.2"/>
+<rect x="311" y="729" width="357" height="113" rx="9" fill="#142d3f" stroke="#3d6074" stroke-width="1.2"/>
+<rect x="679" y="729" width="489" height="113" rx="9" fill="#25383f" stroke="#628b97" stroke-width="1.2"/>
+<rect x="1179" y="729" width="329" height="113" rx="9" fill="#203546" stroke="#4a7085" stroke-width="1.2"/>
+<text x="71" y="771" fill="#f2faff" font-size="21" font-weight="730" font-family="Inter,Noto Sans KR,Arial,sans-serif">Result accepted</text>
+<text x="71" y="804" fill="#b4ced9" font-size="16" font-weight="510" font-family="Inter,Noto Sans KR,Arial,sans-serif">After durable completion</text>
+<text x="329" y="785" fill="#cedfeb" font-size="18" font-weight="530" font-family="Inter,Noto Sans KR,Arial,sans-serif">Ack alone proves no result</text>
+<text x="700" y="784" fill="#d8efed" font-size="18" font-weight="610" font-family="Inter,Noto Sans KR,Arial,sans-serif">Job service rejects stale events</text>
+<text x="1198" y="786" fill="#8fddc3" font-size="17" font-weight="650" font-family="Inter,Noto Sans KR,Arial,sans-serif">Current stage and attempt</text>
+<rect x="52" y="876" width="1456" height="58" rx="9" fill="#1b3a42" stroke="#6e9e9d" stroke-width="1.2"/>
+<text x="74" y="912" fill="#8de6c3" font-size="17" font-weight="760" font-family="Inter,Noto Sans KR,Arial,sans-serif">KEY DISTINCTION</text>
+<text x="276" y="912" fill="#d9eeed" font-size="19" font-weight="620" font-family="Inter,Noto Sans KR,Arial,sans-serif">RabbitMQ delivery is transport state; the document job is durable application state.</text>
+<text x="53" y="958" fill="#8cabb9" font-size="14" font-weight="520" font-family="Inter,Noto Sans KR,Arial,sans-serif">Rows are conceptual failure boundaries, not measurements. A passing local test is not a production DLX/DLQ guarantee.</text>
+</svg>

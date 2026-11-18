@@ -1,129 +1,169 @@
 ---
-title: "Asynchronous Workflows with RabbitMQ: Retrying Without Repeating Effects"
-description: "How I approached queue-backed workers, delivery acknowledgement, failure/retry paths and idempotent processing for internal services."
-date: "2026-11-15"
+title: "The Message Returned While the Worker Was Still Running"
+description: "A RabbitMQ Shovel migration, misleading heartbeat settings, overlapping consumers and the move from late acknowledgements to durable job claims."
+date: "2026-11-18"
 draft: false
 reviewed: true
+reviewStatus: "reviewed"
 sensitivity: sanitized
-category: "Engineering Investigation"
+category: "Systems Engineering"
 area: "Messaging & Reliability"
-tags: ["RabbitMQ", "Messaging", "Idempotency", "Retry", "Distributed Systems"]
+tags: ["RabbitMQ", "Shovel", "AMQP", "Heartbeat", "Idempotency", "Distributed Systems", "Retries"]
 type: "implementation-note"
-role: "ROKAF infrastructure engineering and operational analysis"
-period: "Jul 2025–Present"
+role: "RabbitMQ message migration, connection/heartbeat investigation and asynchronous worker reliability architecture"
+period: "2026"
 status: "active"
-techStack: ["RabbitMQ", "Messaging", "Idempotency", "Retry", "Distributed Systems"]
+techStack: ["RabbitMQ", "K3s", "Python", "Pika", "PostgreSQL", "MinIO"]
 ---
 
-As an internal system grows, not every request should do all of its work synchronously. Some operations take longer than a user-facing request budget, depend on an external service, or need to survive the caller disconnecting. I worked on **queue-backed asynchronous processing with RabbitMQ** and had to think beyond “publish a message and let a worker handle it.”
+The queue had one document-conversion task. A worker had already taken it and was still processing. Yet the message appeared ready again, and another worker could start the **same logical operation** while the first one continued.
 
-The central question became: **What if the worker performs the action, then crashes before acknowledging the message?** The broker may deliver the same work again. A reliable design must handle that possibility explicitly.
+I had expected the broker to recover a failed consumer. Instead, I was watching two notions of failure diverge. The **AMQP connection had failed**, so RabbitMQ could return an unacknowledged delivery to the queue. The original conversion process had not necessarily stopped. It might continue doing expensive work and writing artifacts long after the broker stopped considering it the message's owner.
+
+That problem came after a RabbitMQ-to-RabbitMQ migration I had completed using Shovel. It later informed a different worker-lifetime model in a document-processing service. These were **separate episodes in March and June 2026**, not one continuous rollout that solved every cause of every disconnect.
+
+The interesting part was not only how to make RabbitMQ more stable. It was deciding how much of a long-running job's lifetime the broker should own.
+
+This account deliberately excludes internal hostnames, port mappings, actual queues, virtual hosts, credentials and deployment topology. It separates observations from proposed explanations and locally validated redesign work.
+
+## Moving messages was one problem; keeping consumers alive was another
+
+In early March, I moved work from an old RabbitMQ broker to a new one with the **Shovel plugin**. I configured a one-way transfer between equivalent source and destination queues. The recorded setup used the `on-confirm` acknowledgement mode: the source delivery is acknowledged after publication to the destination has been confirmed.
+
+I could observe the Shovel running, messages decreasing in the old queue and increasing in the new one. I regarded that migration as successful, then prepared applications to use the new broker's Kubernetes Service endpoint.
+
+Shovel solved the immediate **transport and migration** problem. It did not copy the entire broker configuration, the consumers' process state or the history of which business effects had already occurred. Nor did a successful transfer demonstrate that every consumer could run a multi-hour task safely.
+
+I did not retain a reconciled source-and-destination message-ID inventory, a precise moved-message count or a failover exercise that would support stronger claims. The status and queue-count observations are evidence of the observed transfer, not a blanket exactly-once migration guarantee.
+
+A useful distinction emerged:
+
+| Concern | What the evidence showed | What it did not show |
+| --- | --- | --- |
+| Shovel migration | Source messages were transferred to the destination queue; Shovel ran and queue counts moved in the expected directions | Exactly-once business effects or every queue definition being copied |
+| New broker reachability | Applications could target the Kubernetes Service and the failing connection path was inside the cluster | That a proxy was the cause, or that TCP sessions were stable for hours |
+| Worker continuity | A long-running handler could keep working after AMQP connection loss | That the broker still recognized it as the delivery owner |
+
+Shovel and the worker failure were related operationally because both involved RabbitMQ, but their success criteria were different.
+
+## The reset was not coming through the web proxy
+
+In March I was investigating intermittent `Connection reset by peer` during document-processing work. The affected worker called RabbitMQ through the Kubernetes service name from another Pod. This path did not go through the Nginx or Traefik HTTP reverse-proxy chain I used for web applications.
+
+That mattered. It ruled out a simplistic explanation that the web proxy's WebSocket or HTTP timeout had closed the AMQP session. It did **not** prove what did close it.
+
+Some conversions were hundreds of seconds long; others could run for hours. In one investigation the recorded work duration ranged from roughly **500 seconds to three hours**. The consumer was holding its delivery unacknowledged until the expensive operation completed.
+
+The broker logs gave me a much sharper clue than the generic reset message:
+
+`missed heartbeats from client, timeout: 60s`
+
+One log showed an AMQP connection being closed after about three minutes. In the client at that stage, the heartbeat and blocked-connection timeout options had not originally been set explicitly. I experimented with separating the connection's I/O loop and heartbeat work from the long-running handler. Connection loss still occurred.
+
+I later set or observed the RabbitMQ server heartbeat configuration at `86400` seconds, intending to tolerate very long jobs. Yet the disconnect symptoms persisted. The earlier log's `60s` timeout was not thereby disproved, and the record does not include a successful inspection of the **effective negotiated heartbeat for the failing connection**.
+
+RabbitMQ's heartbeat timeout is negotiated between client and server; a server-side number alone is not proof of the value actually used on a connection. The official documentation explains why both sides matter and why very large timeouts are generally a poor substitute for a live connection event loop.
+
+There was another setting in the investigation: `consumer_timeout` appeared to be `1800000` milliseconds (30 minutes). That concerns delivery acknowledgement timeout, **not the same mechanism as a negotiated AMQP heartbeat**. The recorded `missed heartbeats ... 60s` event should not be relabeled as a thirty-minute acknowledgement timeout. Those mechanisms can both matter to long-running consumers, but the logs distinguish which one was observed.
+
+I considered heartbeat negotiation, blocked client I/O, network-idle behavior and service-level connection handling as hypotheses. I could not establish one final network root cause or a proven permanent fix for the March resets.
+
+## The most damaging consequence was two workers doing one job
+
+A broken AMQP connection has a predictable consequence for an **unacknowledged delivery**: RabbitMQ can requeue and redeliver it. But the worker's processing function need not immediately notice that the transport has gone away.
+
+That was the failure mode I observed. A worker could lose its connection while continuing a long conversion. The queue then showed the task as ready again. Another available consumer could start the same job before the old worker ended.
+
+This was a more important reliability problem than a dashboard's connection count. Two workers might both create output, update a database or send a completion event for one document request. Even if their result files had different names, they could race to set the same job's final state.
 
 <figure className="project-concept-figure">
-  <a href="/figures/journals/rabbitmq-idempotency.svg" target="_blank" rel="noopener noreferrer" aria-label="Open diagram full size">
-    <img src="/figures/journals/rabbitmq-idempotency.svg" alt="A producer publishes work to a queue, a worker processes it, and acknowledgement/retry behavior is kept separate from durable idempotency checks." loading="lazy" decoding="async" />
+  <a href="/figures/journals/rabbitmq-two-owners-timeline.svg" target="_blank" rel="noopener noreferrer" aria-label="Open the old RabbitMQ delivery and processing overlap timeline">
+    <img src="/figures/journals/rabbitmq-two-owners-timeline.svg" alt="A dual timeline. Broker: unacknowledged delivery, connection lost, message requeued and second delivery. Worker A: original conversion continues after connection loss. Worker B: duplicate processing begins before A finishes. The overlapping interval is identified without invented timestamps." loading="lazy" decoding="async" />
   </a>
-  <figcaption>A producer publishes work to a queue, a worker processes it, and acknowledgement/retry behavior is kept separate from durable idempotency checks. Abstract engineering view rather than a description of internal systems.</figcaption>
+  <figcaption>Broker delivery ownership can end without terminating the processing that originally received the message. This is a conceptual rendering of the observed overlap, not a packet-level trace or measured duration.</figcaption>
 </figure>
 
-## 1. What made the queue attractive
+A larger heartbeat timeout would not by itself make two simultaneous workers safe. Even perfect heartbeat handling cannot eliminate crashes between committing a side effect and acknowledging a delivery. That race must be handled at the application layer.
 
-I wanted an API to accept and track work without holding the original request open for every downstream operation. A queue provides a useful separation between **request admission** and **work execution**, and allows consumers to scale or retry independently.
+## An acknowledgement can be early, late or simply unrelated to the result
 
-But this also introduces questions that do not exist in a fully synchronous function call: what happens to work when the consumer dies, who owns its progress, and what does the user see when a retry happens?
+The old model kept one RabbitMQ delivery unacknowledged throughout a potentially lengthy conversion. Its advantage was simple: if the consumer truly died before an Ack, the broker could redeliver the task. Its weakness was that the delivery's transport lifetime was tied to a conversion that might take hours. After a connection loss, that model could grant the same logical job to another worker even while the original work continued.
 
-## 2. Acknowledgement is not the same as correctness
+A tempting opposite was to Ack as soon as the message arrived. This kept the broker connection's role brief, but **an unconditional early Ack could lose the job** if the worker then crashed before saving progress. The broker would have no outstanding delivery to replay.
 
-A worker can successfully write an output and then fail before sending its acknowledgement. Depending on broker and consumer settings, the job may be redelivered. If the handler blindly repeats a state-changing action, a harmless retry can become a duplicate effect.
+The later design did neither. It first **claimed the logical stage in durable application state**, then acknowledged the RabbitMQ command, and only then proceeded with the long-running work. Once the broker command had been acknowledged, RabbitMQ no longer owned recovery of that stage; a job service and lease reconciler did.
 
-I thought in terms of a small state machine:
+That transfer of responsibility was deliberate. It did not mean the job had finished when the Ack was sent.
 
-| Stage | Risk | Design response |
+| Moment | Broker's knowledge | Durable job service's knowledge |
 | --- | --- | --- |
-| Publish | Caller repeats a request | Stable logical work identity |
-| Consume | Worker takes a job | Controlled concurrency and visibility of in-progress state |
-| Apply | Side effect partially succeeds | Make the operation safe to retry, or explicitly reconcile state |
-| Acknowledge | Worker fails after side effect | Idempotency check on redelivery |
-| Retry | Fault persists | Bounded retry/backoff and a way to inspect failed work |
+| Command delivered | One consumer has an unacknowledged delivery | Stage may still be pending |
+| Claim recorded | Delivery is still outstanding until Ack | Stage and attempt are owned under a lease |
+| Ack sent | Broker command is complete | Work is **not** yet complete |
+| Conversion continues | Broker has no outstanding copy of this command | Heartbeats / lease keep ownership current |
+| Worker disappears | Broker cannot redeliver an already-Acked command | Stale lease triggers reconciliation and a bounded new attempt |
+| Output committed, completion accepted | Ack says nothing about the result | Job service verifies relevant stage and durable artifact identity |
 
-The important distinction is **at-least-once delivery is compatible with exactly-once *effect* only when the application owns deduplication and transaction boundaries**. Messaging middleware alone does not remove the need to design those boundaries.
+The DB-backed claim must be acquired with concurrency control, not with a casual read followed by an unguarded write. The durable job identity and attempt/claim token make it possible to reject stale completion events even if an earlier worker wakes up after a replacement has taken over.
 
-## 3. Where I put the idempotency concept
+<figure className="project-concept-figure">
+  <a href="/figures/journals/rabbitmq-ack-claim-failure-windows.svg" target="_blank" rel="noopener noreferrer" aria-label="Open a failure-window ledger comparing late acknowledgements with durable claim followed by acknowledgement">
+    <img src="/figures/journals/rabbitmq-ack-claim-failure-windows.svg" alt="A failure-window matrix, not a linear flowchart. Rows cover loss before claim, after durable claim before Ack, after Ack before output, after output before completion event, and after completion. Columns compare late Ack behavior, claim-and-Ack plus stale lease recovery, and the evidence needed for a safe retry." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Moving the Ack earlier solves no consistency problem on its own. The durable claim, stale-lease reconciler and idempotency checks are what make that choice recoverable.</figcaption>
+</figure>
 
-The design question is what uniquely identifies the *logical operation*: not merely a random delivery attempt, but the piece of work the system intends to do once. A stable key can help a worker decide whether to create, resume, verify or skip an effect.
+## A new processing attempt is not a new document job
 
-That choice depends on whether the operation is database-only, creates files/objects, or calls another service. A database transaction may atomically record one kind of result, while an object store and a queue may not share the same atomic transaction boundary.
+A RabbitMQ redelivery, a user retry and a recovered stale lease can all refer to the **same logical job**. I needed a stable job ID that did not change with each attempt.
 
-The work led me to consider state transitions such as **pending → processing → completed/failed**, with repeat attempts checking stored progress rather than assuming a new delivery means new work.
+The newer worker-runtime design distinguished the accepted job, its active stage, the command ID, the current attempt and lease, and the artifact identity. The job service had the authority to accept or reject stage results. A repeated command for a completed stage should not advance the workflow again; a stale completion from a superseded worker should not overwrite a newer result.
 
-## 4. Operational trade-offs
+The most important boundary was across three persistent systems: job state in PostgreSQL, artifacts in MinIO, and command delivery in RabbitMQ. There is no ordinary atomic transaction that commits all three together.
 
-A queue introduces new failure modes: backlog, slow consumers, poison messages, broker unavailability, and messages that are processed but never acknowledged. I wanted visibility into **queue depth, consumer health, processing age, retries and final outcome**, not just whether RabbitMQ was running.
+A worker might upload a valid file to MinIO and lose its connection before its completion event is applied to PostgreSQL. A retry should check for the existing artifact under a deterministic identity and reconcile it; blindly making another output can duplicate the effect. Conversely, a database row marked completed while its expected artifact is missing is not a successful document job.
 
-Back-pressure also matters. Adding workers when the database is already overloaded may make the system less reliable instead of faster.
+The same distinction applied to retries and dead-letter handling. The later local reliability suite exercised retry/backoff, stale-lease recovery and logical dead-letter state. **Physical RabbitMQ DLX/DLQ wiring was not universally enabled by default** because a queue-declaration mismatch appeared in the Helm integration. An application-level terminal failure is not proof that a production dead-letter queue was correctly installed.
 
-## 5. The failure windows that changed my design thinking
+I kept stage ownership in the central job service instead of asking each format worker to select and publish its own next processing stage. That made it easier to reject duplicate or out-of-order events; it also made reconciliation a necessary part of the system.
 
-I found it useful to examine a logical unit of work in **failure windows**, not merely in terms of whether the queue or worker process was healthy.
+## The tests supported the redesign, not a universal success claim
 
-| Failure window | What may already have happened | Recovery question |
-| --- | --- | --- |
-| Before publish confirmation | A message may or may not have reached the broker | Does retry reuse the same logical work ID? |
-| After publish, before consumption | The job is queued but no worker has handled it | Is the queue durable and observable? |
-| During processing | Some intermediate work may exist | Can work resume or be safely retried? |
-| After side effect, before acknowledgement | The intended change may already be committed | Will redelivery repeat the external effect? |
-| After acknowledgement | Broker delivery is complete | Is the application outcome recorded and visible? |
+The June work had more than a diagram behind it. Retained development notes describe local tests covering durable claims, stale leases, bounded retry and duplicate/stale-event handling. Controlled route-level tests exercised PDF, DOCX and HWPX processing paths, and an isolated Helm rehearsal brought up the necessary service dependencies.
 
-This table explains why **successful acknowledgement is not proof that a user-visible operation was correct**. The application needs durable progress and a clear definition of success.
+Those are meaningful results. They show that the new lifetime model could execute and that selected recovery behavior was tested under controlled conditions.
 
-### A stable work identity matters more than an attempt ID
+They do **not** demonstrate that every March reset root cause had disappeared, that every possible race was eliminated or that a full production failure-injection campaign passed. I have no reliable throughput improvement percentage to publish. Nor should I describe the newer Claim → Ack model as if it were the configuration that produced the original March heartbeat logs.
 
-Consider a user request that creates one report. The API call may time out, the caller may retry and the worker may also be redelivered. If each attempt receives an unrelated identity, the system can create multiple reports for one logical request.
+The tests I would keep next to the implementation are concrete:
 
-A stable idempotency key can represent the **user's intended operation**, while a separate attempt ID records each processing try. They should not be confused.
+- Kill the worker **after durable claim and Ack** but before output; ensure the stale lease eventually becomes retryable without changing the job identity.
+- Kill it **after artifact upload but before completion event**; ensure another attempt reconciles the object instead of creating a second logical result.
+- Deliver the same command or a stale result twice; ensure it does not advance the wrong stage.
+- Exhaust retries; ensure the failure is discoverable through job state, irrespective of physical DLQ wiring.
+- Compare user-visible result availability with what MinIO and the job database actually contain.
 
-## 6. State transitions and atomicity boundaries
+These are the failure boundaries that matter more to a document user than a single green RabbitMQ health indicator. Some of them had targeted tests in June; I do not present the list as evidence that every operational environment passed all five.
 
-A useful conceptual state machine is:
+## What Shovel could move, and what it could not
 
-| State | Meaning | Permitted next actions |
-| --- | --- | --- |
-| `pending` | Accepted but not yet claimed | Claim or cancel |
-| `processing` | Worker holds a lease or work ownership | Complete, fail or time out |
-| `completed` | Durable result exists | Return existing result, do not repeat effect |
-| `failed` | Attempt did not complete | Retry if policy permits |
-| `dead-letter` | Automated attempts are exhausted | Inspect, repair and replay deliberately |
+Looking back, the Shovel migration and the later worker redesign addressed two different meanings of "moving work."
 
-The difficult part is **who persists the transition**. Recording `completed` in one database while writing output to a different object store does not automatically create one atomic transaction. Application-level reconciliation may still be required.
+Shovel moved **messages from one broker to another**. With `on-confirm`, the source acknowledgement follows confirmation from the destination, which is a useful transfer boundary. RabbitMQ's Shovel documentation is explicit about these semantics. But a confirmed publication is still not the same as the document being converted once.
 
-For a DB-only operation, a uniqueness constraint or transaction can help protect one effect. For an external API or object storage write, the operation may need a deterministic resource key or an explicit check of existing state.
+The job-service redesign moved **ownership of a long-running logical operation** away from an AMQP delivery and into durable state. The message was allowed to be transient. The job was not.
 
-This is design analysis, not a claim that every mechanism was deployed uniformly.
+The most instructive thing I encountered was a task simultaneously appearing queued and running. It made the separation unavoidable: a broker knows which delivery is currently outstanding, while only the application can know which logical result should exist.
 
-## 7. Back-pressure and the cost of “more workers”
+## Related records
 
-A queue absorbs burstiness but can hide a mismatch between incoming demand and downstream capacity. If consumer throughput stays below producer throughput, the queue age and backlog will increase.
+- [K3s platform engineering](/projects/independent-on-premises-k3s-platform-engineering/) — the platform in which RabbitMQ operated
+- [Database and migration state](/projects/rokaf-database-ha-and-langfuse-migrations/) — why a timeout or retry cannot replace durable progress
 
-| Observation | What it might mean | What I would check |
-| --- | --- | --- |
-| Queue depth rising | Input exceeds effective drain rate | Arrival rate, consumer completions |
-| Consumers busy, database slow | Downstream bottleneck | Query latency, connection pool |
-| Redelivery rate rising | Workers failing or losing acknowledgements | Timeout/restart patterns |
-| Oldest message age rising | Some work is starved | Priority, concurrency, poison messages |
-| Memory pressure on workers | Large jobs or unbounded in-flight work | Batch sizes and per-job memory |
+## References
 
-Adding workers can increase load on the very service already limiting throughput. I would define a **bounded concurrency budget** and measure the whole workflow rather than just the broker.
-
-## 8. What a reproducible test would look like
-
-I would test the important failure boundaries in an isolated service: publish a logical job, stop the consumer after committing a side effect but before acknowledgement, then allow redelivery and inspect the final state. The success condition is not “the worker ran twice”; it is that **the logical operation produced the intended effect once**.
-
-I would also compare normal, retried and permanently failing jobs in a dashboard with queue age, retries and terminal outcomes. These are proposed validation cases; no public production benchmark is included in my original records.
-
-## What I learned
-
-The useful abstraction is not just a queue: it is a **workflow with durable identity, observable state and explicit retry semantics**. That lesson connects strongly to database migrations and any other background operation whose caller may time out while work continues.
-
-My records support the queue-based/idempotency design work, but I have not retained a public set of load-test metrics. I therefore focus on the decisions and the failure cases I reasoned about rather than inventing throughput improvements.
-
-[Database migration lessons](/projects/rokaf-database-ha-and-langfuse-migrations/) · [ROKAF overview](/projects/independent-on-premises-k3s-platform-engineering/).
+- [RabbitMQ — Heartbeats and negotiated timeouts](https://www.rabbitmq.com/docs/heartbeats)
+- [RabbitMQ — Consumer acknowledgements and publisher confirms](https://www.rabbitmq.com/docs/confirms)
+- [RabbitMQ — Consumer delivery acknowledgement timeout](https://www.rabbitmq.com/docs/consumers)
+- [RabbitMQ — Shovel](https://www.rabbitmq.com/docs/shovel)
+- [RabbitMQ — Dynamic Shovel acknowledgement modes](https://www.rabbitmq.com/docs/shovel-dynamic)

@@ -643,5 +643,15 @@
   "Longhorn replica incident response, CSI attachment troubleshooting, data preservation and recovery-state verification": "Longhorn Replica 장애 대응, CSI Attach 문제 분석, 데이터 보존과 복구 상태 검증",
   "Data Recovery": "데이터 복구",
   "PersistentVolume": "PersistentVolume",
-  "Replicas": "Replica"
+  "Replicas": "Replica",
+  "The Message Returned While the Worker Was Still Running": "Worker는 계속 처리하는데 메시지가 다시 돌아왔다",
+  "The Message Returned While the Worker Was Still Running | Jihwan Park": "Worker는 계속 처리하는데 메시지가 다시 돌아왔다 | 박지환",
+  "A RabbitMQ Shovel migration, misleading heartbeat settings, overlapping consumers and the move from late acknowledgements to durable job claims.": "RabbitMQ Shovel로 메시지를 옮긴 뒤 겪었던 Heartbeat 장애와 중복 실행 문제, 그리고 Claim과 Lease를 이용한 Worker 모델 개편을 기록했다.",
+  "RabbitMQ message migration, connection/heartbeat investigation and asynchronous worker reliability architecture": "RabbitMQ Shovel 메시지 이전, Heartbeat·연결 장애 조사, 비동기 Worker 실행·복구 구조 설계",
+  "Shovel": "Shovel",
+  "AMQP": "AMQP",
+  "Heartbeat": "Heartbeat",
+  "Retries": "재시도",
+  "Pika": "Pika",
+  "Python": "Python"
 }
