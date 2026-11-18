@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1520 1010" role="img" aria-labelledby="t d"><title id="t">Where a failed Longhorn attach crosses ownership boundaries</title><desc id="d">Layered diagnostic cross-section with application filesystem, CSI kubelet, Kubernetes and Longhorn volume attachment, engine instance-manager, replica and disk. Separate observations are pinned to their relevant layers, not drawn as a single causal chain. Recovery of a node or a process is not proof of user data integrity.</desc>
+<rect x="0" y="0" width="1520" height="1010" rx="0" fill="#081420" stroke="#081420" stroke-width="0"/>
+<text x="50" y="69" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="37" font-weight="780" fill="#f3faff">Where an attach failure actually lives</text>
+<text x="50" y="110" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="19" font-weight="500" fill="#b1cbd9">The same unavailable PVC can involve multiple owners and different evidence.</text>
+<path d="M50 131H1470" fill="none" stroke="#56788c" stroke-width="1.8"  stroke-linecap="round"/>
+<text x="57" y="178" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="17" font-weight="730" fill="#87b1c6">STORAGE PATH · OWNERSHIP CROSS-SECTION</text>
+<text x="682" y="178" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="17" font-weight="730" fill="#87b1c6">CLUES FROM DIFFERENT INCIDENTS</text>
+<rect x="59" y="209" width="554" height="80" rx="10" fill="#1a3445" stroke="#7bbad4" stroke-width="1.5"/>
+<rect x="59" y="209" width="10" height="80" rx="4" fill="#7bbad4" stroke="#7bbad4" stroke-width="1.5"/>
+<text x="83" y="242" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="23" font-weight="710" fill="#f2f9fc">Application</text>
+<text x="83" y="270" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="16" font-weight="500" fill="#b8d0dc">A read/write request must succeed</text>
+<rect x="59" y="300" width="554" height="80" rx="10" fill="#1b3446" stroke="#7bbad4" stroke-width="1.5"/>
+<rect x="59" y="300" width="10" height="80" rx="4" fill="#7bbad4" stroke="#7bbad4" stroke-width="1.5"/>
+<text x="83" y="333" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="23" font-weight="710" fill="#f2f9fc">Filesystem / mount</text>
+<text x="83" y="361" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="16" font-weight="500" fill="#b8d0dc">Mounted device and access semantics</text>
+<rect x="59" y="391" width="554" height="80" rx="10" fill="#203a4b" stroke="#8fc5da" stroke-width="1.5"/>
+<rect x="59" y="391" width="10" height="80" rx="4" fill="#8fc5da" stroke="#8fc5da" stroke-width="1.5"/>
+<text x="83" y="424" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="23" font-weight="710" fill="#f2f9fc">CSI / kubelet</text>
+<text x="83" y="452" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="16" font-weight="500" fill="#b8d0dc">Stage, publish, unmount, globalmount</text>
+<rect x="59" y="482" width="554" height="80" rx="10" fill="#253d4a" stroke="#b3c2dc" stroke-width="1.5"/>
+<rect x="59" y="482" width="10" height="80" rx="4" fill="#b3c2dc" stroke="#b3c2dc" stroke-width="1.5"/>
+<text x="83" y="515" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="23" font-weight="710" fill="#f2f9fc">Attachment controllers</text>
+<text x="83" y="543" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="16" font-weight="500" fill="#b8d0dc">Volume state and attachment tickets</text>
+<rect x="59" y="573" width="554" height="80" rx="10" fill="#3a3446" stroke="#ddacd0" stroke-width="1.5"/>
+<rect x="59" y="573" width="10" height="80" rx="4" fill="#ddacd0" stroke="#ddacd0" stroke-width="1.5"/>
+<text x="83" y="606" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="23" font-weight="710" fill="#f2f9fc">Instance manager</text>
+<text x="83" y="634" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="16" font-weight="500" fill="#b8d0dc">Engine process lifecycle</text>
+<rect x="59" y="664" width="554" height="80" rx="10" fill="#374039" stroke="#c8d59b" stroke-width="1.5"/>
+<rect x="59" y="664" width="10" height="80" rx="4" fill="#c8d59b" stroke="#c8d59b" stroke-width="1.5"/>
+<text x="83" y="697" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="23" font-weight="710" fill="#f2f9fc">Replica membership</text>
+<text x="83" y="725" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="16" font-weight="500" fill="#b8d0dc">Healthy, Unknown, Stopped, rebuild</text>
+<rect x="59" y="755" width="554" height="80" rx="10" fill="#283b39" stroke="#90d8b6" stroke-width="1.5"/>
+<rect x="59" y="755" width="10" height="80" rx="4" fill="#90d8b6" stroke="#90d8b6" stroke-width="1.5"/>
+<text x="83" y="788" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="23" font-weight="710" fill="#f2f9fc">Node / disk</text>
+<text x="83" y="816" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="16" font-weight="500" fill="#b8d0dc">Kubelet, local replica files, devices</text>
+<path d="M631 209V833" fill="none" stroke="#476c80" stroke-width="2" stroke-dasharray="7 7" stroke-linecap="round"/>
+<path d="M613 249H637V249H682" fill="none" stroke="#8ebed4" stroke-width="2.6"  stroke-linecap="round"/>
+<rect x="692" y="219" width="752" height="75" rx="10" fill="#172e40" stroke="#8ebed4" stroke-width="1.6"/>
+<text x="713" y="244" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="16" font-weight="740" fill="#8ebed4">WORKLOAD SYMPTOM</text>
+<text x="713" y="274" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="19" font-weight="540" fill="#e1eff7">A scheduled Pod may still lack a usable mount</text>
+<path d="M613 426H637V389H682" fill="none" stroke="#9cc4dd" stroke-width="2.6"  stroke-linecap="round"/>
+<rect x="692" y="359" width="752" height="75" rx="10" fill="#172e40" stroke="#9cc4dd" stroke-width="1.6"/>
+<text x="713" y="384" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="16" font-weight="740" fill="#9cc4dd">MOUNT EVIDENCE</text>
+<text x="713" y="414" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="19" font-weight="540" fill="#e1eff7">globalmount: Device or resource busy</text>
+<path d="M613 518H637V512H682" fill="none" stroke="#b4b8e1" stroke-width="2.6"  stroke-linecap="round"/>
+<rect x="692" y="482" width="752" height="75" rx="10" fill="#172e40" stroke="#b4b8e1" stroke-width="1.6"/>
+<text x="713" y="507" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="16" font-weight="740" fill="#b4b8e1">VOLUME EVIDENCE</text>
+<text x="713" y="537" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="19" font-weight="540" fill="#e1eff7">Detaching / Faulted / NotReady</text>
+<path d="M613 613H637V630H682" fill="none" stroke="#e0b2cd" stroke-width="2.6"  stroke-linecap="round"/>
+<rect x="692" y="600" width="752" height="75" rx="10" fill="#172e40" stroke="#e0b2cd" stroke-width="1.6"/>
+<text x="713" y="625" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="16" font-weight="740" fill="#e0b2cd">PROCESS EVIDENCE</text>
+<text x="713" y="655" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="19" font-weight="540" fill="#e1eff7">state stopping rather than stopped</text>
+<path d="M613 795H637V765H682" fill="none" stroke="#a8d5b1" stroke-width="2.6"  stroke-linecap="round"/>
+<rect x="692" y="735" width="752" height="75" rx="10" fill="#172e40" stroke="#a8d5b1" stroke-width="1.6"/>
+<text x="713" y="760" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="16" font-weight="740" fill="#a8d5b1">HOST AND REPLICA</text>
+<text x="713" y="790" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="19" font-weight="540" fill="#e1eff7">Node Ready; .img present; replica may be Stopped</text>
+<rect x="59" y="875" width="1385" height="80" rx="12" fill="#202f3b" stroke="#677b87" stroke-width="1.5"/>
+<text x="84" y="911" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="18" font-weight="740" fill="#edc4a6">RECOVERY STILL NEEDS PROOF</text>
+<text x="84" y="940" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="18" font-weight="530" fill="#e0eaf0">Attach + healthy replicas + application read/write + integrity checks are separate milestones.</text>
+<text x="59" y="988" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="14" font-weight="500" fill="#93afc1">Conceptual fault boundaries. Observations occurred at different times; no actual nodes, disks or volumes are depicted.</text>
+</svg>

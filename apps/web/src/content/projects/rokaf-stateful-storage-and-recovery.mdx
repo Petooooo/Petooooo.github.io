@@ -1,149 +1,151 @@
 ---
-title: "When a Pod Recovers but Its Data Does Not"
-description: "Operational decisions around Longhorn, MinIO, volume attachment, replica rebuilds and the recovery budget of persistent applications."
-date: "2026-11-15"
+title: "The Volume Said Healthy After I Lowered the Replica Count"
+description: "Why Longhorn's green volume status, healthy replica count, disk files and successful attachment represented different stages of recovery."
+date: "2026-11-18"
 draft: false
 reviewed: true
+reviewStatus: "reviewed"
 sensitivity: sanitized
 category: "Systems Engineering"
 area: "Storage & Reliability"
-tags: ["K3s", "Longhorn", "MinIO", "PVC", "S3", "Recovery"]
+tags: ["K3s", "Longhorn", "Replicas", "CSI", "PersistentVolume", "Data Recovery", "Kubernetes"]
 type: "implementation-note"
-role: "Persistent storage administration, recovery investigation and reliability analysis"
-period: "Jul 2025–Present"
+role: "Longhorn replica incident response, CSI attachment troubleshooting, data preservation and recovery-state verification"
+period: "2026"
 status: "active"
-techStack: ["K3s", "Longhorn", "MinIO", "PVC", "S3", "Recovery"]
+techStack: ["K3s", "Longhorn", "Kubernetes", "CSI", "Linux Storage"]
 ---
 
-A stateless Pod can often be recreated somewhere else and become useful quickly. The first time I began operating persistent services, I realized that this mental model hides the hardest part: **the replacement process may start long before its data is available and consistent**.
+I changed a Longhorn volume's desired replica count from **two to one** and watched its status turn **Healthy**. The change looked like a fix, at least on the dashboard. But I could still see two replica objects, and one of them had not returned to a usable state.
 
-In my K3s environment I worked with Longhorn persistent volumes and MinIO object storage. The recurring engineering decision was not simply “How many replicas?” but **which component owns persistence, what state must be restored, and what failure is actually being tolerated?**
+Longhorn had become healthy **against the new target**, not against the original redundancy requirement. I could not conclude that it had rebuilt the second copy, that its disk contents were current, or that another disk failure would be survivable.
+
+This was one of several persistent-storage incidents I investigated on a closed-network K3s platform in early 2026. Other episodes involved a replica stuck in `Stopped` despite an existing data file, a node that stopped reporting its status, and an instance-manager process that could not finish stopping while a volume remained `Detaching`. They surfaced as similar application failures, but they were **different incidents on different dates**, not one clean recovery narrative.
+
+I have removed volume sizes, PVC identifiers, hostnames, node numbers, operational disk paths and other internal details. The surviving observations are more specific than a general tutorial but not enough to claim a complete rebuild or full data-integrity audit of every volume.
+
+## The green label measured the target I had just reduced
+
+In late January, one volume was `Degraded`. Its intended replica count was two. One replica was `Healthy`; another was `Unknown`. The UI did not provide the useful replica log view I expected, leaving me with a status whose underlying reason still required investigation.
+
+I reduced the configured replica count to one. The volume promptly changed to `Healthy`, yet the old replica object still appeared alongside the remaining healthy replica. It would have been easy to count the rows and assume two copies were still present. That was not what I had observed.
+
+There were at least three separate variables:
+
+| Signal | Before the change | After the change | What it actually established |
+| --- | --- | --- | --- |
+| Desired replica count | 2 | 1 | The configured redundancy target changed |
+| Volume status | `Degraded` | `Healthy` | Longhorn evaluated health against that target |
+| Replica objects shown | One `Healthy`, one `Unknown` | Two objects still visible; one remained suspect | An object being listed did not prove it was a usable, current copy |
+| Two healthy data copies | Not demonstrated | Not demonstrated | Original failure tolerance was **not** verified as restored |
 
 <figure className="project-concept-figure">
-  <a href="/figures/journals/stateful-recovery-layers.svg" target="_blank" rel="noopener noreferrer" aria-label="Open diagram full size">
-    <img src="/figures/journals/stateful-recovery-layers.svg" alt="The recovery timeline distinguishes rescheduling, volume availability, database state, and client-visible readiness rather than declaring success at the first restarted Pod." loading="lazy" decoding="async" />
+  <a href="/figures/journals/longhorn-desired-vs-actual-replicas.svg" target="_blank" rel="noopener noreferrer" aria-label="Open a comparison of configured and observed Longhorn replica states">
+    <img src="/figures/journals/longhorn-desired-vs-actual-replicas.svg" alt="Side-by-side evidence panels. A target of two with one Healthy and one Unknown replica corresponded to Degraded. Changing the target to one produced a Healthy volume label while the stale second object remained. The diagram marks restored two-copy durability as unverified." loading="lazy" decoding="async" />
   </a>
-  <figcaption>The recovery timeline distinguishes rescheduling, volume availability, database state, and client-visible readiness rather than declaring success at the first restarted Pod. This is a conceptual illustration, not an internal deployment diagram.</figcaption>
+  <figcaption>A green label after lowering the replication target did not mean the second good copy had been rebuilt. The drawing describes observed state, not actual replica placement.</figcaption>
 </figure>
 
-## 1. Separating the four recovery clocks
+During the same investigation, the one known healthy replica showed a `Deleting Snapshot` operation that I had not started manually. I could not establish that the operation caused the degradation or damaged the data. But it did make another destructive intervention harder to justify: the last known good source was busy, and I did not have a validated second source to fall back to.
 
-A node or workload failure can set several different clocks running.
+The more important question was not whether the interface could be made tidy. It was **which data copy I would trust if the next operation failed**.
 
-| Clock | Event I needed to observe | What it does *not* prove |
+## A replica file on disk was not a healthy replica
+
+In a related follow-up, the node holding a problematic replica was running, and its replica `.img` file still existed on disk. Nevertheless, Longhorn showed `Stopped`. I enabled **Offline Replica Rebuilding**, but the replica remained Stopped during the observed check.
+
+That was not proof that Longhorn had lost the bytes. It also was not proof that the bytes could be reintroduced safely. File existence does not establish that the snapshot chain is valid, that the bytes match the latest committed writes, or that the engine recognizes this replica as eligible to join the active set.
+
+Offline rebuilding has prerequisites. Longhorn's documentation describes eligibility for detached degraded volumes, a reusable failed replica or schedulable disk candidate, and a ready instance manager. The exact behavior depends on the installed release. Enabling a setting **permits a mechanism**; it cannot make an ineligible replica rebuild instantly.
+
+At another point I tried to delete a replica and Longhorn refused, warning that no other healthy replica was available and this copy might still hold data needed for recovery. The refusal was useful evidence, not an obstacle to bypass blindly. If a replica may be the last recovery candidate, deleting it to remove an error marker can eliminate the only remaining path back to the original data.
+
+My preserved notes do not show a completed rebuild, a valid second copy and a successful byte-for-byte comparison after this operation. What I can confirm is that the file remained, the replica was still Stopped, the offline rebuild setting did not visibly change it, and a deletion guard protected potentially valuable data.
+
+## Node Ready and volume Ready answered different questions
+
+During a separate node-health incident, Kubernetes marked a node's conditions `Unknown` with `Kubelet stopped posting node status`. The K3s agent journal did not expose an equally obvious error, and important Longhorn replica data still physically occupied the node's disk.
+
+After an authorized reboot, the node returned to `Ready`.
+
+That was a meaningful recovery of kubelet-to-control-plane communication. It did **not** verify that every Longhorn replica on that host could rejoin, that the volume was attached and writable, or that application-level data remained consistent. I learned to treat the host coming back as one checkpoint in a larger investigation.
+
+Before resetting node state or cleaning directories, preserving the physical replica data mattered. A scheduler, a storage controller and a filesystem do not share exactly the same notion of what has recovered.
+
+## A different volume could not finish detaching
+
+Another large volume had previously shown a repeating `Detaching` condition, along with `Faulted` and `NotReady` symptoms. The consuming workload could not get a usable attachment.
+
+One instance-manager log line gave the incident a sharper shape:
+
+`failed to unregister process ... since it is state stopping rather than stopped`
+
+I have replaced the original process identifier with an ellipsis. The message was about a **process-state transition**. Something Longhorn wanted to unregister had not advanced from `stopping` to `stopped`. That is different from the scheduler simply failing to place a Pod, and different again from finding a corrupt file on disk.
+
+To reason about it I separated the owners of the operation: the application requests I/O through its mounted filesystem; kubelet and CSI manage mount and staging actions; Kubernetes and Longhorn track attachment state; the instance manager supervises engine and replica processes; and the underlying host retains devices, mounts, open resources and replica files.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/longhorn-attachment-fault-domains.svg" target="_blank" rel="noopener noreferrer" aria-label="Open the Longhorn attachment failure-domain cross section">
+    <img src="/figures/journals/longhorn-attachment-fault-domains.svg" alt="Layered storage diagnostic cross section, from application operation and filesystem mount through CSI, attachment tickets, instance-manager engine processes and replica files. Observations such as Detaching, stopping process, busy globalmount and node Ready are placed at different layers; no real topology is shown." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Storage attachment, replica lifecycle, node health and user-visible data access have different owners. The diagram is not a map of the real cluster.</figcaption>
+</figure>
+
+In later troubleshooting I also encountered a force-detach followed by a **port-in-use** error, and in another node cleanup a Longhorn CSI `globalmount` directory could not be removed because the device or resource was busy. These are evidence of resources still being held or contested. They do not prove that the earlier process-manager incident had the same root cause.
+
+Similarly, missing containerd snapshot paths or CSI metadata files in a separate node incident were not proof of Longhorn block corruption. It mattered to preserve those boundaries in the write-up.
+
+For the instance-manager `stopping` log, I do not have a final trace demonstrating a clean reattach, restored two-replica set and application-wide data verification. An instance-manager restart was discussed as a possible intervention; a suggestion is not a recorded successful result.
+
+## What should be checked before touching a volume?
+
+A PVC being `Bound` does not demonstrate that its Pod has a mounted block device. A Pod being scheduled does not prove that a former writer has detached safely. A volume label being green does not establish that its initial redundancy target has been restored.
+
+I found it useful to turn each signal into a narrower question:
+
+| Observation | Next evidence I would look for | What I would **not** conclude |
 | --- | --- | --- |
-| **Scheduling** | A new Pod is placed | The underlying volume is attached |
-| **Storage** | Volume attachment and replica state reconcile | The application has recovered its on-disk state |
-| **Application** | Database/service process becomes internally ready | External clients can use the intended operation |
-| **User-visible** | A representative request succeeds | Every consistency or durability guarantee has been validated |
+| Pod scheduled / PVC Bound | CSI events, attach and mount results | Data ready |
+| `Detaching` / `Faulted` | Longhorn volume and attachment ticket state, engine logs | Every replica is corrupt |
+| Instance-manager stuck at `stopping` | Process lifecycle, owner, logs and existing writers | Force cleanup is automatically safe |
+| Busy `globalmount` | Active mount references and device users | A replica file should be deleted |
+| Node returned to `Ready` | Replica engine and workload read/write state | Volume fully recovered |
+| `Healthy` after target 2 → 1 | Actual usable replica membership and future rebuild plan | Original two-copy failure tolerance restored |
 
-This distinction changed the way I thought about availability objectives. **RTO** should cover the outage visible to the consumer; **RPO** depends on which data was actually durable or replicated. A healthy Kubernetes object alone answers neither.
+A forced detach can be dangerous if a workload still owns the writer. I would first capture the existing volume and attachment evidence and decide whether the operation could discard the only remaining access path. The Longhorn attachment-ticket model is useful here; arbitrary force operations do not replace inspecting ownership.
 
-## 2. Longhorn made storage transitions visible
+## The hidden cost of a one-copy workaround
 
-Longhorn provided a way to manage replicated volumes without manually managing all storage placement. It also introduced states that matter during a failure: attachment/detachment, replica repair, volume health, actual disk space, and rebuilding after a degraded condition.
+Lowering the desired replica count solved a status problem. It also reduced the amount of hardware failure the volume could tolerate until redundancy was restored. That interval was itself a reliability exposure.
 
-During troubleshooting I encountered **read-only storage symptoms**, attachment behavior and replica rebuild concerns. Some failures initially appeared to be application problems because that was where the error surfaced. The more useful approach was to inspect which layer had changed first: was the process blocked because of storage, was a volume waiting to move, or had the application failed independently?
+Rebuilding requires more than a second empty directory. It needs capacity on an eligible disk, a valid data source, network and disk I/O, and enough time to reconcile snapshots and writes. A cluster may have free space for current logical data but lack the headroom to rebuild a missing replica while the workload continues using the volume.
 
-I also learned that **replicas consume capacity during normal operation and repair**. A cluster near its disk limit may have insufficient headroom to rebuild its redundancy, even when the logical amount of user data appears manageable. Replication is not free backup space.
+I was especially cautious while the sole known healthy source showed a snapshot-deletion operation. A snapshot operation is not evidence of corruption, but competing repair and snapshot work can make recovery decisions less forgiving. I would measure rebuild progress and source availability rather than invent a completion time.
 
-## 3. One storage class should not be used for every stateful application
+StorageClass choices matter too. A small single-instance application may benefit from Longhorn's movable replicated block storage. A database with its own replication, such as ClickHouse, has a separate recovery model. A distributed object store such as MinIO may not need the same replica guarantees at every lower layer. Stacking replicas can consume capacity and complicate failure ordering without automatically improving end-to-end durability.
 
-At first it is tempting to put every database onto a replicated network volume. But a system such as ClickHouse already has database-level replication and recovery logic. Adding an extra network block-replication layer can introduce latency and complicated failure interactions.
+The decision is **which layer is responsible for a recoverable copy**, not which technology looks more redundant on an architecture diagram.
 
-I evaluated when **application-managed replicas on local storage** might be better than automatically applying Longhorn to every service. This was not a claim that local disks are universally safer. It is a question of **where durability and failover should be implemented**, and how the layers interact when one fails.
+## When could I actually say it recovered?
 
-| Workload characteristic | Design question |
-| --- | --- |
-| One mutable database instance | Is volume movement part of the expected recovery plan? |
-| Application-level replicated database | Are replicas independent enough, and does extra block replication help? |
-| Analytics engine with heavy writes | Does rebuild traffic or remote I/O affect write latency and capacity? |
-| Small internal stateful service | Is operational simplicity more valuable than another replication mechanism? |
+I would want five distinct facts: the host is reachable, the volume is attached and mounted safely, the intended number of **usable** replicas has returned, the application has recovered its own on-disk state, and a representative client can read and write the expected data. A backup restore test and a checksum/integrity audit add further confidence.
 
-## 4. MinIO and lifecycle decisions
+For these incidents I have evidence of a node returning to Ready and a volume becoming Healthy after the target was lowered. I also have evidence of Unknown and Stopped replicas and of an instance-manager process stuck in a lifecycle transition. **I do not have a complete verified record of a two-copy rebuild and full application data-integrity validation.**
 
-Object storage required a different mindset from block storage. Applications may store durable records, temporary uploads, retained artifacts or large generated objects under the same API. With MinIO I considered **S3 compatibility, access permissions, migration dependencies, retention and lifecycle policies**.
+Finally, replicas are not backups. Two replicas can both reproduce an accidental delete. A snapshot preserves a version subject to its retention and storage dependencies; an independently protected backup addresses a different loss scenario.
 
-A lifecycle rule is not just housekeeping. Deleting objects early may save disk space but break replay or recovery assumptions; keeping everything indefinitely can exhaust capacity. The correct retention period depends on who owns the data and how long an application may still reference it.
+The most misleading recovery signal I saw was not an error. It was a success indicator that became green because I had just lowered the bar it measured.
 
-## 5. What “volume healthy” really needs to mean
+## Related records
 
-I learned to distinguish **Kubernetes's view of a PVC** from the application's use of data inside that volume. A bound claim states that storage has been provisioned or associated; it says nothing by itself about a recent disk error, a database's recovery log or the consistency of user-facing operations.
+- [MinIO migration and object reconciliation](/projects/rokaf-object-storage-migration/)
+- [Database replication and migrations](/projects/rokaf-database-ha-and-langfuse-migrations/)
+- [Overall K3s platform decisions](/projects/independent-on-premises-k3s-platform-engineering/)
 
-The recovery sequence can include several separate points:
+## References
 
-1. Scheduler chooses a node that can run the workload.
-2. The storage subsystem determines whether the volume can be attached there.
-3. The relevant replicas and data path become usable.
-4. The filesystem can be mounted with the expected permissions and semantics.
-5. The database or application repairs or replays its own persisted state.
-6. A representative client read/write operation succeeds.
-
-An operator who checks only step 1 may report success long before the consumer has received service.
-
-### Replication overhead is also recovery overhead
-
-Suppose a storage system normally has several data copies. Losing one copy does not necessarily mean immediate user-visible downtime, but it can produce a **degraded redundancy window**. Rebuilding the missing copy requires disk capacity, read bandwidth, write bandwidth and time; during the rebuild, ordinary application I/O may compete with repair traffic.
-
-| Operating state | Question I would ask |
-| --- | --- |
-| All replicas healthy | Is the application meeting its latency and durability expectations? |
-| One replica unavailable | Can the workload still read/write, and what redundancy remains? |
-| Rebuild active | Is there enough free space and I/O bandwidth to finish repair? |
-| Rebuild delayed | Is the bottleneck disk space, failed node, scheduling or storage policy? |
-| Service recovered | Did the database/application complete its own recovery, too? |
-
-I avoid publishing numerical rebuild times because the actual hardware, failure domain and workload determine them.
-
-## 6. Choosing the layer that owns durability
-
-A database with built-in replication and a replicated block volume can appear “doubly protected.” That does not necessarily mean it has twice the reliability. Both layers may rebuild simultaneously, compete for bandwidth or react differently to a partial failure.
-
-The decision depends on which layer is responsible for:
-
-- Detecting failed replicas.
-- Selecting a writable copy or leader.
-- Preserving write ordering and consistency.
-- Repairing stale state.
-- Exposing readiness to the application.
-- Providing backup or point-in-time restoration.
-
-In my ClickHouse considerations, this led me to examine **application-managed replication on local storage** rather than mechanically putting every database on a network-replicated volume. This was a workload-specific design choice, not a universal rule for all databases.
-
-## 7. Durability, backup and object lifecycle are different contracts
-
-A replicated volume helps tolerate some hardware failures. It does **not** replace a backup that can recover from accidental deletion or logical corruption. Likewise, MinIO object replication and an S3 lifecycle policy address different concerns.
-
-| Mechanism | Primary purpose | What it does not automatically solve |
-| --- | --- | --- |
-| Block replica | Keep additional copies of current block state | Recovering an old version of accidentally deleted data |
-| Snapshot | Preserve a point-in-time view | Off-cluster disaster recovery without a protected destination |
-| Backup | Recover data after logical or infrastructure loss | Immediate online failover |
-| Object lifecycle | Bound storage retention and growth | Understanding whether deleted objects are still needed |
-| Database replication | Maintain application-aware copies | Unconditional correctness of arbitrary client retries |
-
-A retention period needs to reflect the application's reference lifecycle. Deleting objects after an apparently reasonable interval can break a delayed consumer or historical replay task.
-
-## 8. How I would investigate a read-only symptom
-
-The phrase “read-only volume” can mean a filesystem remount, a storage subsystem state, a database replica state or even an application-level permission issue. My first step would be to identify **which component emitted the error**, not to assume that every layer independently became read-only.
-
-Only then would I compare application logs, mount status, volume state, host I/O evidence and database replica information. A definitive postmortem would need a time-correlated trace; the original public record does not establish such a single root cause.
-
-## 9. An incomplete failure analysis is still useful
-
-I kept several cases in the form of symptoms, hypotheses and checks rather than forcing a neat root cause. For example, **read-only volume behavior** may result from more than one layer; repeated restarts could erase evidence without answering the question.
-
-My preferred order became:
-
-1. Record the application-visible symptom and the point at which it began.
-2. Check Pod scheduling independently from PVC/volume health.
-3. Inspect whether the database or service sees an I/O error, missing data, or a recoverable restart.
-4. Distinguish a temporary workaround from evidence of the actual cause.
-5. Record what is still unverified instead of making the incident sound fully resolved.
-
-This way of reasoning is what eventually pushed my interests toward filesystems, block I/O, persistent state and failure ordering.
-
-**Related migration:** [When MinIO object counts did not match after a migration](/projects/rokaf-object-storage-migration/) — moving data is not the same as reconciling an object namespace.
-
-**Related records:** [database HA and migrations](/projects/rokaf-database-ha-and-langfuse-migrations/) · [overall platform](/projects/independent-on-premises-k3s-platform-engineering/).
+- [Longhorn — Offline Replica Rebuilding](https://longhorn.io/docs/1.13.0/advanced-resources/rebuilding/offline-replica-rebuilding/) — current documentation; confirm availability and prerequisites in the installed release.
+- [Longhorn — Replica Rebuilding](https://longhorn.io/docs/1.13.0/advanced-resources/rebuilding/)
+- [Longhorn — Volume Attachments](https://longhorn.io/docs/1.13.0/advanced-resources/volumeattachment/)
+- [Longhorn — Volume Recovery](https://longhorn.io/docs/1.13.0/high-availability/recover-volume/)
+- [Longhorn — StorageClass Parameters](https://longhorn.io/docs/1.13.0/references/storage-class-parameters/)

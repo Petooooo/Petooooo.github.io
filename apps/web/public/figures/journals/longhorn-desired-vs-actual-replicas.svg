@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1500 920" role="img" aria-labelledby="t d"><title id="t">Volume status changed without a verified second healthy replica</title><desc id="d">Two side-by-side evidence panels show Longhorn before and after lowering desired replicas from two to one. Before: Degraded, one Healthy replica and one Unknown. After: Healthy label, one known Healthy replica and an old suspect object still listed; a restored second healthy copy was not verified. No physical placement information.</desc>
+<rect x="0" y="0" width="1500" height="920" rx="0" fill="#081420" stroke="#081420" stroke-width="0"/>
+<text x="54" y="67" font-size="36" font-weight="770" fill="#f4fbff" text-anchor="start" font-family="Inter,Noto Sans KR,Arial,sans-serif">A green status can measure a smaller target</text>
+<text x="54" y="110" font-size="19" font-weight="500" fill="#afcbda" text-anchor="start" font-family="Inter,Noto Sans KR,Arial,sans-serif">The desired replica count changed. The known healthy-copy count did not.</text>
+<path d="M54 139H1446" fill="none" stroke="#466c80" stroke-width="1.7" />
+<rect x="56" y="169" width="680" height="511" rx="20" fill="#112b3b" stroke="#3d647a" stroke-width="1.5"/>
+<rect x="78" y="189" width="636" height="63" rx="11" fill="#1b3b4e" stroke="#396077" stroke-width="1.5"/>
+<text x="101" y="231" font-size="20" font-weight="750" fill="#b7d5e1" text-anchor="start" font-family="Inter,Noto Sans KR,Arial,sans-serif">BEFORE CHANGE</text>
+<rect x="91" y="276" width="610" height="90" rx="13" fill="#423338" stroke="#eab58d" stroke-width="2"/>
+<text x="115" y="311" font-size="16" font-weight="680" fill="#b2cbd6" text-anchor="start" font-family="Inter,Noto Sans KR,Arial,sans-serif">VOLUME STATUS</text>
+<text x="115" y="343" font-size="30" font-weight="780" fill="#eab58d" text-anchor="start" font-family="Inter,Noto Sans KR,Arial,sans-serif">DEGRADED</text>
+<text x="582" y="330" font-size="15" font-weight="670" fill="#b0cbd4" text-anchor="start" font-family="Inter,Noto Sans KR,Arial,sans-serif">TARGET</text>
+<text x="659" y="339" font-size="37" font-weight="770" fill="#f4faff" text-anchor="middle" font-family="Inter,Noto Sans KR,Arial,sans-serif">2</text>
+<text x="94" y="408" font-size="17" font-weight="735" fill="#9ec3d5" text-anchor="start" font-family="Inter,Noto Sans KR,Arial,sans-serif">REPLICA RECORDS</text>
+<rect x="94" y="429" width="294" height="108" rx="13" fill="#1b4843" stroke="#70c6ac" stroke-width="1.5"/>
+<text x="112" y="464" font-size="19" font-weight="710" fill="#d8f7e9" text-anchor="start" font-family="Inter,Noto Sans KR,Arial,sans-serif">Replica A</text>
+<text x="112" y="498" font-size="24" font-weight="740" fill="#94e6bf" text-anchor="start" font-family="Inter,Noto Sans KR,Arial,sans-serif">Healthy</text>
+<rect x="407" y="429" width="294" height="108" rx="13" fill="#34343d" stroke="#a79891" stroke-width="1.5"/>
+<text x="423" y="465" font-size="19" font-weight="680" fill="#dedbe0" text-anchor="start" font-family="Inter,Noto Sans KR,Arial,sans-serif">Replica B</text>
+<text x="423" y="497" font-size="23" font-weight="680" fill="#e9c19b" text-anchor="start" font-family="Inter,Noto Sans KR,Arial,sans-serif">Unknown</text>
+<rect x="94" y="564" width="606" height="75" rx="10" fill="#1d3444" stroke="#45677b" stroke-width="1.5"/>
+<text x="114" y="595" font-size="14" font-weight="725" fill="#9dbccf" text-anchor="start" font-family="Inter,Noto Sans KR,Arial,sans-serif">INTERPRETATION</text>
+<text x="114" y="622" font-size="19" font-weight="560" fill="#d1e5ef" text-anchor="start" font-family="Inter,Noto Sans KR,Arial,sans-serif">Original redundancy target unmet</text>
+<rect x="764" y="169" width="680" height="511" rx="20" fill="#112b3b" stroke="#3d647a" stroke-width="1.5"/>
+<rect x="786" y="189" width="636" height="63" rx="11" fill="#1b3b4e" stroke="#396077" stroke-width="1.5"/>
+<text x="809" y="231" font-size="20" font-weight="750" fill="#b7d5e1" text-anchor="start" font-family="Inter,Noto Sans KR,Arial,sans-serif">AFTER THE CHANGE</text>
+<rect x="799" y="276" width="610" height="90" rx="13" fill="#163f3d" stroke="#84e0be" stroke-width="2"/>
+<text x="823" y="311" font-size="16" font-weight="680" fill="#b2cbd6" text-anchor="start" font-family="Inter,Noto Sans KR,Arial,sans-serif">VOLUME STATUS</text>
+<text x="823" y="343" font-size="30" font-weight="780" fill="#84e0be" text-anchor="start" font-family="Inter,Noto Sans KR,Arial,sans-serif">HEALTHY</text>
+<text x="1290" y="330" font-size="15" font-weight="670" fill="#b0cbd4" text-anchor="start" font-family="Inter,Noto Sans KR,Arial,sans-serif">TARGET</text>
+<text x="1367" y="339" font-size="37" font-weight="770" fill="#f4faff" text-anchor="middle" font-family="Inter,Noto Sans KR,Arial,sans-serif">1</text>
+<text x="802" y="408" font-size="17" font-weight="735" fill="#9ec3d5" text-anchor="start" font-family="Inter,Noto Sans KR,Arial,sans-serif">REPLICA RECORDS</text>
+<rect x="802" y="429" width="294" height="108" rx="13" fill="#1b4843" stroke="#70c6ac" stroke-width="1.5"/>
+<text x="820" y="464" font-size="19" font-weight="710" fill="#d8f7e9" text-anchor="start" font-family="Inter,Noto Sans KR,Arial,sans-serif">Replica A</text>
+<text x="820" y="498" font-size="24" font-weight="740" fill="#94e6bf" text-anchor="start" font-family="Inter,Noto Sans KR,Arial,sans-serif">Healthy</text>
+<rect x="1115" y="429" width="294" height="108" rx="13" fill="#34343d" stroke="#a79891" stroke-width="1.5"/>
+<text x="1131" y="465" font-size="19" font-weight="680" fill="#dedbe0" text-anchor="start" font-family="Inter,Noto Sans KR,Arial,sans-serif">Replica B</text>
+<text x="1131" y="497" font-size="16" font-weight="680" fill="#e9c19b" text-anchor="start" font-family="Inter,Noto Sans KR,Arial,sans-serif">Old object still listed</text>
+<rect x="802" y="564" width="606" height="75" rx="10" fill="#1d3444" stroke="#45677b" stroke-width="1.5"/>
+<text x="822" y="595" font-size="14" font-weight="725" fill="#9dbccf" text-anchor="start" font-family="Inter,Noto Sans KR,Arial,sans-serif">INTERPRETATION</text>
+<text x="822" y="622" font-size="17" font-weight="560" fill="#d1e5ef" text-anchor="start" font-family="Inter,Noto Sans KR,Arial,sans-serif">Reduced target met; second copy unverified</text>
+<rect x="55" y="709" width="1392" height="153" rx="14" fill="#172e3f" stroke="#4c7184" stroke-width="1.5"/>
+<text x="78" y="747" font-size="16" font-weight="750" fill="#9fc9d9" text-anchor="start" font-family="Inter,Noto Sans KR,Arial,sans-serif">WHAT CHANGED</text>
+<text x="78" y="783" font-size="20" font-weight="590" fill="#e6f2fa" text-anchor="start" font-family="Inter,Noto Sans KR,Arial,sans-serif">Configured target</text>
+<text x="78" y="818" font-size="28" font-weight="760" fill="#e4d6b8" text-anchor="start" font-family="Inter,Noto Sans KR,Arial,sans-serif">2 → 1</text>
+<path d="M433 738V838" fill="none" stroke="#385c70" stroke-width="1.5" />
+<text x="467" y="783" font-size="20" font-weight="590" fill="#e6f2fa" text-anchor="start" font-family="Inter,Noto Sans KR,Arial,sans-serif">Known healthy copies</text>
+<text x="467" y="818" font-size="28" font-weight="760" fill="#8fdfbd" text-anchor="start" font-family="Inter,Noto Sans KR,Arial,sans-serif">1 → 1</text>
+<path d="M879 738V838" fill="none" stroke="#385c70" stroke-width="1.5" />
+<text x="920" y="783" font-size="20" font-weight="590" fill="#e6f2fa" text-anchor="start" font-family="Inter,Noto Sans KR,Arial,sans-serif">Restored two-copy redundancy</text>
+<text x="920" y="818" font-size="25" font-weight="745" fill="#e6b998" text-anchor="start" font-family="Inter,Noto Sans KR,Arial,sans-serif">NOT VERIFIED</text>
+<text x="55" y="901" font-size="15" font-weight="500" fill="#8eaebe" text-anchor="start" font-family="Inter,Noto Sans KR,Arial,sans-serif">Observed UI states; not a map of replicas, physical nodes, byte integrity or a completed rebuild.</text>
+</svg>

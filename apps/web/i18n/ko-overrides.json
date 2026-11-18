@@ -636,5 +636,12 @@
   "Rocket.Chat": "Rocket.Chat",
   "Nexus3": "Nexus3",
   "SMTP": "SMTP",
-  "Configuration": "설정"
+  "Configuration": "설정",
+  "The Volume Said Healthy After I Lowered the Replica Count": "Replica를 하나로 줄였더니 Healthy가 됐다",
+  "The Volume Said Healthy After I Lowered the Replica Count | Jihwan Park": "Replica를 하나로 줄였더니 Healthy가 됐다 | 박지환",
+  "Why Longhorn's green volume status, healthy replica count, disk files and successful attachment represented different stages of recovery.": "Replica 수를 줄이자 볼륨 상태는 Healthy가 됐지만, 실제 데이터와 복제본이 모두 복구된 것은 아니었다. Longhorn 장애를 겪으며 다시 구분하게 된 복구의 기준.",
+  "Longhorn replica incident response, CSI attachment troubleshooting, data preservation and recovery-state verification": "Longhorn Replica 장애 대응, CSI Attach 문제 분석, 데이터 보존과 복구 상태 검증",
+  "Data Recovery": "데이터 복구",
+  "PersistentVolume": "PersistentVolume",
+  "Replicas": "Replica"
 }
