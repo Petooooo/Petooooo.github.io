@@ -5,7 +5,7 @@
   "rokaf-chat-attachments-object-storage": "07b0bf21de4cd294ba04b71aaaa280f915c052e56eae172d832ec6e906dee668",
   "rokaf-clickhouse-replication-migration": "d19dfd94104de8c3e5014a50b6edf8a18833351a1a3fdb7420e19c4e28d510d1",
   "rokaf-control-plane-incident-log": "671217ebb449e6260c198629d4aa9e8c7563956086adfd7f19634197dbeba8ce",
-  "rokaf-database-ha-and-langfuse-migrations": "260607c3829ec552cabd12594d7e1af4032e3a65f9a5c6123c541727717aa654",
+  "rokaf-database-ha-and-langfuse-migrations": "f7b2d5f8a7811211388258fd16634b1b9ef1feefeda5a2e4b1d2db4d02b7cdb0",
   "rokaf-dns-vip-open-investigations": "3194799b599eee0c90f8c7159e9a79bb980a797d01b6ff5f5cfd2ccaa5f4dc00",
   "rokaf-gpu-discovery-open-investigation": "4b52414af64065e9d1e2669cd5f6691d46498a72fdac4de232c77d8c00bdca7d",
   "rokaf-gpu-scheduling-and-capacity": "87e89b0a873ab7a7d55bb826cddd9c699a480b0fb100f7fe9400792cbdd4c80c",
