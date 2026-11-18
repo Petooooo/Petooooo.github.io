@@ -29,6 +29,7 @@ K3s는 이런 서비스의 공통 실행 환경을 제공했지만 모든 책임
 | ClickHouse | [ReplicatedMergeTree로 데이터 옮기기](/projects/rokaf-clickhouse-replication-migration/) — 테이블 메타데이터, Replica 상태, 데이터 검증 |
 | 인증과 인가 | [ServiceAccount부터 객체 권한까지](/projects/rokaf-identity-rbac-and-policy/) — Kubernetes RBAC와 애플리케이션 권한 |
 | 네트워크 | [Traefik·MetalLB·사설 TLS](/projects/rokaf-networking-and-tls/) — DNS, 요청 경로, 인증서 신뢰 |
+| Plane CE 초기 설정 | [로그인은 왜 계속 처음으로 돌아갔을까](/projects/rokaf-plane-ce-bootstrap-routing/) — 관리자 화면과 인증 API의 라우팅, 추가 프록시와 파일 저장소 경계 |
 | 외부 접속 | [ServiceLB와 호스트 포트 충돌](/projects/rokaf-service-lb-hostport-conflict/) — VIP 주소와 포트 자원의 소유권 |
 | GPU | [스케줄링과 실제 가용 용량](/projects/rokaf-gpu-scheduling-and-capacity/) — Time-slicing, MIG, VRAM, 복구 시 배치 |
 | 관측성 | [사라진 메트릭의 원인 추적](/projects/rokaf-observability-and-failure-evidence/) — Prometheus WAL과 DCGM Exporter 배치 |

@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1480 1088" role="img" aria-labelledby="bt-title bt-desc"><title id="bt-title">Plane first-run setup: observed states and separate open investigations</title><desc id="bt-desc">First-run state chart with a repeated admin/API failure loop, a route correction, observed successful user and workspace creation, and independent later issues: extra reverse proxy returned 404 and browser storage/TLS requests failed. It does not claim all features worked.</desc><defs>
+<marker id="arrow-6a9cac" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M1 1L9 5L1 9" fill="none" stroke="#6a9cac" stroke-width="1.6"/></marker>
+<marker id="arrow-db9e87" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M1 1L9 5L1 9" fill="none" stroke="#db9e87" stroke-width="1.6"/></marker>
+<marker id="arrow-86d1af" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M1 1L9 5L1 9" fill="none" stroke="#86d1af" stroke-width="1.6"/></marker>
+<marker id="arrow-dcb97b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M1 1L9 5L1 9" fill="none" stroke="#dcb97b" stroke-width="1.6"/></marker>
+</defs>
+<rect x="0" y="0" width="1480" height="1088" rx="0" fill="#081420" stroke="#081420" stroke-width="1.5"/>
+<text x="60" y="64" fill="#f2faff" font-size="34" font-weight="750" text-anchor="start" font-family="Inter,Noto Sans KR,Arial,sans-serif">First-run setup was a state transition, not a page load.</text>
+<text x="60" y="103" fill="#a6c2d3" font-size="19" font-weight="500" text-anchor="start" font-family="Inter,Noto Sans KR,Arial,sans-serif">Verified separately: account and Workspace creation; Pages Live connection recovered.</text>
+<path d="M60 127H1420" stroke="#33566a"/>
+<text x="65" y="165" fill="#8bbdd1" font-size="18" font-weight="750" text-anchor="start" font-family="Inter,Noto Sans KR,Arial,sans-serif">FIRST-RUN INVESTIGATION</text>
+<rect x="60" y="182" width="1360" height="449" rx="16" fill="#102537" stroke="#315368" stroke-width="1.3"/>
+<rect x="91" y="238" width="245" height="122" rx="15" fill="#1d3a4a" stroke="#74b5cb" stroke-width="2"/>
+<text x="113" y="274" fill="#92d4e5" font-size="17" font-weight="750" text-anchor="start" font-family="Inter,Noto Sans KR,Arial,sans-serif">BROWSER</text>
+<text x="113" y="311" fill="#eff9ff" font-size="24" font-weight="690" text-anchor="start" font-family="Inter,Noto Sans KR,Arial,sans-serif">Web UI renders</text>
+<text x="113" y="337" fill="#b9d0dd" font-size="16" font-weight="500" text-anchor="start" font-family="Inter,Noto Sans KR,Arial,sans-serif">not a functional test</text>
+<polygon points="525,218 667,304 525,391 383,304" fill="#244053" stroke="#b8a0de" stroke-width="2"/>
+<text x="525" y="282" fill="#f5f0ff" font-size="20" font-weight="700" text-anchor="middle" font-family="Inter,Noto Sans KR,Arial,sans-serif">Correct service</text>
+<text x="525" y="313" fill="#f5f0ff" font-size="20" font-weight="700" text-anchor="middle" font-family="Inter,Noto Sans KR,Arial,sans-serif">receives path?</text>
+<text x="525" y="340" fill="#c9b6e5" font-size="14" font-weight="510" text-anchor="middle" font-family="Inter,Noto Sans KR,Arial,sans-serif">routing decision</text>
+<path d="M336 300H377" fill="none" stroke="#6a9cac" stroke-width="2.6"  stroke-linejoin="round" stroke-linecap="round" marker-end="url(#arrow-6a9cac)"/>
+<text x="360" y="279" fill="#a8cad9" font-size="15" font-weight="550" text-anchor="middle" font-family="Inter,Noto Sans KR,Arial,sans-serif">request</text>
+<rect x="353" y="440" width="375" height="125" rx="14" fill="#3e2d33" stroke="#bf827f" stroke-width="1.8"/>
+<text x="378" y="478" fill="#f1b4a9" font-size="17" font-weight="780" text-anchor="start" font-family="Inter,Noto Sans KR,Arial,sans-serif">REPEATED FAILURE</text>
+<text x="378" y="513" fill="#ffefeb" font-size="23" font-weight="700" text-anchor="start" font-family="Inter,Noto Sans KR,Arial,sans-serif">/god-mode loop</text>
+<text x="378" y="544" fill="#f2c5be" font-size="17" font-weight="500" text-anchor="start" font-family="Inter,Noto Sans KR,Arial,sans-serif">/auth/email-check: 405 then 400</text>
+<path d="M525 391V433" fill="none" stroke="#db9e87" stroke-width="2.5"  stroke-linejoin="round" stroke-linecap="round" marker-end="url(#arrow-db9e87)"/>
+<text x="543" y="418" fill="#eab4a8" font-size="15" font-weight="720" text-anchor="start" font-family="Inter,Noto Sans KR,Arial,sans-serif">NO</text>
+<path d="M351 484C259 487 254 394 337 308" fill="none" stroke="#db9e87" stroke-width="2.2" stroke-dasharray="8 7" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#arrow-db9e87)"/>
+<text x="185" y="422" fill="#daa5a1" font-size="17" font-weight="650" text-anchor="start" font-family="Inter,Noto Sans KR,Arial,sans-serif">retry ≠ progress</text>
+<rect x="792" y="438" width="298" height="124" rx="15" fill="#1b3c43" stroke="#69beb5" stroke-width="2"/>
+<text x="817" y="477" fill="#8bdfd0" font-size="17" font-weight="750" text-anchor="start" font-family="Inter,Noto Sans KR,Arial,sans-serif">ROUTING CORRECTED</text>
+<text x="817" y="509" fill="#e6fff8" font-size="21" font-weight="650" text-anchor="start" font-family="Inter,Noto Sans KR,Arial,sans-serif">API/auth ownership</text>
+<text x="817" y="539" fill="#aed9d2" font-size="18" font-weight="510" text-anchor="start" font-family="Inter,Noto Sans KR,Arial,sans-serif">rules revised</text>
+<path d="M728 501H786" fill="none" stroke="#86d1af" stroke-width="2.5"  stroke-linejoin="round" stroke-linecap="round" marker-end="url(#arrow-86d1af)"/>
+<text x="746" y="484" fill="#93dfbe" font-size="15" font-weight="700" text-anchor="start" font-family="Inter,Noto Sans KR,Arial,sans-serif">fix</text>
+<rect x="1133" y="239" width="254" height="151" rx="17" fill="#1b423a" stroke="#7bd6b0" stroke-width="2.1"/>
+<text x="1159" y="272" fill="#91ecc5" font-size="17" font-weight="790" text-anchor="start" font-family="Inter,Noto Sans KR,Arial,sans-serif">VERIFIED</text>
+<text x="1159" y="308" fill="#f1fff9" font-size="24" font-weight="710" text-anchor="start" font-family="Inter,Noto Sans KR,Arial,sans-serif">New account</text>
+<text x="1159" y="337" fill="#d3f8e6" font-size="20" font-weight="640" text-anchor="start" font-family="Inter,Noto Sans KR,Arial,sans-serif">Workspace created</text>
+<text x="1159" y="367" fill="#bce8d6" font-size="15" font-weight="500" text-anchor="start" font-family="Inter,Noto Sans KR,Arial,sans-serif">initial setup passed</text>
+<path d="M1091 486C1166 482 1191 452 1225 395" fill="none" stroke="#86d1af" stroke-width="2.7"  stroke-linejoin="round" stroke-linecap="round" marker-end="url(#arrow-86d1af)"/>
+<text x="1159" y="441" fill="#8addb5" font-size="16" font-weight="650" text-anchor="start" font-family="Inter,Noto Sans KR,Arial,sans-serif">functional success</text>
+<path d="M667 304C820 302 909 306 1128 306" fill="none" stroke="#6a9cac" stroke-width="2.5" stroke-dasharray="8 7" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#arrow-6a9cac)"/>
+<text x="898" y="283" fill="#abd1df" font-size="16" font-weight="660" text-anchor="middle" font-family="Inter,Noto Sans KR,Arial,sans-serif">expected routes</text>
+<text x="82" y="600" fill="#b9cad7" font-size="17" font-weight="500" text-anchor="start" font-family="Inter,Noto Sans KR,Arial,sans-serif">405 / 400 were HTTP observations; they did not independently prove the database state.</text>
+<text x="65" y="672" fill="#efbf87" font-size="18" font-weight="750" text-anchor="start" font-family="Inter,Noto Sans KR,Arial,sans-serif">SEPARATE LATER INVESTIGATIONS — NOT INCLUDED IN THE VERIFIED SUCCESS</text>
+<rect x="60" y="692" width="650" height="160" rx="15" fill="#2a2937" stroke="#8e7899" stroke-width="1.7"/>
+<rect x="769" y="692" width="651" height="160" rx="15" fill="#2b2c32" stroke="#987f61" stroke-width="1.7"/>
+<text x="89" y="735" fill="#d9bee9" font-size="19" font-weight="740" text-anchor="start" font-family="Inter,Noto Sans KR,Arial,sans-serif">EXTRA NGINX ENTRY</text>
+<text x="89" y="776" fill="#f0e5f6" font-size="22" font-weight="640" text-anchor="start" font-family="Inter,Noto Sans KR,Arial,sans-serif">HTTP 404 before login UI</text>
+<text x="89" y="813" fill="#c8b5d4" font-size="17" font-weight="520" text-anchor="start" font-family="Inter,Noto Sans KR,Arial,sans-serif">Cause / final fix not established</text>
+<text x="801" y="735" fill="#f2c998" font-size="19" font-weight="740" text-anchor="start" font-family="Inter,Noto Sans KR,Arial,sans-serif">BROWSER STORAGE PATH</text>
+<text x="801" y="776" fill="#f5eadc" font-size="21" font-weight="640" text-anchor="start" font-family="Inter,Noto Sans KR,Arial,sans-serif">Upload error + HTTPS trust failure</text>
+<text x="801" y="813" fill="#d6c4a6" font-size="17" font-weight="520" text-anchor="start" font-family="Inter,Noto Sans KR,Arial,sans-serif">No confirmed end-to-end upload fix</text>
+
+
+<text x="65" y="921" fill="#82d9bd" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="18" font-weight="750">SEPARATE LATER FIX — CONFIRMED</text>
+<rect x="60" y="939" width="1360" height="100" rx="14" fill="#173a38" stroke="#62bda7" stroke-width="1.6"/>
+<text x="94" y="979" fill="#d9fff4" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="23" font-weight="730">Plane Pages · Connect lost</text>
+<text x="94" y="1013" fill="#a1e4d1" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="19">Missing /live route added → connection restored</text>
+<text x="64" y="1065" fill="#96b0bd" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="15">Observed states only · no real hosts, ports, credentials or internal topology</text>
+</svg>

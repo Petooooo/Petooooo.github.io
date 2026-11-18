@@ -1,0 +1,145 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1480 900" role="img" aria-labelledby="route-title route-desc"><title id="route-title">One public origin, different Plane service routes</title><desc id="route-desc">Conceptual route ownership matrix. Each request path has a separate target, including admin, API, web, live, spaces and object storage. A catch-all web route must not shadow more specific services.</desc>
+<rect x="0" y="0" width="1480" height="900" rx="0" fill="#081421" stroke="#081421" stroke-width="1"/>
+<text x="58" y="65" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="34" font-weight="760" fill="#f4faff" text-anchor="start">One hostname. Different request owners.</text>
+<text x="58" y="103" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="19" font-weight="500" fill="#a9c5d6" text-anchor="start">The main web page can load while its administration and API calls are misrouted.</text>
+<path d="M58 129L1422 129" fill="none" stroke="#35566b" stroke-width="1"/>
+<rect x="58" y="150" width="1364" height="58" rx="10" fill="#11283a" stroke="#33586f" stroke-width="1.2"/>
+<text x="80" y="188" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="17" font-weight="710" fill="#91c9d9" text-anchor="start">ROUTE MATCHING</text>
+<text x="270" y="188" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="19" font-weight="570" fill="#ecf5fb" text-anchor="start">Specific path rules must win before the web catch-all.</text>
+<rect x="58" y="234" width="1364" height="71" rx="9" fill="#204052" stroke="#345e73" stroke-width="1"/>
+<text x="80" y="263" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="18" font-weight="730" fill="#e2f1fa" text-anchor="start">REQUEST PATH</text>
+<text x="80" y="286" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="14" font-weight="500" fill="#aecbd8" text-anchor="start">(illustrative)</text>
+<text x="487" y="263" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="17" font-weight="700" fill="#eff8fc" text-anchor="middle">WEB</text>
+<text x="487" y="287" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="13" font-weight="470" fill="#adcad8" text-anchor="middle">UI</text>
+<text x="653" y="263" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="17" font-weight="700" fill="#eff8fc" text-anchor="middle">ADMIN</text>
+<text x="653" y="287" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="13" font-weight="470" fill="#adcad8" text-anchor="middle">Setup</text>
+<path d="M570 250L570 291" fill="none" stroke="#35566b" stroke-width="1"/>
+<text x="819" y="263" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="17" font-weight="700" fill="#eff8fc" text-anchor="middle">API</text>
+<text x="819" y="287" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="13" font-weight="470" fill="#adcad8" text-anchor="middle">Auth</text>
+<path d="M736 250L736 291" fill="none" stroke="#35566b" stroke-width="1"/>
+<text x="985" y="263" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="17" font-weight="700" fill="#eff8fc" text-anchor="middle">LIVE</text>
+<text x="985" y="287" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="13" font-weight="470" fill="#adcad8" text-anchor="middle">Realtime</text>
+<path d="M902 250L902 291" fill="none" stroke="#35566b" stroke-width="1"/>
+<text x="1151" y="263" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="17" font-weight="700" fill="#eff8fc" text-anchor="middle">SPACE</text>
+<text x="1151" y="287" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="13" font-weight="470" fill="#adcad8" text-anchor="middle">Pages</text>
+<path d="M1068 250L1068 291" fill="none" stroke="#35566b" stroke-width="1"/>
+<text x="1317" y="263" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="17" font-weight="700" fill="#eff8fc" text-anchor="middle">OBJECT</text>
+<text x="1317" y="287" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="13" font-weight="470" fill="#adcad8" text-anchor="middle">S3</text>
+<path d="M1234 250L1234 291" fill="none" stroke="#35566b" stroke-width="1"/>
+<rect x="58" y="313" width="1364" height="64" rx="7" fill="#153044" stroke="#27475a" stroke-width="1"/>
+<text x="80" y="341" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="20" font-weight="670" fill="#f1f8ff" text-anchor="start">/</text>
+<text x="80" y="363" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="14" font-weight="520" fill="#94b9cd" text-anchor="start">ordinary frontend</text>
+<rect x="421" y="323" width="132" height="43" rx="7" fill="#204653" stroke="#65bcd5" stroke-width="1.7"/>
+<circle cx="451" cy="344" r="9" fill="#65bcd5"/>
+<text x="468" y="350" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="13" font-weight="700" fill="#65bcd5" text-anchor="start">OWNER</text>
+<path d="M570 323L570 368" fill="none" stroke="#244254" stroke-width="0.8"/>
+<circle cx="653" cy="345" r="3" fill="#486479" opacity=".7"/>
+<path d="M736 323L736 368" fill="none" stroke="#244254" stroke-width="0.8"/>
+<circle cx="819" cy="345" r="3" fill="#486479" opacity=".7"/>
+<path d="M902 323L902 368" fill="none" stroke="#244254" stroke-width="0.8"/>
+<circle cx="985" cy="345" r="3" fill="#486479" opacity=".7"/>
+<path d="M1068 323L1068 368" fill="none" stroke="#244254" stroke-width="0.8"/>
+<circle cx="1151" cy="345" r="3" fill="#486479" opacity=".7"/>
+<path d="M1234 323L1234 368" fill="none" stroke="#244254" stroke-width="0.8"/>
+<circle cx="1317" cy="345" r="3" fill="#486479" opacity=".7"/>
+<rect x="58" y="382" width="1364" height="64" rx="7" fill="#11293a" stroke="#27475a" stroke-width="1"/>
+<text x="80" y="410" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="20" font-weight="670" fill="#f1f8ff" text-anchor="start">/god-mode/*</text>
+<text x="80" y="432" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="14" font-weight="520" fill="#94b9cd" text-anchor="start">first-run setup</text>
+<circle cx="487" cy="414" r="3" fill="#486479" opacity=".7"/>
+<path d="M570 392L570 437" fill="none" stroke="#244254" stroke-width="0.8"/>
+<rect x="587" y="392" width="132" height="43" rx="7" fill="#204653" stroke="#c2a0ec" stroke-width="1.7"/>
+<circle cx="617" cy="413" r="9" fill="#c2a0ec"/>
+<text x="634" y="419" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="13" font-weight="700" fill="#c2a0ec" text-anchor="start">OWNER</text>
+<path d="M736 392L736 437" fill="none" stroke="#244254" stroke-width="0.8"/>
+<circle cx="819" cy="414" r="3" fill="#486479" opacity=".7"/>
+<path d="M902 392L902 437" fill="none" stroke="#244254" stroke-width="0.8"/>
+<circle cx="985" cy="414" r="3" fill="#486479" opacity=".7"/>
+<path d="M1068 392L1068 437" fill="none" stroke="#244254" stroke-width="0.8"/>
+<circle cx="1151" cy="414" r="3" fill="#486479" opacity=".7"/>
+<path d="M1234 392L1234 437" fill="none" stroke="#244254" stroke-width="0.8"/>
+<circle cx="1317" cy="414" r="3" fill="#486479" opacity=".7"/>
+<rect x="58" y="451" width="1364" height="64" rx="7" fill="#153044" stroke="#27475a" stroke-width="1"/>
+<text x="80" y="479" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="20" font-weight="670" fill="#f1f8ff" text-anchor="start">/auth/*  /api/*</text>
+<text x="80" y="501" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="14" font-weight="520" fill="#94b9cd" text-anchor="start">sessions and API</text>
+<circle cx="487" cy="483" r="3" fill="#486479" opacity=".7"/>
+<path d="M570 461L570 506" fill="none" stroke="#244254" stroke-width="0.8"/>
+<circle cx="653" cy="483" r="3" fill="#486479" opacity=".7"/>
+<path d="M736 461L736 506" fill="none" stroke="#244254" stroke-width="0.8"/>
+<rect x="753" y="461" width="132" height="43" rx="7" fill="#204653" stroke="#8addb6" stroke-width="1.7"/>
+<circle cx="783" cy="482" r="9" fill="#8addb6"/>
+<text x="800" y="488" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="13" font-weight="700" fill="#8addb6" text-anchor="start">OWNER</text>
+<path d="M902 461L902 506" fill="none" stroke="#244254" stroke-width="0.8"/>
+<circle cx="985" cy="483" r="3" fill="#486479" opacity=".7"/>
+<path d="M1068 461L1068 506" fill="none" stroke="#244254" stroke-width="0.8"/>
+<circle cx="1151" cy="483" r="3" fill="#486479" opacity=".7"/>
+<path d="M1234 461L1234 506" fill="none" stroke="#244254" stroke-width="0.8"/>
+<circle cx="1317" cy="483" r="3" fill="#486479" opacity=".7"/>
+<rect x="58" y="520" width="1364" height="64" rx="7" fill="#11293a" stroke="#27475a" stroke-width="1"/>
+<text x="80" y="548" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="20" font-weight="670" fill="#f1f8ff" text-anchor="start">/graphql/*</text>
+<text x="80" y="570" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="14" font-weight="520" fill="#f6c689" text-anchor="start">version-dependent API</text>
+<circle cx="487" cy="552" r="3" fill="#486479" opacity=".7"/>
+<path d="M570 530L570 575" fill="none" stroke="#244254" stroke-width="0.8"/>
+<circle cx="653" cy="552" r="3" fill="#486479" opacity=".7"/>
+<path d="M736 530L736 575" fill="none" stroke="#244254" stroke-width="0.8"/>
+<rect x="753" y="530" width="132" height="43" rx="7" fill="#1a3544" stroke="#ae885c" stroke-width="1.7"/>
+<circle cx="780" cy="551" r="8" fill="none" stroke="#8addb6" stroke-width="2" stroke-dasharray="3 2"/>
+<text x="796" y="557" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="13" font-weight="700" fill="#8addb6" text-anchor="start">VARIES</text>
+<path d="M902 530L902 575" fill="none" stroke="#244254" stroke-width="0.8"/>
+<circle cx="985" cy="552" r="3" fill="#486479" opacity=".7"/>
+<path d="M1068 530L1068 575" fill="none" stroke="#244254" stroke-width="0.8"/>
+<circle cx="1151" cy="552" r="3" fill="#486479" opacity=".7"/>
+<path d="M1234 530L1234 575" fill="none" stroke="#244254" stroke-width="0.8"/>
+<circle cx="1317" cy="552" r="3" fill="#486479" opacity=".7"/>
+<rect x="58" y="589" width="1364" height="64" rx="7" fill="#153044" stroke="#27475a" stroke-width="1"/>
+<text x="80" y="617" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="20" font-weight="670" fill="#f1f8ff" text-anchor="start">/live/*</text>
+<text x="80" y="639" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="14" font-weight="520" fill="#94b9cd" text-anchor="start">upgraded connection</text>
+<circle cx="487" cy="621" r="3" fill="#486479" opacity=".7"/>
+<path d="M570 599L570 644" fill="none" stroke="#244254" stroke-width="0.8"/>
+<circle cx="653" cy="621" r="3" fill="#486479" opacity=".7"/>
+<path d="M736 599L736 644" fill="none" stroke="#244254" stroke-width="0.8"/>
+<circle cx="819" cy="621" r="3" fill="#486479" opacity=".7"/>
+<path d="M902 599L902 644" fill="none" stroke="#244254" stroke-width="0.8"/>
+<rect x="919" y="599" width="132" height="43" rx="7" fill="#204653" stroke="#f4c17a" stroke-width="1.7"/>
+<circle cx="949" cy="620" r="9" fill="#f4c17a"/>
+<text x="966" y="626" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="13" font-weight="700" fill="#f4c17a" text-anchor="start">OWNER</text>
+<path d="M1068 599L1068 644" fill="none" stroke="#244254" stroke-width="0.8"/>
+<circle cx="1151" cy="621" r="3" fill="#486479" opacity=".7"/>
+<path d="M1234 599L1234 644" fill="none" stroke="#244254" stroke-width="0.8"/>
+<circle cx="1317" cy="621" r="3" fill="#486479" opacity=".7"/>
+<rect x="58" y="658" width="1364" height="64" rx="7" fill="#11293a" stroke="#27475a" stroke-width="1"/>
+<text x="80" y="686" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="20" font-weight="670" fill="#f1f8ff" text-anchor="start">/spaces/*</text>
+<text x="80" y="708" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="14" font-weight="520" fill="#94b9cd" text-anchor="start">published pages</text>
+<circle cx="487" cy="690" r="3" fill="#486479" opacity=".7"/>
+<path d="M570 668L570 713" fill="none" stroke="#244254" stroke-width="0.8"/>
+<circle cx="653" cy="690" r="3" fill="#486479" opacity=".7"/>
+<path d="M736 668L736 713" fill="none" stroke="#244254" stroke-width="0.8"/>
+<circle cx="819" cy="690" r="3" fill="#486479" opacity=".7"/>
+<path d="M902 668L902 713" fill="none" stroke="#244254" stroke-width="0.8"/>
+<circle cx="985" cy="690" r="3" fill="#486479" opacity=".7"/>
+<path d="M1068 668L1068 713" fill="none" stroke="#244254" stroke-width="0.8"/>
+<rect x="1085" y="668" width="132" height="43" rx="7" fill="#204653" stroke="#99adf3" stroke-width="1.7"/>
+<circle cx="1115" cy="689" r="9" fill="#99adf3"/>
+<text x="1132" y="695" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="13" font-weight="700" fill="#99adf3" text-anchor="start">OWNER</text>
+<path d="M1234 668L1234 713" fill="none" stroke="#244254" stroke-width="0.8"/>
+<circle cx="1317" cy="690" r="3" fill="#486479" opacity=".7"/>
+<rect x="58" y="727" width="1364" height="64" rx="7" fill="#153044" stroke="#27475a" stroke-width="1"/>
+<text x="80" y="755" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="20" font-weight="670" fill="#f1f8ff" text-anchor="start">/uploads/*</text>
+<text x="80" y="777" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="14" font-weight="520" fill="#f6c689" text-anchor="start">bucket/proxy design</text>
+<circle cx="487" cy="759" r="3" fill="#486479" opacity=".7"/>
+<path d="M570 737L570 782" fill="none" stroke="#244254" stroke-width="0.8"/>
+<circle cx="653" cy="759" r="3" fill="#486479" opacity=".7"/>
+<path d="M736 737L736 782" fill="none" stroke="#244254" stroke-width="0.8"/>
+<circle cx="819" cy="759" r="3" fill="#486479" opacity=".7"/>
+<path d="M902 737L902 782" fill="none" stroke="#244254" stroke-width="0.8"/>
+<circle cx="985" cy="759" r="3" fill="#486479" opacity=".7"/>
+<path d="M1068 737L1068 782" fill="none" stroke="#244254" stroke-width="0.8"/>
+<circle cx="1151" cy="759" r="3" fill="#486479" opacity=".7"/>
+<path d="M1234 737L1234 782" fill="none" stroke="#244254" stroke-width="0.8"/>
+<rect x="1251" y="737" width="132" height="43" rx="7" fill="#1a3544" stroke="#ae885c" stroke-width="1.7"/>
+<circle cx="1278" cy="758" r="8" fill="none" stroke="#db9aab" stroke-width="2" stroke-dasharray="3 2"/>
+<text x="1294" y="764" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="13" font-weight="700" fill="#db9aab" text-anchor="start">VARIES</text>
+<rect x="58" y="810" width="1364" height="61" rx="9" fill="#1d2b38" stroke="#516578" stroke-width="1"/>
+<text x="81" y="839" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="17" font-weight="750" fill="#86cee1" text-anchor="start">Boundary:</text>
+<text x="191" y="839" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="18" font-weight="540" fill="#e2eef7" text-anchor="start">A 200 HTML response from WEB does not prove the API or ADMIN request succeeded.</text>
+<text x="81" y="862" font-family="Inter,Noto Sans KR,Arial,sans-serif" font-size="14" font-weight="480" fill="#9db8c8" text-anchor="start">Conceptual mapping only · routes and versions vary · no private Ingress or topology shown</text>
+</svg>

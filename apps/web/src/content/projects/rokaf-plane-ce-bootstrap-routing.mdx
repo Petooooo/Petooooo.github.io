@@ -1,0 +1,147 @@
+---
+title: "Plane CE: A Login Screen, a Redirect Loop, and the Routes Behind Them"
+description: "A self-hosted Plane CE setup that reached the browser but could not finish first-run configuration, the path-based routing correction that unlocked account creation, and later proxy and storage questions that remained separate."
+date: "2026-11-18"
+draft: false
+reviewed: true
+reviewStatus: "reviewed"
+sensitivity: sanitized
+category: "Systems Engineering"
+area: "Networking & Reliability"
+tags: ["Plane CE", "Kubernetes", "Ingress", "Reverse Proxy", "HTTP", "WebSocket", "MinIO", "TLS"]
+type: "implementation-note"
+role: "Self-hosted application integration, ingress troubleshooting and initial instance configuration"
+period: "2026"
+status: "active"
+techStack: ["Plane CE", "K3s", "Kubernetes", "Helm", "Ingress", "Nginx", "MinIO"]
+---
+
+The first Plane CE page loaded, but that was almost the only reassuring part. Trying to get through the initial setup kept bringing me back to `/god-mode`. The email check endpoint returned HTTP 405 at one point and 400 at another. The application also displayed **"Instance not configured."**
+
+I was deploying Plane Community Edition in a closed-network Kubernetes environment. The working version at the time was Plane CE v1.2.0. Most of the underlying services could be started, yet I could not finish the action that mattered: configure the instance and create a usable account.
+
+It was tempting to treat each message as a separate application error. But the failures all happened around the boundary between the browser, the web frontend, the administrative interface, and authentication APIs. Eventually, after revising the request routing, the instance setup began working. I could create a new user, and the application created a Workspace as part of that flow.
+
+What made the incident useful was the gap between **"the page loads"** and **"the application can complete its first request sequence."** They are not equivalent deployment checks. A separate Pages collaboration failure later made that distinction even clearer: it was repaired by routing the missing `/live` path to Plane's Live service.
+
+## A redirect loop made the installation look unfinished
+
+The visible symptom was an unfinished first-run experience: the browser repeatedly ended up around the administration setup page instead of advancing to a working login. The accompanying "Instance not configured" message looked like proof that the database had no initialized instance record.
+
+That was one possible explanation, but it was not the only one. An application can display a configuration error because its frontend is unable to retrieve the configuration from the intended API. If a reverse proxy directs an API request to a web frontend, the response may be an HTML document, a redirect, or an HTTP error rather than the JSON the caller expects.
+
+I therefore stopped interpreting the page text as a definitive database diagnosis. The initial troubleshooting involved inspecting where the browser was sending requests and what those paths actually reached.
+
+The `/auth/email-check` endpoint was especially revealing. At one stage it returned **405 Method Not Allowed**; at another it returned **400 Bad Request**. Those status codes are observations, not complete root-cause explanations. A 405 may indicate that the received HTTP method was not accepted by whichever component handled the request. A 400 can mean the request reached an endpoint that rejected its input or state. Neither alone proves that the instance is configured, that a session is valid, or that the route is correct.
+
+## One hostname did not mean one backend
+
+What I initially saw as a single Plane application was actually a collection of services exposed under the same public origin. A path-based router had to deliver different requests to different destinations.
+
+The following is a conceptual route map, based on the Plane architecture and the routing responsibilities that mattered during the investigation. It is **not a copy of my internal Ingress configuration**. Exact paths and upstreams depend on the Plane and Helm chart version.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/plane-route-ownership.svg" target="_blank" rel="noopener noreferrer" aria-label="Open Plane path ownership diagram showing admin, API, frontend, realtime and upload routes">
+    <img src="/figures/journals/plane-route-ownership.svg" alt="Path ownership matrix: /god-mode routes to administrative setup; /auth and /api to the API; /live to realtime; /spaces to the space frontend; /uploads to object-storage access where configured; / as the catch-all routes to the web UI. Diagram is conceptual rather than an internal network topology." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>The route a browser chooses determines which service must answer. The catch-all frontend cannot substitute for the administration and API services.</figcaption>
+</figure>
+
+| Request path (illustrative) | Responsible service | What can fail if misrouted |
+| --- | --- | --- |
+| `/god-mode/*` | Administrative setup UI | First-run page or redirect does not complete |
+| `/auth/*`, `/api/*` | Application API | Email check, session or configuration request fails |
+| `/graphql/*`, `/internal/*` | API-side routes where exposed by that deployment | Endpoint-dependent operations may fail |
+| `/live/*` | Realtime service where used | WebSocket or collaborative features cannot connect |
+| `/spaces/*` | Published space frontend | Public or shared pages fail |
+| Upload bucket path | Object-store route or application storage proxy | Browser cannot fetch or upload the object |
+| `/` | Main web frontend | Ordinary page and static UI |
+
+The important rule is not that this table applies unchanged to every Plane release. It is that a broad rule such as `PathPrefix("/")` must not swallow requests that belong to more specific backends. The application may appear alive while its API and administrative flows are effectively disconnected.
+
+When investigating, I considered the Host header and forwarded scheme alongside the path itself. An authentication flow can depend on a stable external origin; a mismatch between the browser's visible URL and the application's configured address may affect redirects or generated URLs. But that is a separate hypothesis from a misrouted API request and needs its own evidence.
+
+## What actually changed
+
+The decisive troubleshooting step was to correct the route handling so the relevant API and authentication paths no longer disappeared into the general frontend route. After this change, the earlier first-run blockage cleared: **user registration worked, and a Workspace could be created**.
+
+This is a meaningful functional result. It shows that the browser was now able to complete at least the setup and account-creation sequence. It does not prove that every Plane feature or upstream integration was healthy.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/plane-bootstrap-statechart.svg" target="_blank" rel="noopener noreferrer" aria-label="Open Plane first-run setup statechart separating observed failures, corrective routing and verified account creation">
+    <img src="/figures/journals/plane-bootstrap-statechart.svg" alt="State chart distinguishes initial reachable web UI, blocked god-mode and auth requests, routing correction, and observed successful account and workspace creation. Unverified later proxy and storage paths are separate branches, not successful states." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>The first-run state transition was verified at account and Workspace creation. Later proxy and storage issues are shown as separate investigations, not implied fixes.</figcaption>
+</figure>
+
+I also considered how the instance's external address and setup state were represented. Those are reasonable things to inspect when an installation claims that its instance is unconfigured. However, I do not have a preserved before/after database audit proving that a particular `Instance` field update was the sole cause of the recovery. I would rather retain the supported conclusion: correcting the routing was followed by a successful initial setup.
+
+The experience changed what I would test after installing a multi-service web application. A successful HTTP 200 on the landing page is insufficient. I need to verify the **path-to-service mapping**, then submit an actual application request that crosses the same boundaries as normal use.
+
+## The later reverse-proxy problem was not the same victory
+
+A later attempt exposed the application through a different entry point, using Nginx as an additional reverse proxy. The environment and URL-related values were changed during that investigation, but the proxy path still returned 404 and did not even render the login page.
+
+That later symptom should not be folded into the successful bootstrap story. The earlier route correction had established that the application could create an account and Workspace through one access path. It did **not** establish that every alternative host, port, or extra proxy would forward all of Plane's routes correctly.
+
+There are several plausible differences between the two entry paths: the Host header, externally advertised origin, path matching, redirects and upstream selection. The preserved notes do not identify a single verified cause for the later 404, nor do they show its final resolution.
+
+For that reason, I would compare the two requests by starting at the client and keeping the method, path, response status and response headers together. A reverse proxy that returns a 404 before the request reaches the expected frontend requires a different fix from a frontend that renders successfully but cannot call the API.
+
+## Pages needed a different kind of successful request
+
+After I could register an account, another symptom appeared in Plane Pages: the interface displayed **"Connect lost"** even though the site itself could be opened.
+
+I had already configured Nginx to forward HTTP/1.1 connections and the `Upgrade` and `Connection` headers typically required for WebSocket traffic. Adjusting those headers again would not make much sense if the request never reached the component that understood the protocol.
+
+The more useful question was which backend received `/live`. I found that this path was missing from the IngressRoute. It was not the job of the main Web frontend to answer the real-time collaboration connection.
+
+I added the route to the **Live service**. The Pages connection-loss problem then disappeared. That is a functional result from the original incident, not an inference from a Kubernetes Ready status. The exact proxy implementation is omitted, but the public route family `/live` is also identified in Plane's CE Helm documentation.
+
+There were two separate conditions: the proxy had to preserve the WebSocket upgrade, **and** the route had to target the service responsible for it. A successful login did not test that second condition. Conversely, a fixed WebSocket did not establish that the file-upload and proxy-origin issues below were resolved.
+
+## A separate storage problem crossed the browser boundary
+
+The same deployment raised another question around file uploads. Using an internal MinIO endpoint, backend communication could work. But uploads initiated from the browser still produced errors. When an externally reachable HTTPS storage address was tried, certificate validation failed. After a separate Nginx-based storage access experiment, the Plane API reported that bucket access was forbidden. That was a distinct authorization symptom, not proof that the earlier certificate issue had been fixed.
+
+This was not proof of a broken MinIO service. A backend Pod can resolve and reach a cluster-internal storage hostname while a browser outside that network cannot. Likewise, a server process may trust a certificate differently from the user's browser. Publicly generated upload URLs must be usable **from the party that actually sends the request**.
+
+To reason about the failure I separated the callers:
+
+| Caller | What it needs | What a successful check establishes |
+| --- | --- | --- |
+| Plane backend | A resolvable S3-compatible endpoint and valid storage credentials | Server-side storage operations may work |
+| Browser | A reachable HTTPS URL, appropriate certificate identity/trust and permitted cross-origin behavior | The client can attempt upload/download |
+| Ingress or storage proxy | A route to the correct bucket or upstream, with headers and request size handled correctly | Traffic can reach the intended backend |
+
+In Plane's self-hosting documentation, a storage-proxy option can shift some browser uploads and downloads through the application rather than making the browser contact S3 directly. This is useful as an architectural comparison, but **I have not verified that this option was enabled or tested successfully in the original incident**.
+
+Certificate trust and name matching remain independent of path forwarding. A certificate could be trusted by the backend and rejected by the browser, or the TLS certificate could be valid for a different hostname. Changing an object-store environment variable alone cannot guarantee browser reachability.
+
+The preserved investigation does not establish a final, working browser file-upload configuration or completed OAuth integration. **The Pages real-time connection issue was independently resolved** after the missing `/live` mapping was added.
+
+## How I would test such a deployment now
+
+I would use a small set of user-facing tests arranged by responsibility, not just a list of healthy Pods.
+
+A landing page should render under the expected origin. The administration route should lead to the intended admin service. An email-check request should receive the response appropriate to the method and application state. A fresh account should be able to enter a Workspace. Then, separately, I would test a WebSocket connection if the feature is used and verify file upload and download from the actual client browser. In this case, Pages recovered after its `/live` route was added; the file-upload path did not have comparable final verification.
+
+A route table is useful as a design artifact, but observable responses remain decisive. For example, HTTP 200 from an upstream is weak evidence if the API caller expected JSON and received the frontend's HTML shell. Testing only inside the Kubernetes network can hide failures that occur from the user's external network. Testing only the browser can miss backend failures that produce vague error screens.
+
+Two changes have direct functional evidence: **account and Workspace creation worked after correcting API path ownership**, and **Pages stopped reporting a lost connection after routing `/live` to Live**. The additional Nginx entry path and browser-facing storage endpoint remained separately unresolved in my surviving records.
+
+## A usable service is a set of successful conversations
+
+The Plane incident looked like an incomplete setup, but its most important fix was about which service received which HTTP request. A working UI and Running Pods did not tell me whether setup, authentication, backend APIs and object storage were reachable from their respective callers.
+
+I no longer treat an Ingress rule as a short path from a hostname to one Pod. For a multi-service application it is part of the application's interface contract: the same hostname may route to different services based on the path, while some operations depend on session state, external-origin headers, upgrades or direct browser access to storage.
+
+Working account registration and a restored Pages connection gave me two different forms of functional verification. A later proxy still returned 404, and a browser-originated upload could still fail despite backend-to-MinIO communication. A single broad "deployment complete" claim would hide those distinctions.
+
+## References
+
+- [Plane — self-hosted architecture](https://developers.plane.so/self-hosting/plane-architecture) — general service responsibilities; not proof of the original deployment's exact configuration.
+- [Plane CE 1.2.0 — Helm chart route families](https://artifacthub.io/packages/helm/makeplane/plane-ce/1.2.0) — version-matched reference for `/live`, `/api`, `/auth`, `/god-mode` and other route families.
+- [Plane — Kubernetes installation and ingress routes](https://developers.plane.so/self-hosting/methods/kubernetes) — current documentation; verify against the installed chart version.
+- [Plane — external reverse proxy](https://developers.plane.so/self-hosting/govern/reverse-proxy) — current paths and forwarded-header considerations.
+- [Plane — Kubernetes storage settings](https://developers.plane.so/self-hosting/methods/kubernetes) — storage URL and proxy options; not evidence of a completed storage fix.

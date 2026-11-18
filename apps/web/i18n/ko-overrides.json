@@ -609,5 +609,13 @@
   "When Old Attachments Disappeared: Rocket.Chat's GridFS-to-MinIO Migration": "예전 첨부파일은 어디로 갔을까: Rocket.Chat의 GridFS에서 MinIO로",
   "Why preserved messages and successful new uploads did not restore historical attachments: GridFS payloads, Rocket.Chat upload metadata, S3 object keys, and a migration plan based on observable identities.": "대화 내역과 새 업로드는 정상인데 예전 첨부파일만 열리지 않았던 이유. GridFS 파일 데이터와 Rocket.Chat 메타데이터, MinIO 객체 Key를 맞추는 과정.",
   "GridFS": "GridFS",
-  "When Old Attachments Disappeared: Rocket.Chat's GridFS-to-MinIO Migration | Jihwan Park": "예전 첨부파일은 어디로 갔을까: Rocket.Chat의 GridFS에서 MinIO로 | 박지환"
+  "When Old Attachments Disappeared: Rocket.Chat's GridFS-to-MinIO Migration | Jihwan Park": "예전 첨부파일은 어디로 갔을까: Rocket.Chat의 GridFS에서 MinIO로 | 박지환",
+  "A self-hosted Plane CE setup that reached the browser but could not finish first-run configuration, the path-based routing correction that unlocked account creation, and later proxy and storage questions that remained separate.": "첫 화면은 열리는데 초기 설정은 끝나지 않던 Plane CE. API·관리자 경로를 수정해 계정 생성에 성공한 과정과 이후 남은 프록시·파일 저장소 문제.",
+  "Fourteen detailed accounts of the engineering choices, failed assumptions and reliability trade-offs behind the platform.": "플랫폼 운영 중 겪었던 장애와 설계 선택, 그에 따른 고민을 정리한 14편의 기술 기록이다.",
+  "Plane CE": "Plane CE",
+  "Plane CE: A Login Screen, a Redirect Loop, and the Routes Behind Them": "Plane CE 로그인은 왜 계속 처음으로 돌아갔을까",
+  "Plane CE: A Login Screen, a Redirect Loop, and the Routes Behind Them | Jihwan Park": "Plane CE 로그인은 왜 계속 처음으로 돌아갔을까 | 박지환",
+  "Reverse Proxy": "Reverse Proxy",
+  "Self-hosted application integration, ingress troubleshooting and initial instance configuration": "Plane CE 초기 설정과 Ingress 라우팅 장애 조사, 사용자·Workspace 등록 검증",
+  "WebSocket": "WebSocket"
 }

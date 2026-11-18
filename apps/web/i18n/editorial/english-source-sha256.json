@@ -1,6 +1,6 @@
 {
   "bit-shift-cnn-accelerator-zynq": "5afa94644077341049db4013a5cf8bb9eb8def1d85a0325659127faed9d0f014",
-  "independent-on-premises-k3s-platform-engineering": "10c3572fbcb10740a36284aab1b540099282630c6e13addafb0647b1a3aa1b95",
+  "independent-on-premises-k3s-platform-engineering": "4b2fe0e6f36f61ce113b5e255aed34087aff233763def93e455f866cbb6d4d7a",
   "rokaf-async-workers-and-idempotency": "eac960e6c93ab59531da241fc5b98ad5eeeab7911a6f6673038708226d54b2d9",
   "rokaf-chat-attachments-object-storage": "07b0bf21de4cd294ba04b71aaaa280f915c052e56eae172d832ec6e906dee668",
   "rokaf-clickhouse-replication-migration": "d19dfd94104de8c3e5014a50b6edf8a18833351a1a3fdb7420e19c4e28d510d1",
@@ -15,6 +15,7 @@
   "rokaf-object-storage-migration": "6ec9db0aeac54862054676796092afb31c2ef6a11a9b2ccda90f36e5ae360c73",
   "rokaf-observability-and-failure-evidence": "c9f9179f8fee7f8b513e8e08211b1c2b84c9551cf7cee31ef92a2ac42f09af0a",
   "rokaf-offline-gitops-delivery": "b2ceed507643014c50befc66d3e05e4941c5d862279a1a1e399b633e0f36a45a",
+  "rokaf-plane-ce-bootstrap-routing": "18f8915dc43518ebaa40eba0e5324f90e1b1f2d8d0016f3682e49a623acaba6d",
   "rokaf-private-artifacts-and-ci": "4de4d002e1362a7fbc37e8ea1c5ff30c4638cffd79e845ca0b0a60b7d07f0877",
   "rokaf-service-lb-hostport-conflict": "e0cbad7535faf1d8eaee4c9aff0b25cc585cfbdde3f433adf7c67e80302ee9b7",
   "rokaf-stateful-storage-and-recovery": "ab8bdb57edd832b84be4ac1fb4ca73b595dc0eb4287af3247e91f4c81ebb6f2f",
