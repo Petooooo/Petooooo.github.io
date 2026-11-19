@@ -1,7 +1,8 @@
 ---
-title: "When Old Attachments Disappeared: Rocket.Chat's GridFS-to-MinIO Migration"
-description: "Why preserved messages and successful new uploads did not restore historical attachments: GridFS payloads, Rocket.Chat upload metadata, S3 object keys, and a migration plan based on observable identities."
+title: "Rocket.Chat Attachments: GridFS to MinIO Migration"
+description: "Migration of historical Rocket.Chat attachments across GridFS payloads, upload metadata and MinIO object keys."
 date: "2026-11-17"
+updated: "2026-11-19"
 draft: false
 reviewed: true
 reviewStatus: "reviewed"
@@ -126,7 +127,7 @@ At the beginning, I thought I was moving files from one storage product to anoth
 
 The useful experimental contrast was already in front of me: new attachments worked, historical ones did not. That directed attention away from a blanket "MinIO is broken" diagnosis and toward the keys, metadata and original bytes needed to make an old attachment readable.
 
-The migration could be considered complete only when a historical message led to the right upload record, the record pointed to the right binary, and the user could read the result. A copy command finishing, a MongoDB restore succeeding, or an S3 bucket containing objects each answered only one part of that question.
+My remaining acceptance test was to open a historical attachment through its original message and compare the returned bytes against the GridFS source. Successful new uploads and a populated MinIO bucket were useful checks, but neither verified historical references.
 
 ## References
 

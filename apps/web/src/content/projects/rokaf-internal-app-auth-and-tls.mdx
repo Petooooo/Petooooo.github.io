@@ -1,7 +1,8 @@
 ---
-title: "The Wiki Loaded, but Login and Editing Took Different Routes"
-description: "Following Outline's GitLab sign-in, reverse-proxied WebSocket, certificate trust and file requests across independent network boundaries."
+title: "Outline: GitLab OAuth, WebSocket and TLS Incidents"
+description: "Outline login, WebSocket, client certificate and attachment troubleshooting across different request paths."
 date: "2026-11-18"
+updated: "2026-11-19"
 draft: false
 reviewed: true
 reviewStatus: "reviewed"
@@ -121,9 +122,7 @@ The WebSocket upgrade and the client certificate intervention had observable eff
 
 A stronger future verification would pair observations with the actual caller: test the provider name and HTTPS handshake **from Outline's runtime**, inspect the OAuth callback URL as the provider sees it, test WebSocket upgrades in the browser and follow a failing image request to its full host, response and authorization context. After that, reproduce a save and image reload on an affected client, not just a successful `101` handshake.
 
-The lesson was not that every failure needed a new proxy rule. It was that the same web application can involve several unrelated request paths, each with its own client and trust store. I had fixed one protocol boundary, narrowed another through client certificates, and found remaining failures whose causes needed different evidence.
-
-I would rather leave those boundaries visible than flatten the story into a single "SSO and TLS fixed" deployment note.
+The recorded result includes a WebSocket `101` handshake and an improvement after a client certificate change. The GitLab `ETIMEDOUT`, callback mismatch and some client file-loading cases did not have preserved end-to-end recovery checks.
 
 ## References
 

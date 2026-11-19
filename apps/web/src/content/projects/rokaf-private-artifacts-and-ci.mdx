@@ -1,7 +1,8 @@
 ---
-title: "The Cluster Needed Images from a Registry It Could Not Reach"
-description: "Kaniko's misleading missing-executor errors, Runner selection, three certificate trust boundaries, Nexus blob storage, and a private registry's recovery dependency."
+title: "Nexus and Kaniko: Private Registry CI/CD"
+description: "GitLab Runner and Kaniko runtime setup, Nexus storage, TLS trust boundaries and image recovery dependencies."
 date: "2026-11-18"
+updated: "2026-11-19"
 draft: false
 reviewed: true
 reviewStatus: "reviewed"
@@ -141,7 +142,7 @@ If I were packaging the system again, I would preserve the identity of the **sou
 
 A build succeeding does not automatically update desired state. The companion [offline GitOps record](/projects/rokaf-offline-gitops-delivery/) examines that separate promotion and reconciliation boundary.
 
-I had started by thinking of Nexus as a destination for Docker images. I ended up thinking of it as a service the whole cluster might need before it could repair itself. **The most serious problem was not that a Push failed; it was that a recovery step could ask an unavailable dependency to supply the very image needed to restore that dependency.**
+During the later Nexus/CoreDNS outage, some Pods could not retrieve the images required for restart. That made cached-image coverage and independent access to recovery images specific operational requirements, separate from the earlier Kaniko runtime and registry TLS fixes.
 
 ## References
 

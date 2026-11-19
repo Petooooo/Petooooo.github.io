@@ -1,8 +1,8 @@
 ---
-title: "A Healthy Database Pod Was Not Enough"
-description: "MongoDB, PostgreSQL/Pgpool, ClickHouse/Keeper and Langfuse incidents where replicas, routing, stored progress and actual reads told different stories."
+title: "Database HA: MongoDB, Pgpool and ClickHouse"
+description: "Operational notes on MongoDB primary discovery, PostgreSQL/Pgpool routing, ClickHouse replication and Langfuse migration state."
 date: "2026-11-15"
-updated: "2026-11-18"
+updated: "2026-11-19"
 draft: false
 reviewed: true
 sensitivity: sanitized
@@ -129,7 +129,7 @@ When I first investigated the v4 migration, several stages were still open. The 
 
 **That was an intermediate state, not the final outcome.** By November 17, 2026, I had completed Langfuse migration Steps 1–5, moved to `events_only` on app 4.46.0, and passed checks of historical and newly written data. The last step cleaned up an intermediate sorting table; it did not delete the original `traces` or `observations` tables. The [focused migration record](/projects/rokaf-langfuse-v4-migration-field-notes/) separates those later results from the earlier errors.
 
-That verification supports a completed migration in the tested scope. It does not automatically establish the outcome of every possible historical edge case or failure-recovery scenario. I still want each claim about availability to point to the layer and test that supports it.
+Langfuse Steps 1–5 and the tested historical/new-data paths were completed on November 17, 2026. That checkpoint does not verify every historical record or prove failover behavior for the MongoDB, PostgreSQL and ClickHouse incidents discussed above.
 
 **Related records:** [stateful storage recovery](/projects/rokaf-stateful-storage-and-recovery/) · [ROKAF platform overview](/projects/independent-on-premises-k3s-platform-engineering/).
 

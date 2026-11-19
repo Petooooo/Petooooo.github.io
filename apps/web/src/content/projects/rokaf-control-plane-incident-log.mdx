@@ -1,7 +1,8 @@
 ---
-title: "Control-Plane Incidents: etcd, Disk State and the Limits of a Quick Fix"
-description: "A field journal of control-plane instability, read-only disk symptoms and the distinction between restoration and verified root-cause analysis."
+title: "K3s Control Plane: etcd and Read-Only Disk Incidents"
+description: "K3s control-plane incidents involving etcd instability, read-only disk symptoms, recovery actions and unresolved causes."
 date: "2026-11-15"
+updated: "2026-11-19"
 draft: false
 reviewed: true
 sensitivity: sanitized
@@ -113,6 +114,6 @@ I have records of **etcd instability/corruption and read-only behavior** and the
 
 The investigation points me toward the kernel's storage path: filesystem remount behavior, write errors, durable metadata and the way databases respond to delayed or failed storage operations.
 
-This is one of the clearest connections between my operational background and the OS/storage work I want to study.
+The available incident notes do not isolate one disk or filesystem cause. Reproducing the read-only transition and correlating host I/O errors with etcd logs would be needed before assigning a root cause.
 
 [Stateful recovery record](/projects/rokaf-stateful-storage-and-recovery/) · [ROKAF overview](/projects/independent-on-premises-k3s-platform-engineering/).

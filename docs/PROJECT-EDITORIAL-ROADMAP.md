@@ -1,6 +1,6 @@
 # Portfolio project editorial roadmap
 
-Updated: 2026-11-15
+Updated: 2026-11-19
 
 This document separates **published engineering records** from **candidate articles requiring source review**. It is not an official military systems inventory. Public entries exclude internal diagrams, hosts, network addresses, identities, credentials and production runbooks.
 
@@ -32,7 +32,7 @@ The independent K3s platform article is the **overview/index**. Its topic pages 
 
 | Focus | Slug | Recorded boundary |
 | --- | --- | --- |
-| Langfuse v4 background migrations | `rokaf-langfuse-v4-migration-field-notes` | Step 2 timeout vs persisted completed state; later open stages |
+| Langfuse v4 data migration | `rokaf-langfuse-v4-migration-field-notes` | Step 2 timeout differed from stored progress; Steps 1–5 and historical/new data checks completed November 17, 2026 |
 | DNS and VIP reachability | `rokaf-dns-vip-open-investigations` | Intermittent symptom; multiple unconfirmed hypotheses |
 | GPU Operator / NFD visibility | `rokaf-gpu-discovery-open-investigation` | Missing/unexpected labels; full root cause not established |
 | etcd and host disk incidents | `rokaf-control-plane-incident-log` | Restored service and remaining root-cause questions separated |
@@ -73,6 +73,15 @@ The source-of-truth connection map is [systems-notes/notes/study-roadmap.mdx](ht
 - Continuous: algorithms, systems code, research reading and reproducible notes
 
 Experiments should be implemented in `systems-notes/labs/`, and results should be documented in Korean technical notes. Original KDT course source material and private mentor conversations are not published.
+
+## Title and narrative voice
+
+- **Use subject-led titles modeled on the existing `systems-notes` collection.** Prefer `Component: Mechanism / Incident / Migration` or `Component A and B: Specific Problem`. A reader should know the technical topic from the title alone.
+- Avoid narrative hooks, rhetorical questions, two-sentence title reveals, and artificial conclusions: `The ...`, `Why ...`, `When ...`, `X was running, but Y ...`. Such material belongs in the body only when the incident actually supports it.
+- Keep the English Projects title and the independently edited Korean title **technical and concise**, without translating the English syntax word for word. Examples: `RabbitMQ Redelivery and Worker Idempotency` / `RabbitMQ 메시지 재전달과 Worker 중복 처리`; `Longhorn Replica Failure and Volume Recovery` / `Longhorn Replica 장애와 볼륨 복구`.
+- The body may remain a first-person account: begin with the actual observed symptom, show the decisions and evidence, and distinguish recovery, design proposals and unverified hypotheses. Do not manufacture a general moral or a bold aphorism at the end of every article. Close with the concrete checkpoint or outstanding test instead.
+- On title/description changes, update the Korean override catalog and acknowledge the English source hashes. Keep slugs stable; verify site cards, HTML `title`, Korean `/kr/` pages and metadata after building.
+- `automation/scripts/check-project-titles.py` rejects common narrative-hook titles in published Projects during the site check/build. Editorial judgment is still required for less obvious cases.
 
 ## Design and publishing conventions
 

@@ -1,7 +1,8 @@
 ---
-title: "When Metrics Went Missing: WAL Pressure, Exporter Placement, and GPU Visibility"
-description: "A closed-network K3s observability investigation: Prometheus WAL exhaustion, missing node metrics, DCGM Exporter placement, and the limits of what an empty dashboard can prove."
+title: "Monitoring Incidents: Prometheus WAL and GPU Exporters"
+description: "Prometheus WAL storage pressure, missing node-exporter metrics and DCGM Exporter placement investigations."
 date: "2026-11-17"
+updated: "2026-11-19"
 draft: false
 reviewed: true
 reviewStatus: "reviewed"
@@ -194,7 +195,7 @@ Those are **engineering conclusions and design directions**, not verified claims
 
 I cannot support exact retention thresholds, complete monitoring coverage, permanent GPU-role fix, a quantified recovery improvement or successful WAL recovery using the surviving evidence. I have intentionally not added such claims.
 
-The central lesson was that **the absence of a metric has a topology**. Its cause can live at device placement, the exporter, the scrape controller, the TSDB write path or the visualization query. An empty panel identifies none of those by itself.
+The WAL write error demonstrated a Prometheus storage failure; missing node-exporter and DCGM series required separate checks of exporter placement, direct responses and scrape targets. A missing Grafana series did not by itself locate the failed step.
 
 ## References and connected engineering records
 

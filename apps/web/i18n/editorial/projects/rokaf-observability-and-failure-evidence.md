@@ -102,7 +102,7 @@ Prometheus와 Grafana 외에도 Elasticsearch·Logstash·Kibana로 로그를 모
 
 다음에 비슷한 상황이 온다면 대시보드 대신 수집 경로를 따라가고 싶다. Exporter가 있는가, 직접 응답하는가, Target이 발견되는가, 샘플이 저장되는가, Grafana가 그 값을 제대로 요청하는가. 모니터링이 고장 나더라도 이 질문에 답할 수 있는 로그와 호스트 상태 확인 수단은 남겨둬야 한다.
 
-빈 화면은 실패가 발생했다는 사실을 알려줄 뿐이다. **어디에서 관측이 끊겼는지는 따로 증명해야 한다.**
+Prometheus WAL의 공간 부족은 로그로 확인했다. node-exporter와 DCGM 메트릭 누락은 각각 Exporter 배치·직접 응답·Target 발견·샘플 저장 상태를 대조해야 하며, Grafana의 빈 그래프만으로 한 원인을 확정할 수는 없다.
 
 ## 참고 자료
 

@@ -1,8 +1,8 @@
 ---
-title: "The Migration Timed Out. The Work Had Already Moved On."
-description: "How a Langfuse v4 upgrade moved from a misleading Step 2 timeout through ClickHouse and state-handling problems to verified historical and new-data reads, events_only cutover and final cleanup."
+title: "Langfuse v4 Migration: Timeout and Data Validation"
+description: "Langfuse v4 migration through Step 2 timeout, backfill, persistent job state, events_only cutover and verified Steps 1–5."
 date: "2026-11-15"
-updated: "2026-11-18"
+updated: "2026-11-19"
 draft: false
 reviewed: true
 reviewStatus: "reviewed"
@@ -91,8 +91,6 @@ I used several sources of truth at different points. Each answered a narrower qu
 | Functional read/write tests | Whether tested historical and new-data paths work | Every historical edge case or future failure scenario |
 | Cleanup checkpoint | Whether the temporary migration table was removed | A universal data-integrity guarantee |
 
-At the beginning I was tempted to equate a timeout with failure. At the end I had a much better question: **what was already durable when the request stopped, and what still needed to be read back before I could call it finished?**
-
-The migration did reach its verified operational checkpoint. The lesson is not that timeouts are harmless; it is that a timeout is insufficient evidence for what happened to durable data. Only the later checks gave me grounds to say the work was complete within the scope I had actually tested.
+The Step 2 request timed out while PostgreSQL recorded nine completed chunks and zero failed chunks. I continued the remaining procedure, verified historical and newly created data in `events_only` mode, and completed Steps 1–5 and temporary-table cleanup by November 17, 2026. The timeout alone had not described the final outcome.
 
 **Related records:** [Database HA and migration states](/projects/rokaf-database-ha-and-langfuse-migrations/) · [ClickHouse replicated-table migration](/projects/rokaf-clickhouse-replication-migration/) · [Stateful storage and recovery](/projects/rokaf-stateful-storage-and-recovery/).

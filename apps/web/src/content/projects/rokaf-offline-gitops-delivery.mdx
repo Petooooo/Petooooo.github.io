@@ -1,7 +1,8 @@
 ---
-title: "Two Control Loops Behind Offline GitOps Delivery"
-description: "How I separated image production from desired-state reconciliation in a closed-network K3s environment, and what Kaniko, a private registry, certificate trust and Argo CD taught me about dependable delivery."
+title: "Offline GitOps: GitLab Runner, Nexus and Argo CD"
+description: "Image building, private registry dependencies and Argo CD desired-state reconciliation on a closed-network K3s cluster."
 date: "2026-11-17"
+updated: "2026-11-19"
 draft: false
 reviewed: true
 reviewStatus: "reviewed"
@@ -189,7 +190,7 @@ A representative evaluation would use a harmless test service and an approved te
 
 The list is an **acceptance test plan**, not an assertion that all six experiments were carried out during service operation. It would allow me to distinguish CI correctness, GitOps convergence and user-visible availability with recorded evidence rather than inference.
 
-The engineering lesson was that **image provenance, desired resource state and usable runtime state are three different contracts**. Putting GitLab, Nexus and Argo CD into one deployment diagram is easy. Making each contract independently observable, reproducible and recoverable is where the operational design begins.
+For each deployment I would retain the built image digest, the desired image reference in Git, the Argo CD synchronization result and an application-level probe. The original records do not contain an exhaustive end-to-end promotion and failover test of the whole platform.
 
 ## References and connected engineering records
 

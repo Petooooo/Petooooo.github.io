@@ -1,7 +1,8 @@
 ---
-title: "The Containers Were Running. The Services Still Needed Each Other."
-description: "Integrating self-hosted applications meant verifying contracts between Helm values, runtime configuration, identity, SMTP, storage and registry clients—not merely counting Ready Pods."
+title: "Self-Hosted Services: Authentication, Mail and Storage"
+description: "Integration of self-hosted applications across authentication, SMTP, object storage, registry and Helm configuration."
 date: "2026-11-18"
+updated: "2026-11-19"
 draft: false
 reviewed: true
 reviewStatus: "reviewed"
@@ -131,9 +132,7 @@ I would now define a small functional contract for each new service before calli
 
 This is a checklist I formed from the incidents, **not a statement that every cell was verified for every service**. Where integrations were only discussed or partially tested, the published evidence remains limited.
 
-In retrospect, Kubernetes had solved a different problem from the one I was trying to prove. It could arrange workloads, restart containers and connect Services. It could not know that a user's verification code needed SMTP, that a browser was opening a different file host, or that a Docker client did not trust the connector's certificate.
-
-Once I started treating each of those behaviors as its own contract, debugging became less about changing every part of the stack and more about finding the exact boundary that had not yet passed its functional test.
+The corresponding functional checks were different: send an actual verification email, fetch a stored attachment from the browser, and authenticate and push to the Docker connector. Pod readiness was useful but could not substitute for those application operations.
 
 ## References
 

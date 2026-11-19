@@ -1,7 +1,8 @@
 ---
-title: "DNS and Load-Balancer VIP: An Investigation Still in Progress"
-description: "Field notes on intermittent DNS and service reachability, with confirmed symptoms separated from unverified VIP and resolver hypotheses."
+title: "CoreDNS and MetalLB VIP Reachability"
+description: "Investigation of intermittent DNS and VIP access, with observed behavior and unresolved causes kept separate."
 date: "2026-11-15"
+updated: "2026-11-19"
 draft: false
 reviewed: true
 sensitivity: sanitized
@@ -103,6 +104,6 @@ This is exactly the kind of incomplete investigation I want to preserve. It cont
 
 I would use an isolated or sanitized test setup to correlate **resolver responses, advertisement state, application endpoints and client-visible status** at the same timestamps. That would help separate a plausible explanation from a demonstrated cause.
 
-The engineering value of this incomplete case is learning to **preserve uncertainty without giving up diagnostic structure**.
+The available logs do not establish a single root cause. A repeated request trace with synchronized resolver, VIP advertisement, endpoint and ingress states is still needed.
 
 [Networking design record](/projects/rokaf-networking-and-tls/) · [ROKAF overview](/projects/independent-on-premises-k3s-platform-engineering/).

@@ -1,7 +1,8 @@
 ---
-title: "The Message Returned While the Worker Was Still Running"
-description: "A RabbitMQ Shovel migration, misleading heartbeat settings, overlapping consumers and the move from late acknowledgements to durable job claims."
+title: "RabbitMQ Redelivery and Worker Idempotency"
+description: "RabbitMQ Shovel migration, connection-loss redelivery, overlapping workers and durable job-claim design."
 date: "2026-11-18"
+updated: "2026-11-19"
 draft: false
 reviewed: true
 reviewStatus: "reviewed"
@@ -153,7 +154,7 @@ Shovel moved **messages from one broker to another**. With `on-confirm`, the sou
 
 The job-service redesign moved **ownership of a long-running logical operation** away from an AMQP delivery and into durable state. The message was allowed to be transient. The job was not.
 
-The most instructive thing I encountered was a task simultaneously appearing queued and running. It made the separation unavoidable: a broker knows which delivery is currently outstanding, while only the application can know which logical result should exist.
+During the incident, the same logical job could appear queued while an earlier worker was still processing it. The durable claim was intended to prevent a later delivery from writing a competing result; broker acknowledgement alone could not enforce that rule.
 
 ## Related records
 

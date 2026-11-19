@@ -1,7 +1,8 @@
 ---
-title: "Migrating MinIO: When the Object Count Didn't Match"
-description: "A real standalone-to-distributed MinIO migration, the choice between block replicas and erasure-coded storage, interrupted transfers, missing objects, IAM migration, and the limits of copy-based verification."
+title: "MinIO Migration: Standalone to Distributed"
+description: "MinIO migration to distributed storage, interrupted transfers, object reconciliation and IAM migration."
 date: "2026-11-17"
+updated: "2026-11-19"
 draft: false
 reviewed: true
 reviewStatus: "reviewed"
@@ -204,9 +205,7 @@ I cannot claim that every one of these gates was passed in the original migratio
 | Evaluated lifecycle and TTL behavior | **Designed/investigated**; final universal policy not verified |
 | Complete version-aware byte-level reconciliation with zero differences | **Not established by the retained evidence** |
 
-The project changed my notion of a successful storage migration. I originally needed a replacement service that could tolerate failures differently from a single server on a replicated volume. By the time the bulk copy was over, the harder question was whether the **new namespace meant the same thing to every client**.
-
-For that, no progress bar, healthy Pod, aggregate byte count or single diff pass is enough on its own. You need a stable reference point, a way to reconcile individual objects, and a decision about what to do with the cases that do not match.
+The bulk transfer and target deployment were completed, but source and target object counts and sizes did not fully match at the observed checkpoints. I still needed object-key-level reconciliation, failed-upload rechecks and client-side read tests before calling the move a complete integrity-verified migration.
 
 ## References and related work
 

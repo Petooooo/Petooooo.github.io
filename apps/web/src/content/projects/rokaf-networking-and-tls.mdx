@@ -1,6 +1,6 @@
 ---
-title: "Traefik Served the Wrong Certificate Before the Route Ran"
-description: "Following real K3s access failures across IP-based TLS, ServiceLB host-port claims, WebSocket upgrades and unresolved DNS/VIP questions—without mistaking one recovered path for an entire healthy network."
+title: "K3s Networking: Traefik, MetalLB and TLS"
+description: "IP-based TLS, ServiceLB host-port contention, WebSocket proxy behavior and separate DNS/VIP investigations."
 date: "2026-11-15"
 updated: "2026-11-19"
 draft: false
@@ -95,6 +95,6 @@ The next questions follow the specific request: Did its name resolve? Was the de
 
 I did not run every one of those checks during every incident. They are the boundaries I learned to preserve in the record. The default-certificate episode was about certificate selection. The LoadBalancer episode was about host-port ownership. The WebSocket episode was about an HTTP protocol upgrade. The CNI and VIP questions remained partly open.
 
-**“The network is down” described what someone experienced, not where the fault lived.** The useful work was to follow a request far enough to say where the evidence changed, without turning an assumption about the next layer into a fact.
+The incidents had separate checkpoints: the certificate returned by Traefik, a `svclb-*` Pod claiming an existing host port, and an Outline WebSocket request changing from HTTP `400` to `101`. I did not establish a common cause for the remaining DNS, VIP and CNI symptoms.
 
 **Related records:** [ServiceLB and MetalLB host-port contention](/projects/rokaf-service-lb-hostport-conflict/) · [Outline WebSocket and identity-provider paths](/projects/rokaf-internal-app-auth-and-tls/) · [DNS/VIP open investigation](/projects/rokaf-dns-vip-open-investigations/) · [Nexus/Kaniko certificate boundaries](/projects/rokaf-private-artifacts-and-ci/).

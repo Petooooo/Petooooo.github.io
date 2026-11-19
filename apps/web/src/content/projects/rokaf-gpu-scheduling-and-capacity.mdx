@@ -1,8 +1,8 @@
 ---
-title: "GPU Scheduling Is a Capacity Decision, Not Just a Device Request"
-description: "A first-person account of configuring time-slicing, comparing it with hardware-isolated MIG, and reasoning about VRAM contention, scheduling, and degraded service capacity."
+title: "Kubernetes GPU Sharing: Time-Slicing and MIG"
+description: "GPU time-slicing configuration and comparison with whole-device and MIG allocation, including memory contention and failover capacity."
 date: "2026-11-15"
-updated: "2026-11-17"
+updated: "2026-11-19"
 draft: false
 reviewed: true
 sensitivity: sanitized
@@ -136,7 +136,7 @@ That trade-off also affected placement constraints. Pinning an application tight
 | Repeated, controlled latency/throughput comparison among all three policies | **Not publicly verified** |
 | Zero-interruption failover with full performance after host loss | **Not claimed** |
 
-The conclusion is not that time-slicing was a mistake or that MIG is always superior. It is that **the right sharing policy follows from the isolation and performance contract of each workload**. More advertised GPU resources are useful only when they translate into usable application capacity.
+I configured time-slicing and evaluated MIG on supported hardware as a different allocation model. Choosing between them requires measured peak VRAM use, workload interference and latency; a larger advertised replica count does not provide those measurements.
 
 ## References and connected cases
 

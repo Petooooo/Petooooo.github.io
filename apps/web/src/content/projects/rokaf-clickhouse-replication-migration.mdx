@@ -1,7 +1,8 @@
 ---
-title: "Moving ClickHouse Data into ReplicatedMergeTree"
-description: "The decisions and failure states behind converting existing ClickHouse tables into a Keeper-coordinated replicated design, without confusing a healthy replica with verified data consistency."
+title: "ClickHouse Migration: Standalone to ReplicatedMergeTree"
+description: "Migration of existing ClickHouse tables to Keeper-coordinated replication, including attach errors, view dependencies and verification."
 date: "2026-11-17"
+updated: "2026-11-19"
 draft: false
 reviewed: true
 reviewStatus: "reviewed"
@@ -159,7 +160,7 @@ The design choice was not "use replication because high availability is good." I
 
 **Not established by public evidence:** an exhaustive historic row-for-row reconciliation, a measured zero-data-loss guarantee, comprehensive view correctness after all changes, or a proven failure-tolerant service-level objective.
 
-This distinction is deliberate. An engineering record is more useful when it says exactly what a check proved than when it equates one green status field with a finished migration.
+At the recorded checkpoint, `is_readonly = 0` and an empty replication queue showed that the sampled replicas were writable and had no pending queue items. Complete row parity and view-result comparison were not established by those checks.
 
 ## Related reading
 

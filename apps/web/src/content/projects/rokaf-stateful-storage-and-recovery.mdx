@@ -1,7 +1,8 @@
 ---
-title: "The Volume Said Healthy After I Lowered the Replica Count"
-description: "Why Longhorn's green volume status, healthy replica count, disk files and successful attachment represented different stages of recovery."
+title: "Longhorn Replica Failure and Volume Recovery"
+description: "Longhorn degraded replicas, attachment state, volume recovery and the limits of lowering replica count."
 date: "2026-11-18"
+updated: "2026-11-19"
 draft: false
 reviewed: true
 reviewStatus: "reviewed"
@@ -134,7 +135,7 @@ For these incidents I have evidence of a node returning to Ready and a volume be
 
 Finally, replicas are not backups. Two replicas can both reproduce an accidental delete. A snapshot preserves a version subject to its retention and storage dependencies; an independently protected backup addresses a different loss scenario.
 
-The most misleading recovery signal I saw was not an error. It was a success indicator that became green because I had just lowered the bar it measured.
+After lowering the desired replica count to one, Longhorn reported a Healthy volume, while the original second replica had not been shown to recover. I treated that as restored availability under a reduced redundancy target, not proof of two healthy replicas or full data-integrity validation.
 
 ## Related records
 

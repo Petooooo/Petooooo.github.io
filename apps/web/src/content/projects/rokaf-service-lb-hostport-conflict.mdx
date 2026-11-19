@@ -1,7 +1,8 @@
 ---
-title: "Why Adding a LoadBalancer Service Broke an Existing Endpoint"
-description: "A K3s networking incident where ServiceLB claimed host-port capacity while MetalLB handled VIP exposure. The observed failure, reversible diagnosis, and why external address assignment is not the same as port ownership."
+title: "K3s ServiceLB and MetalLB: Host-Port Conflict"
+description: "K3s ServiceLB hostPort contention after adding a LoadBalancer Service, distinct from MetalLB VIP advertisement."
 date: "2026-11-17"
+updated: "2026-11-19"
 draft: false
 reviewed: true
 reviewStatus: "reviewed"
@@ -138,7 +139,7 @@ It is not enough to prove that every later MetalLB VIP instability, every DNS fa
 
 I also cannot claim a permanent ServiceLB-disabled configuration across the full cluster from the available record, even though that was the selected long-term design direction.
 
-The lesson I kept was about **resource ownership, not just routing**. The new Kubernetes object looked like a request for one more external address. To the built-in controller, it was also an instruction to create workloads that requested host ports. Once I followed that hidden allocation, the apparent mystery became a finite set of claims on a host-level resource.
+Creating the new LoadBalancer Service caused K3s ServiceLB to request a host port already used by an existing exposure path. Altering or removing that Service avoided or reversed the observed interference. This evidence does not establish the cause of separate DNS or VIP failures.
 
 ## Further references
 

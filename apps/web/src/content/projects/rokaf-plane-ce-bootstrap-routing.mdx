@@ -1,7 +1,8 @@
 ---
-title: "Plane CE: A Login Screen, a Redirect Loop, and the Routes Behind Them"
-description: "A self-hosted Plane CE setup that reached the browser but could not finish first-run configuration, the path-based routing correction that unlocked account creation, and later proxy and storage questions that remained separate."
+title: "Plane CE: Initial Setup and IngressRoute Issues"
+description: "Plane CE first-run redirects, auth routing, Live WebSocket setup and later proxy/storage issues."
 date: "2026-11-18"
+updated: "2026-11-19"
 draft: false
 reviewed: true
 reviewStatus: "reviewed"
@@ -134,7 +135,7 @@ Two changes have direct functional evidence: **account and Workspace creation wo
 
 The Plane incident looked like an incomplete setup, but its most important fix was about which service received which HTTP request. A working UI and Running Pods did not tell me whether setup, authentication, backend APIs and object storage were reachable from their respective callers.
 
-I no longer treat an Ingress rule as a short path from a hostname to one Pod. For a multi-service application it is part of the application's interface contract: the same hostname may route to different services based on the path, while some operations depend on session state, external-origin headers, upgrades or direct browser access to storage.
+The first-run fix involved mapping setup and authentication requests to their intended backends. Later, a separate `/live` route fixed Plane Pages connectivity. The additional proxy and browser-to-storage paths still required their own tests.
 
 Working account registration and a restored Pages connection gave me two different forms of functional verification. A later proxy still returned 404, and a browser-originated upload could still fail despite backend-to-MinIO communication. A single broad "deployment complete" claim would hide those distinctions.
 

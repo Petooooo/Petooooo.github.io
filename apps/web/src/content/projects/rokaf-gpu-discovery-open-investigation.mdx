@@ -1,6 +1,6 @@
 ---
-title: "The GPU Was There, but the Operator Could Not Find Its Node Labels"
-description: "A GPU Operator investigation that began with missing NFD labels and led me to separate hardware discovery, device-plugin resources, Pod placement and actual GPU use."
+title: "GPU Operator and NFD: Node Labels and Resource Registration"
+description: "Observed missing NFD labels and checks for GPU metadata, device-plugin registration, scheduling and runtime behavior."
 date: "2026-11-15"
 updated: "2026-11-19"
 draft: false
@@ -92,6 +92,6 @@ If I returned to this problem, I would capture the Operator configuration, indep
 
 The strongest surviving fact is narrow: **the Operator did not find expected NFD labels in the observed configuration**. It was worth investigating, but it did not establish one root cause for every GPU node, validate all GPU sharing settings or produce a benchmarked performance improvement.
 
-The machine's GPU was only the beginning of the story. Between the hardware and a useful model process were node labels, registered resources, placement decisions and runtime behavior—each with a different source of truth. What I wanted from the platform was not simply to report that a GPU existed, but to explain **why Kubernetes could safely treat it as a usable resource**.
+The missing NFD label was observed, but I did not retain synchronized node-label, `allocatable` and workload initialization measurements for all affected nodes. Those measurements are the next step before declaring the device-registration path recovered.
 
 **References and related records:** [NVIDIA GPU Operator installation and NFD settings](https://docs.nvidia.com/datacenter/cloud-native/gpu-operator/latest/getting-started.html) · [NVIDIA GPU Operator troubleshooting](https://docs.nvidia.com/datacenter/cloud-native/gpu-operator/latest/troubleshooting.html) · [GPU resource sharing](/projects/rokaf-gpu-scheduling-and-capacity/) · [DCGM exporter placement](/projects/rokaf-observability-and-failure-evidence/).

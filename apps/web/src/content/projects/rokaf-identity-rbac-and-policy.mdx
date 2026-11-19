@@ -1,6 +1,6 @@
 ---
-title: "The Runner, the Login, and the Document Needed Different Permissions"
-description: "Why a K3s CI job, a Kaniko registry push, GitLab OAuth sign-in and a document-level policy could not be solved by one administrator role."
+title: "Kubernetes RBAC and Application Authorization"
+description: "Kubernetes ServiceAccounts, CI registry credentials, GitLab OAuth and evaluated object-level authorization models."
 date: "2026-11-15"
 updated: "2026-11-19"
 draft: false
@@ -80,6 +80,6 @@ I would apply the same method to document policies. An owner should be able to p
 
 Those are **verification criteria I considered**, not a claim that I executed every positive and negative case against all production applications. In particular, I cannot turn Keycloak/OpenFGA modeling into a fictional successful rollout.
 
-The pattern that stayed with me was simple. Before changing a permission, I needed to ask: **Which identity made the request, which resource was it trying to change, and where was the decision enforced?** A build job that can run, a user who can sign in, and a person who may edit one document are not the same assertion.
+For subsequent reviews, I would record the actual request identity, resource, namespace or object, and the component that made the allow/deny decision. The Keycloak/OpenFGA model remains an evaluated design; a completed cross-application authorization audit is not part of the recorded work.
 
 **Related records:** [Nexus/Kaniko and closed-network CI](/projects/rokaf-private-artifacts-and-ci/) · [Outline and GitLab authentication boundaries](/projects/rokaf-internal-app-auth-and-tls/) · [K3s platform operations](/projects/independent-on-premises-k3s-platform-engineering/).
