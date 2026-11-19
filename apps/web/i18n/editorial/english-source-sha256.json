@@ -4,7 +4,7 @@
   "rokaf-async-workers-and-idempotency": "3165850507fc30934dff6ffa627015d8f6609acce4bdf836415e6364e0bab487",
   "rokaf-chat-attachments-object-storage": "1e882ca2caeeaecb25b86cfc051b4c59135ed6ff4f3c624fb86d096a569d67ce",
   "rokaf-clickhouse-replication-migration": "e12220dd0eae7537b7a582a3d806fbb88ac4924c6f94ff5ebb6d9c6375736a61",
-  "rokaf-control-plane-incident-log": "d3be2286532d8f89d37c33e8ad8eb881dba9e432c231eef3d835c23a4520d94d",
+  "rokaf-control-plane-incident-log": "0b3967c019df7385ee712ecd4bebc97ab7dabeeb9d869535fad155cea356ec6f",
   "rokaf-database-ha-and-langfuse-migrations": "cdd5de14e250e5d072cc766154d26bb88c34883191014b5a939b4d4850e36dca",
   "rokaf-dns-vip-open-investigations": "ba374e8332d4f8544715d90561d2b557efeeab89e080b58bf6f3f7c00d51510a",
   "rokaf-gpu-discovery-open-investigation": "173998fbe4a30fd691fe39c74f96c3f283461ea03aa364541072e1ad42e72199",
