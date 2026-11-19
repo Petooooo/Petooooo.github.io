@@ -7,7 +7,7 @@
   "rokaf-control-plane-incident-log": "671217ebb449e6260c198629d4aa9e8c7563956086adfd7f19634197dbeba8ce",
   "rokaf-database-ha-and-langfuse-migrations": "f7b2d5f8a7811211388258fd16634b1b9ef1feefeda5a2e4b1d2db4d02b7cdb0",
   "rokaf-dns-vip-open-investigations": "3194799b599eee0c90f8c7159e9a79bb980a797d01b6ff5f5cfd2ccaa5f4dc00",
-  "rokaf-gpu-discovery-open-investigation": "4b52414af64065e9d1e2669cd5f6691d46498a72fdac4de232c77d8c00bdca7d",
+  "rokaf-gpu-discovery-open-investigation": "0f1853eb6be93f4ba2c34514465adc127dfd39edbb9cb82b4f57b40fd681c58a",
   "rokaf-gpu-scheduling-and-capacity": "87e89b0a873ab7a7d55bb826cddd9c699a480b0fb100f7fe9400792cbdd4c80c",
   "rokaf-identity-rbac-and-policy": "9ab7fb358be2a4a38e00bcd176b050ded5b6493c63692a67277c142f664bbc8e",
   "rokaf-internal-app-auth-and-tls": "6e4aa7ac5d28e2943bceec6632bbfaef016dac2f42f6463b24564e76275c14e2",

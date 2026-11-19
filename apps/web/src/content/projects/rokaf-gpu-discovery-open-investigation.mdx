@@ -1,115 +1,97 @@
 ---
-title: "GPU Resources Not Advertised: Separating Node Labels from Device Allocation"
-description: "A partly resolved GPU Operator and Node Feature Discovery investigation, focusing on visibility, labels and scheduling evidence."
+title: "The GPU Was There, but the Operator Could Not Find Its Node Labels"
+description: "A GPU Operator investigation that began with missing NFD labels and led me to separate hardware discovery, device-plugin resources, Pod placement and actual GPU use."
 date: "2026-11-15"
+updated: "2026-11-19"
 draft: false
 reviewed: true
+reviewStatus: "reviewed"
 sensitivity: sanitized
 category: "Engineering Investigation"
 area: "AI Infrastructure"
-tags: ["GPU Operator", "NFD", "Kubernetes", "GPU", "Scheduling"]
+tags: ["GPU Operator", "NFD", "GPU Feature Discovery", "Device Plugin", "Kubernetes", "Scheduling"]
 type: "troubleshooting"
-role: "ROKAF infrastructure troubleshooting and engineering investigation"
-period: "Jul 2025–Present"
+role: "GPU Operator and node discovery investigation, GPU allocation and monitoring boundary analysis"
+period: "2025–2026"
 status: "building"
-techStack: ["GPU Operator", "NFD", "Kubernetes", "GPU", "Scheduling"]
+techStack: ["K3s", "GPU Operator", "NFD", "NVIDIA Device Plugin", "DCGM Exporter"]
 ---
 
-The question sounded simple: **there is GPU hardware on a machine, so why can't the scheduler use it as expected?** The experience reminded me that a Kubernetes resource request depends on an entire chain of discovery and registration before a model container starts.
+While installing NVIDIA GPU Operator on a GPU-equipped K3s node, I encountered a log message that reduced a complicated-looking issue to one small clue: `no nfd label found`. The server had a GPU, but the Operator was not finding the node metadata it expected. In the configuration I was examining, `nfd.enabled=false` was set.
+
+I could have described this as “Kubernetes did not recognize the GPU” and moved on. But that statement skips a question I eventually had to ask: **what, exactly, had failed to recognize it?** A label used to classify a node is not the same thing as an extended resource advertised to the scheduler. Neither proves that a model will initialize successfully inside a container.
+
+The investigation was not a clean, single-setting recovery story. It became a way to distinguish the evidence at each boundary instead of assigning every later GPU problem to that first message.
+
+## The label that was missing was not the GPU itself
+
+The `nfd.enabled=false` value means the GPU Operator is not deploying its own instance of **Node Feature Discovery (NFD)**. That can be intentional when NFD is already installed and operating independently in the cluster. If no suitable NFD instance is publishing the relevant hardware labels for a node, however, the Operator may be unable to recognize the node through the labels it expects.
+
+So the next question was not simply whether to flip the value to `true`. I needed to establish whether another NFD installation existed, whether it was discovering the intended nodes, and whether its results had appeared on the Node objects.
+
+There is a similarly named but distinct component: **GPU Feature Discovery (GFD)** contributes GPU-specific metadata about products and capabilities. NFD's node-hardware classification and GFD's GPU feature information are related to discovery, but they do not serve identical purposes, and neither is the kubelet's allocatable GPU count.
+
+The missing-NFD-label message was an observed symptom at the discovery and node-selection boundary. I have no preserved, comparable before-and-after inventory proving that changing only the NFD setting fixed every node or completed the resource registration chain.
 
 <figure className="project-concept-figure">
-  <a href="/figures/journals/gpu-discovery-investigation.svg" target="_blank" rel="noopener noreferrer" aria-label="Open investigation diagram">
-    <img src="/figures/journals/gpu-discovery-investigation.svg" alt="An accelerator becomes schedulable only after hardware/driver recognition, feature discovery, device-plugin advertisement and compatible workload placement." loading="lazy" decoding="async" />
+  <a href="/figures/journals/gpu-discovery-investigation.svg" target="_blank" rel="noopener noreferrer" aria-label="Open a diagnostic decision tree distinguishing observed NFD label trouble from separate resource, scheduler and runtime checks">
+    <img src="/figures/journals/gpu-discovery-investigation.svg" alt="Diagnostic tree beginning with observed GPU Operator message no nfd label found and nfd.enabled=false, then branching into unverified checks of node labels, nvidia.com/gpu allocatable resources, scheduling predicates and successful model initialization. The observed versus unverified evidence boundary is explicit." loading="lazy" decoding="async" />
   </a>
-  <figcaption>An accelerator becomes schedulable only after hardware/driver recognition, feature discovery, device-plugin advertisement and compatible workload placement. Generalized hypothesis map; it does not disclose the internal infrastructure topology.</figcaption>
+  <figcaption>The NFD-label symptom was observed. The diagram's other checks are acceptance criteria, not claims of completed tests, actual node layouts or a verified universal fix.</figcaption>
 </figure>
 
-## What I encountered
+## A GPU label was not an allocatable GPU
 
-During GPU node setup and troubleshooting, **expected GPU Operator / Node Feature Discovery labels were not showing up** in the way I anticipated. It was tempting to treat this as an application deployment problem, but the missing metadata made a lower-level resource-discovery issue plausible.
+I came to separate several things that can all be called “GPU visibility.”
 
-## The layers I separated
+The host driver needs to recognize the physical device. The container runtime must provide the required device and driver interface to a GPU-enabled workload. Discovery components publish node metadata. Separately, the **NVIDIA device plugin** registers extended resources through the kubelet, which Kubernetes exposes in values such as `status.allocatable["nvidia.com/gpu"]`.
 
-| Layer | Question to answer |
+A node label describes a property. An allocatable resource is a quantity the scheduler can account for when a Pod requests a device. It is possible to have labels without the expected allocatable resource; the absence of one kind of GPU feature label also does not by itself establish that the allocatable count is zero. The two should be checked, not inferred from each other.
+
+That distinction changed the diagnostic order I wanted to use:
+
+| Evidence to inspect | The narrow question it answers |
 | --- | --- |
-| Physical device and driver | Is the GPU available to the host OS? |
-| Driver/runtime interface | Does the expected device interface work for containers? |
-| Feature discovery | Are NFD and related components labeling this node as expected? |
-| Device plugin | Does Kubernetes report the GPU as an allocatable extended resource? |
-| Scheduler | Does the Pod's request/selector/affinity match any node? |
-| Application | Does the model load and remain within accelerator memory constraints? |
+| Host driver and device interface | Can the operating system recognize and communicate with the GPU? |
+| NFD and GFD node metadata | Is the node classified and labeled as expected? |
+| Device plugin and kubelet | Does the node advertise a matching allocatable GPU resource? |
+| Scheduler event and Pod specification | Can this request be placed given selectors, taints and remaining resources? |
+| Runtime and model initialization | Can the container access the assigned device and actually run the model? |
 
-A missing **label** is not necessarily a missing **allocatable resource**, and the reverse can also happen depending on configuration. I learned to avoid conflating the two.
+This table is a **proposed evidence sequence**. It is not a checklist I can mark complete for every production node in the original incident.
 
-## Why the first workaround could be misleading
+## A Pending Pod could be blocked after discovery succeeded
 
-A node selector can make a Pod run in one familiar location, but that does not prove GPU discovery is healthy or that other compatible nodes are schedulable. Likewise, a running device plugin Pod is not by itself proof that every node's resources are advertised correctly.
+Even with a correctly registered device, the scheduler may not place the Pod. The GPU resource name and quantity must match what the node advertises, and `nodeSelector`, node affinity, taints, tolerations, CPU and memory constraints all participate in the decision.
 
-I considered time-slicing and, for compatible hardware, MIG as separate capacity policies—not fixes for discovery or registration failures.
+Pinning a workload to one familiar GPU node can be a tempting workaround. It may provide a short-term route to a working Pod without explaining why another node was not eligible. It can also quietly eliminate alternative placement options when that first node fails.
 
-## A more precise diagnostic model
+For a Pending workload, I would examine its scheduling events alongside the node's `capacity` and `allocatable` values before attributing the problem to the GPU driver. A CUDA initialization error cannot explain a Pod that has never been scheduled.
 
-I found it useful to treat GPU discovery as **three separate contracts**, because each has a different consumer and a different source of truth.
+The reverse distinction also matters. A Pod reaching Running does not prove that the assigned device works for its application. The process must initialize the device, load model weights and allocate runtime buffers and KV cache within physical VRAM. A successful scheduling decision is only one of the gates.
 
-| Contract | Producer | Consumer | Failure visible as |
-| --- | --- | --- | --- |
-| Host device visibility | Driver and operating system | Operator/device runtime | Hardware exists but no usable device interface |
-| Node feature information | Feature discovery / operator components | Placement policy and administrators | Missing or unexpected node labels |
-| Allocatable extended resources | Kubernetes device plugin / kubelet | Scheduler | A Pod asking for GPU resources cannot be admitted or placed |
+## DCGM Exporter taught me the same lesson from another direction
 
-A feature label is metadata. An allocatable resource is a scheduler accounting value. They can be correlated, but treating one as a reliable substitute for the other can hide the real fault.
+I had a separate GPU observability investigation involving **DCGM Exporter**. In one episode it was scheduled onto non-GPU machines, where the Pods became stuck in `ContainerCreating`. In another, its placement was tied to one GPU machine while a second expected GPU machine was uncovered. A direct connection to the expected exporter endpoint on the uncovered node returned connection refused.
 
-### Why inspecting only one Pod is insufficient
+Those observations were about **monitoring coverage**. They were not proof that a GPU device had disappeared or that the device plugin had registered zero resources. Conversely, a running exporter on one host would not establish correct resource registration and scheduling across the fleet.
 
-If the GPU Operator Pod appears healthy, I still need to ask whether the **driver container, feature discovery and device plugin** reached their own operational state. Conversely, a pending inference Pod may be blocked by a selector or toleration even if the node advertises GPU resources correctly.
+I preferred to reason about exporter placement using verified GPU-role information rather than an individual node name. I do not have a preserved, comprehensive after-change fleet audit. The separate [observability investigation](/projects/rokaf-observability-and-failure-evidence/) retains those two scheduling episodes and their evidence boundaries.
 
-I therefore separated the following *candidate* evidence, rather than trusting a green deployment overview:
+## Time-slicing was not a cure for a missing device
 
-1. The host recognizes the expected accelerator and driver interface.
-2. The node's reported labels match the expected discovery logic.
-3. The extended resource appears in allocatable capacity, not only capacity or labels.
-4. The workload requests a resource actually exposed by that plugin.
-5. Its node selector, affinity, taints and tolerations permit a matching node.
-6. Once placed, the process can initialize the accelerator and has enough memory.
+I also configured GPU time-slicing for shared workloads and compared it with whole-GPU allocation and MIG on supported hardware. That was a **capacity-policy decision**, not a replacement for NFD, GFD or device-plugin registration.
 
-The last step is important. **Successful scheduling does not prove successful model loading**. The model's weights, KV cache, buffers and framework allocations can still exceed device memory.
+Advertising several logical GPU access slots does not cause an absent GPU resource to appear or multiply its physical memory. MIG partitions resources on supported accelerators, but it likewise does not repair a node-label discovery failure. It would have been a mistake to tune the sharing mode while the earlier discovery and allocation questions remained unanswered.
 
-## A falsifiable set of hypotheses
+The [GPU scheduling and capacity record](/projects/rokaf-gpu-scheduling-and-capacity/) covers that later distinction: a schedulable slot and enough real VRAM for a model are different promises.
 
-Instead of labeling every GPU scheduling problem as “Operator broken,” I would ask what observation would contradict each hypothesis.
+## The evidence I still needed
 
-| Hypothesis | Supporting symptom | Evidence against it |
-| --- | --- | --- |
-| Driver or runtime unavailable | Host tools or GPU-enabled runtime fail | Host and test container see the accelerator correctly |
-| Feature discovery is incomplete | Required metadata absent | Discovery logs and node metadata are consistent |
-| Device plugin not registering | No extended GPU resource advertised | Kubelet allocatable view has expected resources |
-| Placement policy too restrictive | Pending Pod despite healthy resources | Minimal controlled Pod with equivalent requests schedules |
-| Runtime/model mismatch | Workload starts but GPU initialization fails | Representative workload loads and runs reliably |
+If I returned to this problem, I would capture the Operator configuration, independently installed NFD components and actual node labels at the same time. Next I would inspect the device-plugin Pods and the kubelet's capacity and allocatable values, then submit a minimal GPU request and record the scheduler decision and successful device initialization. These are controlled follow-up checks, not a reproduction I can claim to have completed.
 
-These are **investigation methods**, not a claim that I ran each hypothetical test in the production cluster.
+The strongest surviving fact is narrow: **the Operator did not find expected NFD labels in the observed configuration**. It was worth investigating, but it did not establish one root cause for every GPU node, validate all GPU sharing settings or produce a benchmarked performance improvement.
 
-## Why the distinction mattered operationally
+The machine's GPU was only the beginning of the story. Between the hardware and a useful model process were node labels, registered resources, placement decisions and runtime behavior—each with a different source of truth. What I wanted from the platform was not simply to report that a GPU existed, but to explain **why Kubernetes could safely treat it as a usable resource**.
 
-It would be easy to “fix” the immediate symptom by pinning a service to a familiar node. That may restore one application while leaving the underlying resource-discovery mechanism broken for the next deployment. It can also reduce availability: a service restricted to a single compatible location has fewer recovery options.
-
-I wanted to preserve the difference between **temporary containment** and **a corrected resource model**. The latter requires a node inventory, expected discovery configuration and actual scheduling evidence that remain consistent across changes.
-
-## Follow-up experiment I would publish
-
-In a representative, non-sensitive test environment, I would record one node's advertised resources before and after a controlled plugin restart or configuration change, then schedule a minimal GPU test workload. The output would include the kernel/driver/toolkit versions, GPU resource request, scheduler decision, initialization result and an explicit distinction between *discovery* and *usable capacity*.
-
-I have not published those measurements yet. The value of this case is the diagnostic decomposition and the observed metadata discrepancy, not an unverified performance claim.
-
-## Current state
-
-**Observed:** GPU-related labels/features were not appearing as expected during investigation.
-
-**Not established:** a single confirmed cause across all nodes, a complete production rollout of every sharing configuration, or benchmarked performance gains from changing the scheduling model.
-
-## Next investigation
-
-The next sensible check is to correlate host visibility, operator/device-plugin health, discovered labels and the scheduler's actual allocatable resource view in the same environment. After that, I would test workload placement and memory pressure using a non-sensitive representative workload.
-
-This case made me more interested in the difference between **a hardware capability** and **a reliable resource abstraction that applications can actually request**.
-
-[GPU scheduling decisions](/projects/rokaf-gpu-scheduling-and-capacity/) · [GPU observability and DCGM Exporter placement](/projects/rokaf-observability-and-failure-evidence/) · [ROKAF overview](/projects/independent-on-premises-k3s-platform-engineering/).
+**References and related records:** [NVIDIA GPU Operator installation and NFD settings](https://docs.nvidia.com/datacenter/cloud-native/gpu-operator/latest/getting-started.html) · [NVIDIA GPU Operator troubleshooting](https://docs.nvidia.com/datacenter/cloud-native/gpu-operator/latest/troubleshooting.html) · [GPU resource sharing](/projects/rokaf-gpu-scheduling-and-capacity/) · [DCGM exporter placement](/projects/rokaf-observability-and-failure-evidence/).

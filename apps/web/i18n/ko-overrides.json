@@ -675,5 +675,12 @@
   "The Runner, the Login, and the Document Needed Different Permissions": "CI 작업과 로그인, 문서 수정은 서로 다른 권한이 필요했다",
   "The Runner, the Login, and the Document Needed Different Permissions | Jihwan Park": "CI 작업과 로그인, 문서 수정은 서로 다른 권한이 필요했다 | 박지환",
   "Why a K3s CI job, a Kaniko registry push, GitLab OAuth sign-in and a document-level policy could not be solved by one administrator role.": "GitLab Runner의 Kubernetes 작업, Kaniko의 Registry Push, GitLab 로그인과 문서별 권한을 운영하며 같은 관리자 권한으로 해결할 수 없었던 경계를 기록했다.",
-  "K3s and CI access boundaries, GitLab OAuth integration, and application-level authorization design investigation": "K3s·CI의 권한 경계, GitLab OAuth 연동과 애플리케이션 객체별 인가 설계 검토"
+  "K3s and CI access boundaries, GitLab OAuth integration, and application-level authorization design investigation": "K3s·CI의 권한 경계, GitLab OAuth 연동과 애플리케이션 객체별 인가 설계 검토",
+  "The GPU Was There, but the Operator Could Not Find Its Node Labels": "GPU는 있는데 Operator는 노드 라벨을 찾지 못했다",
+  "The GPU Was There, but the Operator Could Not Find Its Node Labels | Jihwan Park": "GPU는 있는데 Operator는 노드 라벨을 찾지 못했다 | 박지환",
+  "A GPU Operator investigation that began with missing NFD labels and led me to separate hardware discovery, device-plugin resources, Pod placement and actual GPU use.": "GPU Operator에서 NFD 라벨을 찾지 못했던 경험을 출발점으로, 노드 탐지와 GPU 리소스 등록, Pod 배치, 실제 모델 실행을 구분해 조사했다.",
+  "GPU Operator and node discovery investigation, GPU allocation and monitoring boundary analysis": "GPU Operator·NFD의 장치 탐지 조사, GPU 할당 및 DCGM 모니터링 경계 분석",
+  "Device Plugin": "Device Plugin",
+  "GPU Feature Discovery": "GPU Feature Discovery",
+  "NVIDIA Device Plugin": "NVIDIA Device Plugin"
 }
