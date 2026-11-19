@@ -1,0 +1,164 @@
+---
+title: "Document Translation Pipeline: Job State and Worker Recovery"
+description: "A staged document translation pipeline using RabbitMQ, persistent job claims, format-specific workers and isolated recovery tests; production deployment and document fidelity remain unverified."
+date: "2026-11-17"
+updated: "2026-11-20"
+draft: false
+reviewed: true
+reviewStatus: "reviewed"
+sensitivity: sanitized
+category: "Systems Engineering"
+area: "AI Applications & Reliability"
+tags: ["Document Translation", "Microservices", "RabbitMQ", "MinIO", "PostgreSQL", "Kubernetes"]
+type: "implementation-note"
+role: "Prototype architecture, worker implementation and isolated integration verification of an asynchronous document translation workflow"
+period: "2026"
+status: "building"
+techStack: ["Python", "RabbitMQ", "PostgreSQL", "MinIO", "Kubernetes", "Helm"]
+---
+
+A document conversion worker could continue processing even after its RabbitMQ connection had been closed. I had seen this in earlier long-running work: the broker no longer held a delivery for the original consumer, yet the file operation might still be running. A second attempt could start before the first had stopped.
+
+In June 2026 I worked on a document translation workflow that had to handle this problem along with several file formats. A translation job included input storage, document extraction, model-facing translation, replacement or reconstruction, and a final artifact. The individual conversion steps could last longer than an HTTP request and fail independently of the client.
+
+I designed and tested a staged service using persistent job state, RabbitMQ commands and format-specific workers. The evidence covers local code and contract tests, route-level E2E smoke tests and an isolated installation rehearsal. It does **not** establish a full production deployment, broad document-fidelity results or a completed operational failover exercise. The internal endpoints, service names, configuration and deployment topology are intentionally left out.
+
+## The request cannot own the whole lifetime
+
+A synchronous endpoint that uploads a file, runs conversion, extracts text, translates every segment and generates a new document has an uncomfortable property: the client connection becomes an accidental owner of work that can last much longer than the request budget.
+
+I wanted the API request to own **admission**, not execution. Accept the document once, establish an identity for the logical translation, and let the client discover the result through a separately maintained job status. That split changes what must be durable.
+
+The input document and derived artifacts belong in object storage. The job identifier, format, selected translation mode, owner metadata, stage ownership and completion state need a persistent record. RabbitMQ can transport commands and event notifications between services, but the broker delivery itself is not a sufficient source of truth for the job.
+
+| Boundary | Responsibility | What breaks if ownership is unclear |
+| --- | --- | --- |
+| Request/API | Validate a new task and return a stable job identity | Client retries can accidentally create independent jobs |
+| Job service | Decide the active stage and persist state transitions | Two workers may publish the same next step or accept stale results |
+| RabbitMQ | Deliver work commands and completion/failure notifications | A disconnect can cause redelivery, not automatic correction |
+| Format workers | Transform one type of artifact or text segment | One long-running format conversion blocks unrelated work |
+| Object storage | Hold source, intermediate and final artifacts | A completed database flag can point to a missing object |
+| Translation / notification adapters | Invoke other service contracts | API drift or duplicate notifications become workflow failures |
+
+I deliberately kept stage progression with a **central job service**, rather than allowing each worker to decide which queue the next worker should consume. The workers can report their result; the orchestrator checks whether that result belongs to the current stage and decides what to publish next.
+
+That concentrates ordering logic in one place. It also means the job service must survive duplicates and stale events: central coordination simplifies the rule, but does not make distributed state atomic.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/document-translation-architecture.svg" target="_blank" rel="noopener noreferrer" aria-label="Open document translation orchestration and worker ownership diagram">
+    <img src="/figures/journals/document-translation-architecture.svg" alt="Conceptual swimlane diagram: job service maintains durable progress, commands traverse RabbitMQ, format-specific PDF, DOCX and HWPX workers produce object artifacts, and stage results return to the orchestrator." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Responsibility map, not internal topology. Solid arrows represent logical commands or artifact movement; dashed paths represent completion events and progress reconciliation.</figcaption>
+</figure>
+
+## Why different file formats needed different routes
+
+One generic file converter would have been a convenient deployment unit but a poor place to hide format-specific assumptions.
+
+**DOCX** is already structured enough to separate content extraction from replacement, but translating extracted strings does not guarantee that runs, styles or tables remain unchanged. Text length and segmentation can alter layout.
+
+**PDF** usually has to be treated differently. The workflow I validated used an intermediate DOCX representation before text extraction and replacement, with additional export and conversion stages for the requested output. That adds more places where layout fidelity can be lost. A successful worker exit is not equivalent to a visually faithful document.
+
+**HWPX** has its own package and document-structure concerns. The route used dedicated extraction/replacement handling instead of pretending every source document could pass through exactly the same converter. Early HWPX export work included compatibility placeholders; later route-level smoke tests showed that the orchestration path could complete, **not** that every real-world HWPX feature was preserved.
+
+The result was not three independent end-to-end applications. They shared job admission, durable stage progress, translation and result-notification concepts, while branching at the points where the file representation required different workers.
+
+| Input format | Main structural decision | What a route-level test established | What it did not establish |
+| --- | --- | --- | --- |
+| DOCX | Extract → translate → replace content → export artifact | The staged route could hand off and complete in an isolated test | Visual equivalence of arbitrary documents |
+| PDF | Convert through an editable intermediate, then reconstruct | The PDF-route worker chain and completion path were exercised | Pixel-perfect pagination and complex layout retention |
+| HWPX | Parse and replace format-specific structure | HWPX-route orchestration and artifact handoff were exercised | Support for every HWPX construct, font and export edge case |
+
+A translation service that ignores structure may return fluent text and still fail the user's request. That pushed me to treat **document fidelity** and **workflow completion** as two separate test dimensions.
+
+## The RabbitMQ failure that changed the lifetime model
+
+One difficult failure mode appeared in an earlier consumer model: a worker accepted a long document-conversion task and kept its RabbitMQ delivery unacknowledged while doing the expensive work. During long synchronous processing, the client was unable to service the broker connection reliably. The broker reported missed heartbeats and closed the connection.
+
+This was not simply a matter of making the RabbitMQ heartbeat timeout larger. A longer timeout could hide a stalled consumer; an acknowledgement sent before any durable record could lose responsibility for work; and an acknowledgement sent only at the end could keep the transport connection tied to a long-running conversion.
+
+I separated **broker delivery ownership** from **job-stage ownership**.
+
+The newer command-processing path checks the active stage and claims it durably before acknowledging the broker command. The claimed work is represented by a lease and attempt metadata. The expensive conversion can then run independently of keeping that one delivery open. Completion events update the durable state only if the claim and stage are still relevant.
+
+That creates a different failure window. If the worker disappears after acknowledgement but before completing its artifact, RabbitMQ cannot be asked to redeliver that already-acknowledged command. Recovery needs a reconciler that notices a stale lease and deliberately permits another attempt.
+
+The redesign was not a magic exactly-once switch. It moved the responsibility for recovery to explicit application state.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/document-translation-job-state.svg" target="_blank" rel="noopener noreferrer" aria-label="Open translation job stage state machine and recovery branches">
+    <img src="/figures/journals/document-translation-job-state.svg" alt="State machine with pending, claimed, running, completed, retry wait and terminal failure states; stale leases and duplicate completions are separately handled." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Conceptual stage state machine. Acknowledgement, durable claim and final artifact availability are distinct boundaries. The diagram does not describe a production queue configuration.</figcaption>
+</figure>
+
+## A job is not one message
+
+A single document translation can contain many steps, and some steps can create multiple intermediate artifacts. A broker message is only one attempted delivery; the logical job must survive retries and stage restarts without changing identity.
+
+I used the job service as the place to validate transitions. A completed or superseded stage should not accept an old completion event as permission to advance. A duplicate command should be harmless when the current claim already covers that work. Retry attempts need to be bounded, and a permanently failing stage must become inspectable rather than loop forever.
+
+There is no one transaction that atomically commits PostgreSQL state, a MinIO object and a RabbitMQ acknowledgement together. That is a distributed consistency boundary, not a missing database flag.
+
+For example, a worker may successfully write a final artifact and then lose contact before reporting the stage result. A retry must inspect durable identity and existing artifacts; blindly generating a new file can duplicate effects. Conversely, a job row marked complete without the expected artifact is not a useful translation.
+
+The design therefore required **progress reconciliation**, rather than relying only on the last HTTP response or message acknowledgement.
+
+### What the recovery tests attempted to protect
+
+- A repeated command or stale completion should not advance the wrong stage.
+- A worker that stops after claiming a stage should not leave it permanently owned.
+- A retry should preserve the logical job identity and be bounded by policy.
+- A failure that exhausted automated handling should remain visible for inspection.
+- The client should distinguish accepted, processing, completed and failed work without treating a timeout as definitive proof of failure.
+
+The local reliability suite exercised claims, stale-lease reconciliation, retry/backoff and logical dead-letter behavior. Physical RabbitMQ DLX/DLQ wiring had a queue-declaration compatibility issue during the Helm work and was not universally enabled by default. I would not conflate a passing application-level failure-path test with a verified production DLX configuration.
+
+## Boundaries around translation and notification
+
+The conversion workers were not meant to hard-code one translation provider. A translation adapter had to carry a stable segment identity, text and a task-selected translation mode. That let the orchestration and file-replacement layers remain separate from a provider's HTTP contract.
+
+The notification worker had a similar boundary. It should receive enough information to associate the result with the correct recipient and stored artifact, while the source of truth for completed outputs remains the job state. That prevents a notification step from inventing an output path just because a message arrived.
+
+Both adapters needed contract tests. A mock can prove that the job and worker pass the right metadata and error correctly. It cannot prove that a real translation model handles terminology well, or that a real email recipient can open the output from an operational environment.
+
+## Separate workers for separate failure surfaces
+
+I did not split components because microservices were fashionable. The processing stages had genuinely different libraries, execution times, memory footprints and failure surfaces.
+
+A PDF conversion image should not have to carry the same dependencies as a notification adapter. An API accepting job requests should not be blocked by one converter. A broken export route should be identifiable without assuming the translation provider itself is wrong.
+
+The trade-off was more operational machinery: multiple images and release artifacts, broker routing, persistent schema/state, startup dependencies and more places for version drift. In a closed network, even base images and installer dependencies must be packaged deliberately. That overhead was tolerable only if the boundaries made failures easier to contain and recover.
+
+## What the available validation actually proves
+
+The development record from June 2026 supports stronger claims than "I drew an architecture", but narrower claims than "this is a fully proven production translation platform".
+
+| Evidence | What was verified |
+| --- | --- |
+| Python tests and API-contract validation | Job metadata, adapter payloads and worker behavior; one later contract pass recorded 121 unit tests |
+| PDF/DOCX/HWPX route E2E smoke tests | Format-specific worker handoffs and final job outcomes in a controlled environment |
+| Long-running stage, retry/backoff, stale lease and monitoring smokes | Targeted reliability behavior under test conditions |
+| Helm lint, image build and installation rehearsal | Components could be packaged and brought up with local or externally provided PostgreSQL, RabbitMQ and MinIO equivalents |
+| Manual air-gap installation rehearsal | Dependency images, queue/bucket initialization and health/readiness checks in an isolated test setup |
+| Production document-quality benchmark and full operational E2E | **Not established by the retained evidence** |
+
+The test evidence mattered because each layer could look correct on its own. A passing unit test did not show that a PDF route could finish; a running Kubernetes Deployment did not show that a job returned a valid artifact; a successful route smoke test did not prove high-fidelity conversion for an arbitrary document.
+
+## Remaining verification
+
+The next meaningful experiments would be failure-injection tests at the boundaries that cannot share one atomic transaction: after object creation but before stage completion, after durable claim but before artifact creation, and between final artifact availability and notification. I would also compare format fidelity on a corpus containing tables, images, embedded objects and unusual fonts.
+
+I would measure job age, attempt count, time spent in conversion versus translation, invalid outputs and end-to-end completion, rather than reporting only queue depth or worker process health. The public record does not contain credible production throughput or latency measurements, so I do not invent them here.
+
+The locally verified checkpoint was a pipeline that could admit a job, progress through format-specific stages and exercise selected failure recovery paths without tying the entire job to one broker delivery. The next checkpoint would require real document-fidelity comparisons, consistent artifact reconciliation after injected failures, and a separate operational end-to-end test. I do not have results for those checks.
+
+## Related engineering records
+
+- [RabbitMQ delivery, retry and idempotency](/projects/rokaf-async-workers-and-idempotency/)
+- [Private artifacts and offline CI](/projects/rokaf-private-artifacts-and-ci/)
+- [Stateful storage and recovery](/projects/rokaf-stateful-storage-and-recovery/)
+- [On-premises K3s platform](/projects/independent-on-premises-k3s-platform-engineering/)
+- [RabbitMQ consumer acknowledgements and prefetch](https://www.rabbitmq.com/docs/confirms)
+
+*Disclosure note: This is a generalized technical account of development and isolated testing, not a description of the internal deployment. Infrastructure identifiers, endpoint configuration, access paths and operational details are omitted; production deployment and broad document-fidelity claims are not made.*

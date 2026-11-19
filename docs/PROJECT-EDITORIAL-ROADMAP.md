@@ -28,6 +28,7 @@ The independent K3s platform article is the **overview/index**. Its topic pages 
 | Traefik, MetalLB, DNS and private TLS | `rokaf-networking-and-tls` |
 | GPU scheduling and capacity choices | `rokaf-gpu-scheduling-and-capacity` |
 | RabbitMQ workers, retries and idempotency | `rokaf-async-workers-and-idempotency` |
+| Asynchronous document translation pipeline | `document-translation-pipeline` |
 
 ## ROKAF open investigations — published as progress records
 

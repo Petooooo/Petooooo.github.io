@@ -26,7 +26,8 @@ const rokafOrder = [
   "rokaf-self-hosted-services-integration",
   "rokaf-service-lb-hostport-conflict",
   "rokaf-gpu-scheduling-and-capacity",
-  "rokaf-async-workers-and-idempotency"
+  "rokaf-async-workers-and-idempotency",
+  "document-translation-pipeline"
 ];
 const investigationOrder = [
   "rokaf-langfuse-v4-migration-field-notes",
@@ -95,7 +96,7 @@ const highlights = [
   </section>
 
   <section class="border-t border-white/10 py-12 md:py-16">
-    <SectionHeader eyebrow="ROKAF · Engineering journal" title="Systems engineering records" description="Sixteen detailed accounts of the engineering choices, failed assumptions and reliability trade-offs behind the platform." />
+    <SectionHeader eyebrow="ROKAF · Engineering journal" title="Systems engineering records" description="Technical records covering infrastructure operations, application integration and recovery investigations." />
     <div class="grid gap-4 md:grid-cols-2">
       {journal.map((project) => <ProjectCard project={project} />)}
     </div>

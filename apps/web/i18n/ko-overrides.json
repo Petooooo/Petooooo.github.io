@@ -733,5 +733,13 @@
   "kube-proxy": "kube-proxy",
   "Linux Networking": "Linux 네트워크",
   "K3s Pod and Service packet-path investigation, host firewall inspection and CNI design evaluation": "K3s의 Pod·Service 패킷 전달 경로 조사, 호스트 방화벽 검토 및 CNI 구성 비교",
-  "Kubernetes Services": "Kubernetes Services"
+  "Kubernetes Services": "Kubernetes Services",
+  "Document Translation Pipeline: Job State and Worker Recovery": "문서 번역 파이프라인: 작업 상태·Lease·재시도",
+  "Document Translation Pipeline: Job State and Worker Recovery | Jihwan Park": "문서 번역 파이프라인: 작업 상태·Lease·재시도 | 박지환",
+  "A staged document translation pipeline using RabbitMQ, persistent job claims, format-specific workers and isolated recovery tests; production deployment and document fidelity remain unverified.": "RabbitMQ와 영속 작업 상태, 형식별 Worker로 구성한 비동기 문서 번역 파이프라인. 로컬 복구 테스트 결과와 운영 환경에서 검증하지 못한 부분을 구분했다.",
+  "AI Applications & Reliability": "AI 응용·시스템 신뢰성",
+  "Document Translation": "문서 번역",
+  "Microservices": "마이크로서비스",
+  "Prototype architecture, worker implementation and isolated integration verification of an asynchronous document translation workflow": "비동기 문서 번역 파이프라인 설계·Worker 구현 및 격리 환경 통합 검증",
+  "Technical records covering infrastructure operations, application integration and recovery investigations.": "인프라 운영, 서비스 연동과 장애 조사·복구 과정을 정리한 기술 기록."
 }

@@ -119,6 +119,7 @@ Shovel은 기존 RabbitMQ에서 새 RabbitMQ로 **메시지**를 옮겼다. `on-
 
 ## 함께 읽을 기록
 
+- [문서 번역 파이프라인: 작업 상태·Lease·재시도](/projects/document-translation-pipeline/)
 - [K3s 플랫폼 운영 기록](/projects/independent-on-premises-k3s-platform-engineering/)
 - [데이터베이스와 마이그레이션 상태 관리](/projects/rokaf-database-ha-and-langfuse-migrations/)
 
