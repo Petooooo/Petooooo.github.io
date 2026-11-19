@@ -1,0 +1,118 @@
+---
+title: "Kubernetes Storage Placement and Failure Domains"
+description: "Per-node Local-path PVC settings, Longhorn replica recovery, ClickHouse and MongoDB replication, and distributed MinIO storage responsibilities."
+date: "2026-11-19"
+updated: "2026-11-19"
+draft: false
+reviewed: true
+reviewStatus: "reviewed"
+sensitivity: sanitized
+category: "Systems Engineering"
+area: "Storage & Reliability"
+tags: ["K3s", "Local-path", "Longhorn", "PersistentVolume", "StorageClass", "MongoDB", "ClickHouse", "MinIO"]
+type: "implementation-note"
+role: "K3s PV provisioning and node-path correction, stateful storage placement decisions, and replica recovery investigations"
+period: "2026"
+status: "active"
+techStack: ["K3s", "Kubernetes Storage", "Local-path Provisioner", "Longhorn", "MongoDB", "ClickHouse", "MinIO"]
+---
+
+I noticed that a PVC on one K3s node was being provisioned under a directory I had not intended to use. I wanted the data to live on the node's data storage, not under its home-directory area. The first correction was straightforward: review the Local-path Provisioner's `config.json` and change the relevant per-node entry in `nodePathMap`.
+
+That corrected where *new* local volumes would be created. It did not relocate the existing PVC. Its PersistentVolume still referred to storage on the original node and at its existing path. The provisioner configuration was only one part of the system; an already-bound PV had its own location and lifecycle.
+
+The workload was one member of a MongoDB replica set. Because a secondary member can, under the right conditions, recover data from healthy peers, I had another option besides preserving and copying its individual local directory. But that option depended on verifying the role of the member, majority availability, and a safe resynchronization path. It would be inappropriate for an unreplicated source holding the only data copy.
+
+That encounter made the choice between Local-path, Longhorn, database replication and distributed MinIO less abstract. These were not four interchangeable ways to get a PVC. They assigned responsibility for **recovering usable data after a node or disk failure** to different parts of the platform.
+
+## A changed nodePathMap did not move an existing volume
+
+K3s includes the Local-path Provisioner. It creates PersistentVolumes backed by node-local directories, using configuration such as `nodePathMap` to determine where new volume directories are provisioned. An operator can specify a default path and different paths for particular nodes.
+
+I had a node whose provisioned local storage was on an undesired filesystem location. I changed that node's path configuration. The remaining issue was what to do with PVCs that already referred to the earlier directory.
+
+A bound Local-path PV is not a distributed block volume. Its backing files are located on a particular node, and the provisioned PV constrains eligible Pod placement through its node association. Changing the provisioner's configuration does not copy bytes, rewrite an existing PV's backing path, or make the disk portable. Simply scheduling a Pod on a different machine does not cause the data to follow it.
+
+The distinction matters even when the application's current Pod is stopped. Changing a configuration value, migrating on-disk bytes, changing the PV's location metadata and deciding when the old data can be removed are **separate operations**. Deleting a PVC can trigger destructive cleanup depending on the PV reclaim policy and provisioner behavior. I would not treat recreation as a harmless storage-path update.
+
+The MongoDB member in question was a candidate for a different recovery mechanism: replace a dispensable replica and let MongoDB resynchronize it from healthy members. That would require establishing that the member is not the primary, the remaining replica set can preserve majority and useful data, and the node and PVC placement for the new member are correct.
+
+The record supports **the node-specific Local-path configuration change and the consideration of replica recreation**. It does not preserve a completed sequence proving that I deleted this member's old volume and validated a full MongoDB initial sync afterward. Those are different claims.
+
+## With Longhorn, I had to check the copies that actually worked
+
+Longhorn served a different class of storage requirement: a Kubernetes workload could use block storage while Longhorn managed replica placement and attempted to restore failed copies. That can be useful for applications that rely on a volume but do not themselves maintain an independent data-replication protocol.
+
+In one incident I reduced a degraded Longhorn volume's desired replica count from two to one. The volume changed from `Degraded` to `Healthy`, even though the second replica had not been shown to recover. The UI was correct relative to the **new desired count**. It was not reporting restoration of the original two-copy durability.
+
+Another investigation found a replica file still present while the corresponding Longhorn replica remained `Stopped`. A separate detach problem involved an instance-manager process stuck in `stopping`. Seeing a directory or an image file on disk did not demonstrate that the engine could safely attach it or that it contained all committed writes.
+
+Longhorn replica scheduling also depends on eligible nodes and disks, free space and anti-affinity settings. A nominal replica count is not proof that copies occupy genuinely independent failure domains. A repair needs a current source, eligible destination capacity, disk and network bandwidth, and a successful application read/write result afterward.
+
+I documented those incidents in [Longhorn Replica Failure and Volume Recovery](/projects/rokaf-stateful-storage-and-recovery/). For this broader placement decision, the relevant point was **who was expected to rebuild the failed copy**: Longhorn's storage engine, rather than the application performing its own logical data synchronization.
+
+## ClickHouse and MongoDB understood their own replication
+
+For a database with a native replication protocol, I had to consider whether another layer of replicated block storage was necessary.
+
+The MongoDB member involved in the Local-path decision belonged to a replica set. When a secondary is safely replaceable, the database's own sync mechanism can provide the new member's logical data. That is not automatic simply because Kubernetes creates another Pod: the replica set must remain healthy, identities must be correct, and the replacement needs to finish synchronization and reach an expected member state.
+
+For ClickHouse I migrated a standalone dataset toward **ReplicatedMergeTree** tables. Replicas hold their own data parts, while ClickHouse Keeper coordinates replication metadata. Keeper itself does not act as a shared filesystem holding those table parts.
+
+During that migration, `KEEPER_EXCEPTION`, a read-only replica state and temporarily unequal replica progress were part of the investigation. I subsequently inspected a state with `is_readonly = 0` and an empty visible replication queue. That supported a specific checkpoint; it did not by itself demonstrate row-for-row parity across all historical data and dependent views.
+
+I considered local, independently attached storage for such database replicas because data recovery already belonged to the database. Putting every replica on a separately replicated block volume could introduce additional repair work and write amplification during failures. That is an engineering trade-off, **not a rule that replicated block storage must never underlie a replicated database**. The right choice depends on recovery objectives, performance, and where the failure domains really are.
+
+The detailed observations are in [ClickHouse Migration: Standalone to ReplicatedMergeTree](/projects/rokaf-clickhouse-replication-migration/).
+
+## MinIO was responsible for objects across its own storage members
+
+My first MinIO deployment was standalone, using a Longhorn-backed volume. I later configured distributed MinIO with independently backed storage members and transferred a preexisting object dataset into the new service.
+
+Distributed MinIO uses erasure coding at the object layer. Instead of relying on one replicated Kubernetes block volume beneath a single object-store process, data durability and healing are coordinated across the storage members of an erasure set.
+
+Giving every distributed MinIO member another replicated block volume can add storage overhead and overlapping repair traffic. Locally backed volumes were an intentional direction here, but **local directories alone do not provide fault tolerance**. Actual independence of disks or nodes, erasure-set membership, parity settings and the number and kind of simultaneous failures determine what the object store can survive.
+
+The transfer exposed another verification boundary. I copied a large dataset and examined source and target object counts, sizes and differences. Those checks found discrepancies and incomplete upload work that still needed investigation. A distributed service becoming ready did not mean every historical object was now available and byte-correct.
+
+The [MinIO Migration: Standalone to Distributed](/projects/rokaf-object-storage-migration/) record documents the executed transfer and the unresolved parity checks separately.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/storage-failure-domain-matrix.svg" target="_blank" rel="noopener noreferrer" aria-label="Open a comparison of recovery ownership across local volumes, Longhorn, database replicas and distributed MinIO">
+    <img src="/figures/journals/storage-failure-domain-matrix.svg" alt="Storage recovery-ownership matrix: Local-path binds data to a node and needs external restoration; Longhorn reconstructs block replicas; MongoDB and ClickHouse use database-level synchronization; distributed MinIO uses object-level erasure coding and healing. The matrix identifies different verification needs without showing actual cluster topology." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>These are storage failure and recovery responsibilities, not a layout of actual machines, real replica placement, or a measured availability comparison.</figcaption>
+</figure>
+
+## The recovery owner determined the placement policy
+
+The storage choices were easier to compare once I wrote down which component would restore data after failure.
+
+| Storage approach | Who restores the usable copy? | What I would verify after node or disk loss |
+| --- | --- | --- |
+| Local-path PV | No built-in cross-node copy; an operator or higher-level application must recover or resynchronize data | Bound PV, backing path, node affinity, backup or application rebuild |
+| Longhorn block replicas | Longhorn engine and its replica-rebuilding workflow | Actual usable replicas, attachment, rebuild completion and client I/O |
+| MongoDB / ClickHouse replication | Database replication and member recovery | Quorum or member roles, replication lag, data and query correctness |
+| Distributed MinIO | Object-level erasure coding and healing within its configured sets | Member health, healing, object reads and integrity comparison |
+
+These models can coexist. Using Local-path for a MongoDB replica is not inconsistent with using Longhorn for an application that needs a movable block volume. Nor is Longhorn always wrong for a database. The mistake would be assuming all four arrangements provide the same recovery properties merely because Kubernetes reports a `Bound` PVC.
+
+The layers also affect when I should intervene. For a Local-path PV, I start with the node and backing directory. With Longhorn, I inspect attachment and replica health before altering a disk. With a database, I consult the database's own quorum and replication state. For MinIO, the object server's healing and read behavior matters more than a Kubernetes volume count.
+
+## Multiple replicas can share the same failure
+
+Counting replicas cannot tell me whether they will fail independently. Two data copies on the same physical disk are not independent against that disk failing. Different nodes may still share a power source, network dependency, or storage service. Storage placement and anti-affinity settings need to be evaluated against an actual failure domain; a configured replica number cannot substitute for that evaluation.
+
+I have intentionally excluded node identities, actual directories, disk capacities and the production storage layout from this account. There is not enough retained public evidence to claim a quantified multi-node failure tolerance or a successful full-cluster failover exercise.
+
+Replication is also not a backup. An accidental deletion or logically corrupt update can propagate through healthy database replicas; erasure coding does not reverse a valid object delete. Protected backups and tested restore points address those additional loss scenarios.
+
+## What the recorded work established
+
+**Implemented or observed:** correcting node-specific Local-path provisioning configuration; recognizing that existing bound volumes retain their original placement; Longhorn's change from degraded to healthy after a lower replica target; investigation of stuck replicas and attachment; ClickHouse's replicated-table migration checkpoint; distributed MinIO deployment and dataset transfer with discrepancies identified.
+
+**Considered or not conclusively verified:** successfully replacing the particular MongoDB secondary's PVC and completing its full initial sync; restoring the original healthy Longhorn replica count; comprehensive historical parity for ClickHouse; complete byte-level MinIO object reconciliation; and an exhaustive failover test across all storage approaches.
+
+For the next new PVC, I would establish the recovery owner before picking a StorageClass: is the data replaceable from another application replica, must the storage layer provide another current block copy, or does an object store maintain its own erasure set? That answer also tells me which test is required before calling a failed node's replacement complete.
+
+**Related references:** [Longhorn volume recovery](/projects/rokaf-stateful-storage-and-recovery/) · [MinIO data migration](/projects/rokaf-object-storage-migration/) · [ClickHouse replicated migration](/projects/rokaf-clickhouse-replication-migration/) · [K3s Volumes and Storage](https://docs.k3s.io/add-ons/storage) · [Local Path Provisioner](https://github.com/rancher/local-path-provisioner) · [Longhorn Replica Scheduling](https://longhorn.io/docs/1.13.0/nodes-and-volumes/nodes/scheduling/) · [MinIO Erasure Coding](https://min.io/docs/minio/kubernetes/upstream/operations/concepts/erasure-coding.html).

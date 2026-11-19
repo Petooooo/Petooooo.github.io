@@ -715,5 +715,14 @@
   "cgroups": "cgroups",
   "K3s host memory-pressure investigation, earlyoom service diagnosis and process-accounting review": "K3s 호스트 메모리 압박 조사, earlyoom systemd 서비스 진단 및 프로세스별 메모리 사용량 검토",
   "earlyoom 1.9.0": "earlyoom 1.9.0",
-  "systemd": "systemd"
+  "systemd": "systemd",
+  "Kubernetes Storage Placement and Failure Domains": "Kubernetes 스토리지 배치와 장애 영역 설계",
+  "Kubernetes Storage Placement and Failure Domains | Jihwan Park": "Kubernetes 스토리지 배치와 장애 영역 설계 | 박지환",
+  "Per-node Local-path PVC settings, Longhorn replica recovery, ClickHouse and MongoDB replication, and distributed MinIO storage responsibilities.": "노드별 Local-path PVC 경로 설정, Longhorn Replica 복구, MongoDB·ClickHouse 복제와 분산 MinIO의 데이터 복구 책임을 비교한 운영 기록.",
+  "Local-path": "Local-path",
+  "PersistentVolume": "PersistentVolume",
+  "StorageClass": "StorageClass",
+  "Kubernetes Storage": "Kubernetes Storage",
+  "Local-path Provisioner": "Local-path Provisioner",
+  "K3s PV provisioning and node-path correction, stateful storage placement decisions, and replica recovery investigations": "K3s 노드별 PV 경로 설정 수정, 영속 스토리지 배치 기준 수립 및 Replica 복구 조사"
 }

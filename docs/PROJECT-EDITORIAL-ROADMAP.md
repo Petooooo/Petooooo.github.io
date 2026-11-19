@@ -22,6 +22,7 @@ The independent K3s platform article is the **overview/index**. Its topic pages 
 | Platform experience overview | `independent-on-premises-k3s-platform-engineering` |
 | Private images, Nexus, Kaniko and CI | `rokaf-private-artifacts-and-ci` |
 | Longhorn, MinIO and storage recovery | `rokaf-stateful-storage-and-recovery` |
+| Storage placement and failure domains | `rokaf-storage-placement-and-failure-domains` |
 | Database HA and migrations | `rokaf-database-ha-and-langfuse-migrations` |
 | ServiceAccount RBAC, OAuth2, Keycloak and OpenFGA | `rokaf-identity-rbac-and-policy` |
 | Traefik, MetalLB, DNS and private TLS | `rokaf-networking-and-tls` |

@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1320 825" role="img" aria-label="Storage recovery and failure-domain matrix for Local-path, Longhorn, database replication and distributed MinIO">
+  <rect width="1320" height="825" rx="22" fill="#0b1422"/>
+  <text x="48" y="63" fill="#f2f8ff" font-size="31" font-weight="730" font-family="Inter,Arial,sans-serif">Storage placement: who restores the data?</text>
+  <text x="48" y="101" fill="#abc5d5" font-size="18" font-family="Inter,Arial,sans-serif">Different data owners need different failure and recovery checks</text>
+  <path d="M48 127H1272" stroke="#40546b" stroke-width="1.5"/>
+  <text x="62" y="169" fill="#8eb8ce" font-size="15" font-family="Inter,Arial,sans-serif" font-weight="700" letter-spacing="1.5">STORAGE MODEL</text>
+  <text x="318" y="169" fill="#8eb8ce" font-size="15" font-family="Inter,Arial,sans-serif" font-weight="700" letter-spacing="1.5">RECOVERY OWNER</text>
+  <text x="744" y="169" fill="#8eb8ce" font-size="15" font-family="Inter,Arial,sans-serif" font-weight="700" letter-spacing="1.5">PROOF AFTER A FAILURE</text>
+  <text x="1115" y="169" fill="#8eb8ce" font-size="15" font-family="Inter,Arial,sans-serif" font-weight="700" letter-spacing="1.5">TRADE-OFF</text>
+  <rect x="48" y="185" width="1224" height="122" rx="14" fill="#192d43" stroke="#6294c6" stroke-width="1.4"/>
+  <rect x="48" y="185" width="6" height="122" rx="3" fill="#7bbbea"/>
+  <path d="M302 203V290 M727 203V290 M1098 203V290" stroke="#46627b" stroke-width="1.4"/>
+  <text x="66" y="229" fill="#effaff" font-size="23" font-weight="720" font-family="Inter,Arial,sans-serif">Local-path PV</text>
+  <text x="66" y="268" fill="#aec4d8" font-size="16" font-family="Inter,Arial,sans-serif">Node-bound directory</text>
+  <text x="318" y="225" fill="#e4f5ff" font-size="19" font-weight="680" font-family="Inter,Arial,sans-serif">Operator or application</text>
+  <text x="318" y="269" fill="#b0cce0" font-size="16" font-family="Inter,Arial,sans-serif">No cross-node copy by default</text>
+  <text x="744" y="225" fill="#e3f5ff" font-size="18" font-weight="680" font-family="Inter,Arial,sans-serif">PV path / node affinity</text>
+  <text x="744" y="269" fill="#b0cce0" font-size="16" font-family="Inter,Arial,sans-serif">Restore or re-sync completed?</text>
+  <text x="1115" y="225" fill="#d7eaff" font-size="18" font-weight="670" font-family="Inter,Arial,sans-serif">Simple I/O</text>
+  <text x="1115" y="269" fill="#aec4d8" font-size="16" font-family="Inter,Arial,sans-serif">Tied to node</text>
+  <rect x="48" y="324" width="1224" height="122" rx="14" fill="#1c3637" stroke="#60a990" stroke-width="1.4"/>
+  <rect x="48" y="324" width="6" height="122" rx="3" fill="#75cdb0"/>
+  <path d="M302 342V429 M727 342V429 M1098 342V429" stroke="#477568" stroke-width="1.4"/>
+  <text x="66" y="368" fill="#e6fff2" font-size="23" font-weight="720" font-family="Inter,Arial,sans-serif">Longhorn</text>
+  <text x="66" y="407" fill="#acd8c8" font-size="16" font-family="Inter,Arial,sans-serif">Replicated block device</text>
+  <text x="318" y="364" fill="#e3fff3" font-size="19" font-weight="680" font-family="Inter,Arial,sans-serif">Storage engine / replicas</text>
+  <text x="318" y="408" fill="#b0decf" font-size="16" font-family="Inter,Arial,sans-serif">Copies rebuilt on eligible disks</text>
+  <text x="744" y="364" fill="#e3fff3" font-size="18" font-weight="680" font-family="Inter,Arial,sans-serif">Healthy replicas / rebuild</text>
+  <text x="744" y="408" fill="#b0decf" font-size="16" font-family="Inter,Arial,sans-serif">Volume attach + app I/O</text>
+  <text x="1115" y="364" fill="#dcf9eb" font-size="18" font-weight="670" font-family="Inter,Arial,sans-serif">Mobility</text>
+  <text x="1115" y="408" fill="#acd8c8" font-size="16" font-family="Inter,Arial,sans-serif">Rebuild cost</text>
+  <rect x="48" y="463" width="1224" height="122" rx="14" fill="#302f3f" stroke="#a78cbe" stroke-width="1.4"/>
+  <rect x="48" y="463" width="6" height="122" rx="3" fill="#c4a4e5"/>
+  <path d="M302 481V568 M727 481V568 M1098 481V568" stroke="#5f5773" stroke-width="1.4"/>
+  <text x="66" y="507" fill="#f7edff" font-size="22" font-weight="720" font-family="Inter,Arial,sans-serif">DB replicas</text>
+  <text x="66" y="546" fill="#c7b8d7" font-size="16" font-family="Inter,Arial,sans-serif">MongoDB / ClickHouse</text>
+  <text x="318" y="503" fill="#f5e9ff" font-size="19" font-weight="680" font-family="Inter,Arial,sans-serif">Database replication</text>
+  <text x="318" y="547" fill="#d0c0de" font-size="16" font-family="Inter,Arial,sans-serif">Member and part synchronization</text>
+  <text x="744" y="503" fill="#f5e9ff" font-size="18" font-weight="680" font-family="Inter,Arial,sans-serif">Quorum / lag / query results</text>
+  <text x="744" y="547" fill="#d0c0de" font-size="16" font-family="Inter,Arial,sans-serif">Not just a new Pod</text>
+  <text x="1115" y="503" fill="#f1defc" font-size="18" font-weight="670" font-family="Inter,Arial,sans-serif">Data-aware</text>
+  <text x="1115" y="547" fill="#c7b8d7" font-size="16" font-family="Inter,Arial,sans-serif">Coordination</text>
+  <rect x="48" y="602" width="1224" height="122" rx="14" fill="#372f32" stroke="#c2947a" stroke-width="1.4"/>
+  <rect x="48" y="602" width="6" height="122" rx="3" fill="#e4b28b"/>
+  <path d="M302 620V707 M727 620V707 M1098 620V707" stroke="#715750" stroke-width="1.4"/>
+  <text x="66" y="646" fill="#fff2e7" font-size="22" font-weight="720" font-family="Inter,Arial,sans-serif">Distributed MinIO</text>
+  <text x="66" y="685" fill="#dac3b4" font-size="16" font-family="Inter,Arial,sans-serif">Erasure-coded objects</text>
+  <text x="318" y="642" fill="#fff1e5" font-size="19" font-weight="680" font-family="Inter,Arial,sans-serif">Object store / healing</text>
+  <text x="318" y="686" fill="#e1c7b7" font-size="16" font-family="Inter,Arial,sans-serif">Data and parity across members</text>
+  <text x="744" y="642" fill="#fff1e5" font-size="18" font-weight="680" font-family="Inter,Arial,sans-serif">Object reads / healing</text>
+  <text x="744" y="686" fill="#e1c7b7" font-size="16" font-family="Inter,Arial,sans-serif">Set tolerance + integrity check</text>
+  <text x="1115" y="642" fill="#f9e4d7" font-size="18" font-weight="670" font-family="Inter,Arial,sans-serif">Object-level</text>
+  <text x="1115" y="686" fill="#dac3b4" font-size="16" font-family="Inter,Arial,sans-serif">Set limits</text>
+  <text x="48" y="760" fill="#e4caa4" font-size="17" font-weight="720" font-family="Inter,Arial,sans-serif">Replica count does not define independent failure domains. Replication is not a backup.</text>
+  <text x="48" y="803" fill="#91a9b8" font-size="14" font-family="Inter,Arial,sans-serif">Conceptual storage-recovery matrix; no real node identifiers, disk paths or cluster layout</text>
+  <text x="1272" y="803" fill="#7292a6" font-size="13" text-anchor="end" font-family="Inter,Arial,sans-serif">RECOVERY OWNERSHIP</text>
+</svg>
