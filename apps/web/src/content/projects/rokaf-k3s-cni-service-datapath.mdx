@@ -1,0 +1,137 @@
+---
+title: "K3s Networking: Pod IP Routing and ClusterIP Services"
+description: "An internal DNS reachability investigation separating Flannel Pod routing, kube-proxy Service translation, DNS responses, host filtering and unverified conntrack hypotheses."
+date: "2026-11-17"
+updated: "2026-11-19"
+draft: false
+reviewed: true
+reviewStatus: "reviewed"
+sensitivity: sanitized
+category: "Engineering Investigation"
+area: "Kubernetes Networking"
+tags: ["K3s", "Flannel", "CNI", "iptables", "kube-proxy", "ClusterIP", "CoreDNS", "Linux Networking"]
+type: "troubleshooting"
+role: "K3s Pod and Service packet-path investigation, host firewall inspection and CNI design evaluation"
+period: "2025–2026"
+status: "building"
+techStack: ["Linux", "K3s", "Flannel", "kube-proxy", "Kubernetes Services", "CoreDNS"]
+---
+
+An application kept failing during startup because it could not resolve an internal service name. Not every Pod was affected. I inspected the network on a K3s host and found that its Flannel interface was up, routes to Pod networks existed, and Kubernetes Service-related NAT rules were present.
+
+Those observations looked reassuring but did not explain the failing request. A route to a **Pod IP** and a working connection to a **Service ClusterIP** depend on different packet-processing steps. I had checked that several pieces were installed; I had not shown that the affected DNS request actually crossed them.
+
+The surviving incident notes describe partial DNS and Service-IP reachability failures. In a separate request I also saw a timeout toward a destination in a Pod address range. Neither observation came with a synchronized packet capture or a proven rule-level root cause. I wanted to preserve the troubleshooting method without turning a suspected iptables or CNI problem into a fictional completed repair.
+
+## Two addresses, two packet paths
+
+A destination **Pod IP** identifies an endpoint. In a K3s environment using Flannel, Linux routing and CNI-managed networking determine how packets travel to that Pod. Same-node delivery and cross-node transport may use different paths, depending on the configured Flannel backend.
+
+A **ClusterIP** is a virtual Service address. In the kube-proxy **iptables mode** described by Kubernetes, packets addressed to a Service's IP and port are intercepted and destination-NATed to an eligible endpoint. The translated packet still needs a viable path to the chosen backend. Other kube-proxy modes, or an alternative Service datapath, implement the interception differently.
+
+That is why the absence of a conventional route for a Service CIDR did not immediately explain the incident. I could see routes for Pod networks, but the Service range did not have to appear as another ordinary route. I first needed to establish which Service proxy mode the node actually used and whether the particular query matched its programmed forwarding path.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/cni-podip-vs-clusterip.svg" target="_blank" rel="noopener noreferrer" aria-label="Open comparison of Pod IP routing and Service ClusterIP translation">
+    <img src="/figures/journals/cni-podip-vs-clusterip.svg" alt="Conceptual split between direct Pod IP routing over local or Flannel cross-node paths and Service ClusterIP translation to an endpoint, followed by return traffic. The figure does not show actual machine topology." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Direct endpoint routing and virtual-IP translation are separate mechanisms. The Service branch illustrates kube-proxy iptables mode, not a verified inventory of the incident host.</figcaption>
+</figure>
+
+The first useful comparison would have been to send the **same application request from the same Pod**, once to the appropriate backend Pod IP and once through the ClusterIP. A success on the direct path with failure through the Service would narrow the search toward Service selection, translation or stateful return processing. A failure on both paths would make direct routing, filtering or the endpoint process more relevant.
+
+This is a proposed controlled comparison. I did not preserve a paired result from the original outage that conclusively selected one of those branches.
+
+## Flannel UP did not prove the overlay worked
+
+I did inspect a Flannel interface in the UP state. That confirmed that the local interface existed and was not administratively down. It did not establish that a packet could travel between every pair of nodes.
+
+With K3s, Flannel is part of the integrated networking setup; it does not necessarily appear as a separately deployed `flannel` Pod with a standalone image. A search for such a Pod returning nothing is therefore not proof that Flannel was absent. The relevant host interface, K3s agent state, routes and forwarding traffic deserve inspection.
+
+A same-node Pod-to-Pod request can work even if a cross-node encapsulated packet is being dropped. A cross-node request may traverse an overlay, host routing and filtering rules. Even if it reaches the destination, its reply can take a different path or fail to match expected connection state.
+
+I separated the readings I actually had from the tests I still needed:
+
+| Evidence | What it supports | What it cannot establish |
+| --- | --- | --- |
+| Flannel interface UP | Local interface and link state exist | Working cross-node transport |
+| Pod network routes visible | A route has been installed | Delivery, filtering and reply path are correct |
+| Service NAT entries visible | Service-related rules have been written | The failed packet matched those rules |
+| EndpointSlice with ready endpoint | Kubernetes has candidate destinations | An endpoint responds to the actual request |
+| DNS request failed from some Pods | Those clients did not complete name resolution | The CoreDNS process itself failed |
+
+The last row was particularly important. An application reporting a DNS timeout identifies a failed operation, not automatically a malfunctioning resolver. I needed to learn whether it could contact the DNS Service, whether that Service forwarded the packet, and whether CoreDNS answered.
+
+## An ICMP echo was not the DNS request I needed
+
+During troubleshooting I attempted to ping the DNS Service IP. The result was not a sufficient DNS test. A Service virtual IP is not an ordinary host required to respond to ICMP echo requests; its configuration defines traffic through specific ports and protocols.
+
+For CoreDNS, the meaningful test was a DNS query over UDP port 53, and TCP where appropriate. The same question could be sent directly to an appropriate CoreDNS endpoint from the affected Pod to distinguish resolver behavior from Service translation.
+
+A minimal inventory before performing that comparison would look like this:
+
+```bash
+kubectl -n kube-system get service kube-dns
+kubectl -n kube-system get endpointslices \
+  -l kubernetes.io/service-name=kube-dns
+```
+
+Those are read-only inspection examples, not commands copied from a successful incident run. The query itself would then be repeated from the **same source network context** against the returned ClusterIP and an eligible endpoint. Protocol, port, question, time and selected endpoint all matter when comparing the outcomes.
+
+In the original notes, I had the failed operations and host-state inspection but did not capture that complete side-by-side experiment. A failed Ping and a missing Service-CIDR route did not fill the gap.
+
+## Where iptables and conntrack entered the investigation
+
+Once I suspected the Service path, I considered three different points at which a request could fail.
+
+**Service selection and DNAT.** A node may have `KUBE-SVC-*`-style rules in an iptables-based configuration, but seeing them in a listing is not evidence that the failing packet matched them. I needed to identify the active kube-proxy mode and capture the counters or packet observations associated with the specific request.
+
+**Host filtering and forwarding.** A destination can be rewritten successfully and still encounter a drop in a filter, network-policy or forwarding stage. For a reply, source/destination state and the reverse path matter as well. Docker and K3s can both introduce host networking rules, making their ownership worth inspecting. I did **not** retain evidence that a Docker chain change caused this outage.
+
+**Connection tracking.** An exhausted or invalid `conntrack` state is one possible explanation for intermittent packets failing, especially when NAT is involved. But I had no measured table occupancy, drop counter, or time-correlated trace establishing exhaustion here. Calling it the cause would have exceeded the evidence.
+
+The iptables and nftables tools also need care. An operator can look at a legacy or compatibility rule view that does not match the effective Service proxy implementation. This is a reason to check the actual mode and rule owner; it is **not** proof that a legacy/nftables mismatch occurred.
+
+Deleting firewall chains or replacing the CNI before tracing a packet could both disrupt unrelated traffic and erase the state that would have helped explain the failure. The records do not show a controlled ruleset change followed by repeatable success.
+
+## The comparison I would use next
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/cni-service-diagnostic-matrix.svg" target="_blank" rel="noopener noreferrer" aria-label="Open diagnostic comparison table for Pod IP, ClusterIP, DNS and host rule state">
+    <img src="/figures/journals/cni-service-diagnostic-matrix.svg" alt="A test matrix for direct Pod IP, Service ClusterIP, DNS over the configured protocol, same-node versus cross-node paths, NAT counters and conntrack state. It contains no invented pass/fail results." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>A plan for distinguishing failure locations, not a report of tests completed during the original incident.</figcaption>
+</figure>
+
+The order matters because each request is intended to rule out only part of the stack.
+
+| Comparison from a controlled source | What it could isolate |
+| --- | --- |
+| Direct backend Pod IP and correct target port | The endpoint process and sampled Pod routing path |
+| Service ClusterIP and configured Service port | Service interception, endpoint selection and forwarding |
+| DNS query against ClusterIP and endpoint | Transport path versus DNS resolver behavior |
+| Same-node and cross-node Pod destinations | Local CNI delivery versus inter-node transport |
+| Matching rule counters and conntrack events | Whether the inspected packet-processing path was visited |
+| Same request from affected and unaffected Pods | Source node or placement dependency |
+
+A direct backend request and a Service request are not always interchangeable without adjusting their ports: a Service's `port` can map to a different backend `targetPort`. The comparison must preserve the same intended application operation.
+
+No test here supplies a final diagnosis on its own. A direct request that works once does not prove the overlay or endpoint is reliable throughout a longer outage. A packet counter rising on one chain does not prove a response returned to the client.
+
+## Why I did not turn this into a Cilium migration
+
+During later K3s planning I considered what using another CNI, including Cilium, would change. That involved its kernel requirements, Service proxy options, policy model, observability and the practical cost of deploying and upgrading it in an offline environment.
+
+But I did not establish that Flannel's implementation was the cause of this particular DNS failure. Migrating the networking stack would introduce new state and different failure modes before answering the original question. The record supports **Flannel operation and an evaluation of alternatives**, not an implemented Cilium rollout or a demonstrated Cilium-based fix.
+
+This incident is also distinct from [the ServiceLB host-port conflict](/projects/rokaf-service-lb-hostport-conflict/). In that separate case, adding a LoadBalancer Service was followed by `svclb-*` host-port occupation; removing the Service restored the earlier access path. The problem was host-port ownership, not the Pod-to-ClusterIP translation path under investigation here.
+
+## Current evidence and remaining checks
+
+**Observed:** some Pods had DNS/Service-IP access failures; a Flannel interface was UP; Pod-network routes existed; and Service-related NAT entries were visible. Another recorded request to a Pod-range destination timed out. Those observations occurred in troubleshooting, but they are not a full packet timeline from which I can reconstruct a single causal chain.
+
+**Not verified:** a specific FORWARD rule dropping packets, conntrack exhaustion, an iptables/nftables mismatch, a corrupt Service backend selection, a Flannel overlay defect, or a permanent fix delivered by changing the CNI.
+
+If the incident recurred, I would first capture a real query from an affected Pod, compare it with a direct endpoint request, and then examine the effective proxy and host filtering path on the source node. I would repeat the same request from an unaffected location and keep the return traffic in the trace. Until those observations exist, the cause remains open.
+
+**Related records and documentation:** [CoreDNS and MetalLB VIP reachability](/projects/rokaf-dns-vip-open-investigations/) · [K3s networking and TLS](/projects/rokaf-networking-and-tls/) · [Kubernetes — Virtual IPs and Service Proxies](https://kubernetes.io/docs/reference/networking/virtual-ips/) · [Kubernetes — Debug Services](https://kubernetes.io/docs/tasks/debug/debug-application/debug-service/) · [K3s — Basic Network Options](https://docs.k3s.io/networking/basic-network-options/) · [Docker — Firewall rules](https://docs.docker.com/engine/network/firewall-iptables/).

@@ -72,6 +72,7 @@ Docker와 K3s가 한 호스트에서 각각 네트워크 규칙을 생성할 수
 
 ## 관련 기록과 참고 자료
 
+- [K3s 네트워크: Pod IP 라우팅과 ClusterIP 전달 경로](/projects/rokaf-k3s-cni-service-datapath/)
 - [K3s 네트워크: Traefik·MetalLB·TLS](/projects/rokaf-networking-and-tls/)
 - [K3s ServiceLB·MetalLB 호스트 포트 충돌](/projects/rokaf-service-lb-hostport-conflict/)
 - [Kubernetes — Service 디버깅](https://kubernetes.io/docs/tasks/debug/debug-application/debug-service/)

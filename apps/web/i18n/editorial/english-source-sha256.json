@@ -1,12 +1,12 @@
 {
   "bit-shift-cnn-accelerator-zynq": "5afa94644077341049db4013a5cf8bb9eb8def1d85a0325659127faed9d0f014",
-  "independent-on-premises-k3s-platform-engineering": "1f4d1375e9eb77e611ef21974a6ef70be37a07a46dd47e38b46ac6a157ceb2a4",
+  "independent-on-premises-k3s-platform-engineering": "f5ea4ba6bdfabf82b03330c22689d17b03ea73350b26c9c781b3a74387b5fc1a",
   "rokaf-async-workers-and-idempotency": "3165850507fc30934dff6ffa627015d8f6609acce4bdf836415e6364e0bab487",
   "rokaf-chat-attachments-object-storage": "1e882ca2caeeaecb25b86cfc051b4c59135ed6ff4f3c624fb86d096a569d67ce",
   "rokaf-clickhouse-replication-migration": "e12220dd0eae7537b7a582a3d806fbb88ac4924c6f94ff5ebb6d9c6375736a61",
   "rokaf-control-plane-incident-log": "0b3967c019df7385ee712ecd4bebc97ab7dabeeb9d869535fad155cea356ec6f",
   "rokaf-database-ha-and-langfuse-migrations": "cdd5de14e250e5d072cc766154d26bb88c34883191014b5a939b4d4850e36dca",
-  "rokaf-dns-vip-open-investigations": "ba374e8332d4f8544715d90561d2b557efeeab89e080b58bf6f3f7c00d51510a",
+  "rokaf-dns-vip-open-investigations": "584b73d4d9be0ba29035bc7bec0005238ccd29fae9a38f3fb4a25ce10161ec45",
   "rokaf-gpu-discovery-open-investigation": "173998fbe4a30fd691fe39c74f96c3f283461ea03aa364541072e1ad42e72199",
   "rokaf-gpu-scheduling-and-capacity": "114707f6b8427828b64a9b4d755a6db971706dbb88c24b14fdc2e64ebfcc0799",
   "rokaf-identity-rbac-and-policy": "35b3a2527497a0959d62515e0104316af622efe2455dd5306d9782755f4b75d6",
@@ -23,5 +23,6 @@
   "rokaf-stateful-storage-and-recovery": "b9aa8d9828619c089f195eff56a5ebe4c6b98e4c658ecc91c4677d1e0c1674da",
   "tflite-micro-lifecycle-memory-planning": "3da69d122069dde15e01acadb7431cd55f7a496b1a96be7b257ceecda619afc4",
   "rokaf-memory-pressure-and-service-recovery": "e136714468f38bd73fd658d5761257530e981f437ecf52d9dce2b09d87bf96f8",
-  "rokaf-storage-placement-and-failure-domains": "f59e15f3204afc9d5649190186d2742ad7e3a2d99761dcd5bfa20a0e58c02a47"
+  "rokaf-storage-placement-and-failure-domains": "f59e15f3204afc9d5649190186d2742ad7e3a2d99761dcd5bfa20a0e58c02a47",
+  "rokaf-k3s-cni-service-datapath": "d550d936ea39be0927b7423ea238c20db83de5c2e0125a55aceac3cbf72adef6"
 }

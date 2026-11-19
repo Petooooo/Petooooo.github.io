@@ -70,6 +70,7 @@ Not every difficult incident ended with a verified single root cause. Keeping th
 | --- | --- |
 | [Langfuse v4 migration](/projects/rokaf-langfuse-v4-migration-field-notes/) | A timeout conflicted with a persisted completed phase and nine completed chunks; later errors came from other layers |
 | [DNS and VIP reachability](/projects/rokaf-dns-vip-open-investigations/) | Intermittent symptoms with multiple plausible network, resolver and backend hypotheses |
+| [Pod IP routing and ClusterIP Services](/projects/rokaf-k3s-cni-service-datapath/) | Flannel and Pod routes were present during partial DNS failures; the Service translation, filter and return path were not proven |
 | [GPU discovery and labels](/projects/rokaf-gpu-discovery-open-investigation/) | Resource/label discovery did not behave as expected; full cause needed further evidence |
 | [Control-plane and disk incidents](/projects/rokaf-control-plane-incident-log/) | etcd and read-only disk symptoms required separating recovery from host-level root-cause proof |
 | [Linux memory pressure and earlyoom](/projects/rokaf-memory-pressure-and-service-recovery/) | Memory saturation, earlyoom systemd argument/path errors and a later process kill with no confirmed source of the host-wide spike |

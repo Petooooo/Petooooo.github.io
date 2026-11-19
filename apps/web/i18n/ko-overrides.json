@@ -724,5 +724,14 @@
   "StorageClass": "StorageClass",
   "Kubernetes Storage": "Kubernetes Storage",
   "Local-path Provisioner": "Local-path Provisioner",
-  "K3s PV provisioning and node-path correction, stateful storage placement decisions, and replica recovery investigations": "K3s 노드별 PV 경로 설정 수정, 영속 스토리지 배치 기준 수립 및 Replica 복구 조사"
+  "K3s PV provisioning and node-path correction, stateful storage placement decisions, and replica recovery investigations": "K3s 노드별 PV 경로 설정 수정, 영속 스토리지 배치 기준 수립 및 Replica 복구 조사",
+  "K3s Networking: Pod IP Routing and ClusterIP Services": "K3s 네트워크: Pod IP 라우팅과 ClusterIP 전달 경로",
+  "K3s Networking: Pod IP Routing and ClusterIP Services | Jihwan Park": "K3s 네트워크: Pod IP 라우팅과 ClusterIP 전달 경로 | 박지환",
+  "An internal DNS reachability investigation separating Flannel Pod routing, kube-proxy Service translation, DNS responses, host filtering and unverified conntrack hypotheses.": "일부 Pod의 내부 DNS 접근 실패를 조사하며 Flannel 라우팅, ClusterIP 변환, DNS 응답, 호스트 필터링과 conntrack 가설을 구분한 기록.",
+  "Kubernetes Networking": "Kubernetes 네트워크",
+  "iptables": "iptables",
+  "kube-proxy": "kube-proxy",
+  "Linux Networking": "Linux 네트워크",
+  "K3s Pod and Service packet-path investigation, host firewall inspection and CNI design evaluation": "K3s의 Pod·Service 패킷 전달 경로 조사, 호스트 방화벽 검토 및 CNI 구성 비교",
+  "Kubernetes Services": "Kubernetes Services"
 }
