@@ -6,7 +6,7 @@
   "rokaf-clickhouse-replication-migration": "e12220dd0eae7537b7a582a3d806fbb88ac4924c6f94ff5ebb6d9c6375736a61",
   "rokaf-control-plane-incident-log": "d3be2286532d8f89d37c33e8ad8eb881dba9e432c231eef3d835c23a4520d94d",
   "rokaf-database-ha-and-langfuse-migrations": "cdd5de14e250e5d072cc766154d26bb88c34883191014b5a939b4d4850e36dca",
-  "rokaf-dns-vip-open-investigations": "9751ba52d36feeda8a6f0047f9ebdcb771ea28249c471a70f210324577427c7d",
+  "rokaf-dns-vip-open-investigations": "ba374e8332d4f8544715d90561d2b557efeeab89e080b58bf6f3f7c00d51510a",
   "rokaf-gpu-discovery-open-investigation": "173998fbe4a30fd691fe39c74f96c3f283461ea03aa364541072e1ad42e72199",
   "rokaf-gpu-scheduling-and-capacity": "114707f6b8427828b64a9b4d755a6db971706dbb88c24b14fdc2e64ebfcc0799",
   "rokaf-identity-rbac-and-policy": "35b3a2527497a0959d62515e0104316af622efe2455dd5306d9782755f4b75d6",

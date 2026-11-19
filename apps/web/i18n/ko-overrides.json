@@ -661,7 +661,7 @@
   "Operational notes on MongoDB primary discovery, PostgreSQL/Pgpool routing, ClickHouse replication and Langfuse migration state.": "MongoDB Primary 탐색, PostgreSQL/Pgpool 라우팅, ClickHouse 복제와 Langfuse 데이터 이전 상태를 다룬 운영 기록.",
   "CoreDNS and MetalLB VIP Reachability": "CoreDNS·MetalLB VIP 접속 장애 조사",
   "CoreDNS and MetalLB VIP Reachability | Jihwan Park": "CoreDNS·MetalLB VIP 접속 장애 조사 | 박지환",
-  "Investigation of intermittent DNS and VIP access, with observed behavior and unresolved causes kept separate.": "간헐적인 DNS 및 VIP 접속 문제를 조사하며 확인된 현상과 아직 입증하지 못한 원인을 구분했다.",
+  "Pod-to-CoreDNS Service failures, visible Flannel/NAT state, and a separate MetalLB VIP investigation without an established common root cause.": "일부 Pod의 CoreDNS Service IP 접근 실패와 Flannel·NAT 상태를 조사했다. 별도의 MetalLB VIP 접속 문제는 근본 원인을 확정하지 못했다.",
   "GPU Operator and NFD: Node Labels and Resource Registration": "GPU Operator·NFD: 노드 라벨과 GPU 리소스 등록",
   "GPU Operator and NFD: Node Labels and Resource Registration | Jihwan Park": "GPU Operator·NFD: 노드 라벨과 GPU 리소스 등록 | 박지환",
   "Observed missing NFD labels and checks for GPU metadata, device-plugin registration, scheduling and runtime behavior.": "NFD 라벨 누락을 조사하며 GPU 메타데이터, Device Plugin 등록, 스케줄러와 모델 실행을 구분한 기록.",

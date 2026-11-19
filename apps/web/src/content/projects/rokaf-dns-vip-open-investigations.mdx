@@ -1,6 +1,6 @@
 ---
 title: "CoreDNS and MetalLB VIP Reachability"
-description: "Investigation of intermittent DNS and VIP access, with observed behavior and unresolved causes kept separate."
+description: "Pod-to-CoreDNS Service failures, visible Flannel/NAT state, and a separate MetalLB VIP investigation without an established common root cause."
 date: "2026-11-15"
 updated: "2026-11-19"
 draft: false
@@ -8,102 +8,87 @@ reviewed: true
 sensitivity: sanitized
 category: "Engineering Investigation"
 area: "Networking & Reliability"
-tags: ["K3s", "CoreDNS", "MetalLB", "DNS", "Traefik"]
+tags: ["K3s", "CoreDNS", "MetalLB", "ClusterIP", "Flannel", "DNS", "Traefik"]
 type: "troubleshooting"
 role: "ROKAF infrastructure troubleshooting and engineering investigation"
 period: "Jul 2025–Present"
 status: "building"
-techStack: ["K3s", "CoreDNS", "MetalLB", "DNS", "Traefik"]
+techStack: ["K3s", "CoreDNS", "Flannel", "MetalLB", "DNS", "Traefik"]
 ---
 
-The symptom I wanted to understand was not a spectacular cluster-wide crash. It was more frustrating: **service reachability appeared inconsistent**, and several layers could plausibly explain the same client-facing failure. An internal DNS issue, a load-balancer advertisement change, a mismatched Service endpoint or a non-ready application can all look like “sometimes the URL works.”
+When an internal service stopped responding from a Pod, CoreDNS was an obvious component to suspect. Some Pods had trouble reaching DNS or a Service virtual IP, and startup operations that depended on those paths could fail. Other access paths appeared to behave differently. From a user's perspective, the result was simply an unavailable service.
+
+The host state was harder to interpret. **A Flannel interface was up, routes to Pod networks were present, and Service-related NAT entries existed.** Those observations did not show the packet traversing the rules, reaching a ready CoreDNS endpoint or returning to the caller. I could see pieces of the network configuration without proving that the particular request had crossed them.
+
+I also investigated intermittent reachability concerns involving MetalLB VIPs. But an external client reaching a LoadBalancer address and a Pod sending a DNS query to a ClusterIP are not the same request path. I did not have synchronized evidence tying the two symptoms to one cause, so I kept their investigations separate.
+
+## The DNS request failed; the interface still existed
+
+The retained notes describe failures involving DNS or Service-IP access from some Pods. I inspected Flannel, local Pod routes and NAT rules related to Kubernetes Services. The interface was up and the rules were present, yet that did not settle whether the DNS query had reached its intended destination.
+
+An interface being UP says something about its local state. It does not verify cross-node encapsulated traffic, the host firewall's forwarding decision or the return path. Likewise, a Service NAT rule being installed does not show that a packet matched it, selected a working EndpointSlice address or completed a round trip.
+
+At one point, the troubleshooting included ICMP attempts against the DNS Service's virtual IP. That was not a reliable DNS acceptance test. A Kubernetes ClusterIP is a virtual destination for a Service's configured protocols and ports; it does not promise an ordinary host's ICMP echo behavior. **A failed ping to a DNS ClusterIP cannot by itself establish that UDP or TCP DNS queries are failing.**
+
+This was not evidence of one broken CoreDNS instance. It was evidence that I needed to separate the resolver's behavior from the Service datapath carrying the resolver request.
 
 <figure className="project-concept-figure">
-  <a href="/figures/journals/dns-vip-investigation.svg" target="_blank" rel="noopener noreferrer" aria-label="Open investigation diagram">
-    <img src="/figures/journals/dns-vip-investigation.svg" alt="The same timeout could result from DNS resolution, VIP advertisement, service endpoints, Traefik routing or backend readiness; evidence must discriminate them." loading="lazy" decoding="async" />
+  <a href="/figures/journals/dns-vip-investigation.svg" target="_blank" rel="noopener noreferrer" aria-label="Open the DNS, Service IP and MetalLB VIP evidence matrix">
+    <img src="/figures/journals/dns-vip-investigation.svg" alt="Evidence matrix: some Pod-to-DNS/Service IP requests failed, Flannel routes and Service NAT rules were observed, while actual packet traversal and MetalLB advertisement during the VIP symptom remain unverified. Different follow-up tests are shown." loading="lazy" decoding="async" />
   </a>
-  <figcaption>The same timeout could result from DNS resolution, VIP advertisement, service endpoints, Traefik routing or backend readiness; evidence must discriminate them. Generalized hypothesis map; it does not disclose the internal infrastructure topology.</figcaption>
+  <figcaption>Observed configuration and symptoms are distinguished from missing packet-path and advertisement evidence. This is a diagnostic matrix, not a measured failure timeline or internal topology.</figcaption>
 </figure>
 
-## What I observed
+## Was CoreDNS unable to answer, or unable to receive the request?
 
-My earlier infrastructure notes and discussions included **CoreDNS availability concerns** and suspected **MetalLB VIP instability**. These observations made me uneasy about treating Kubernetes Service exposure as automatically reliable just because each individual component's Pod was marked running.
+For an affected Pod, the most useful comparison would be two DNS queries carrying the same question and using the intended protocol: one to the DNS Service's ClusterIP and another to an appropriate CoreDNS Pod endpoint. The queries would need to originate from the same network context and be recorded close together in time.
 
-The first confirmed point was architectural: in a K3s cluster, both DNS resolution and load-balancer exposure are **shared dependencies**. Failure in either can affect numerous unrelated applications, making the incident appear larger than the original failing component.
+If the direct endpoint answered but the Service-IP query did not, I would investigate Service translation, endpoint selection, filtering and return traffic before blaming DNS application logic. If both failed, the direct Pod datapath and resolver process would need attention. Repeating the same test from a known unaffected Pod could then reveal whether the problem depended on its source node.
 
-## Hypotheses I considered
+I did not retain a complete paired set of these measurements from the original incident. They are **follow-up tests**, not results I can retrospectively mark successful or failed.
 
-| Hypothesis | Why it fits the symptom | What would falsify it |
-| --- | --- | --- |
-| DNS availability or resolver delay | Connections by service name fail before reaching the application | A consistent resolution result during the incident |
-| MetalLB advertisement change | The client intermittently cannot reach an otherwise healthy frontend VIP | Stable L2/BGP advertisement and packet reachability throughout |
-| Endpoints or readiness | The VIP is reachable but no usable backend responds | Healthy matched endpoints and successful direct Service traffic |
-| Traefik route or TLS behavior | Connection succeeds but routing/handshake fails | Successful matching transport, certificate and backend route |
-| Host/node network asymmetry | Same request behaves differently by network path | Equivalent connectivity from each relevant path |
+| Comparison to record | What it could distinguish |
+| --- | --- |
+| Affected Pod → DNS ClusterIP, UDP/TCP port 53 | Whether the actual DNS Service path completes |
+| Same Pod → suitable CoreDNS endpoint, same query | Whether bypassing Service translation changes the result |
+| Affected and unaffected Pods → same destination | Whether the failure depends on the source or node |
+| EndpointSlice readiness and a real DNS response | Whether a listed endpoint can serve the request |
+| Service rule counters and packet observations at the failure time | Whether a specific forwarding path is actually traversed |
 
-## Why I didn't want to fix it by guessing
+A failing DNS name resolution and a failing network connection can also coexist. The test should record which resolver answered, what answer it returned, and whether the client then reached the returned destination. An application log that only says “connection timed out” does not make that distinction for me.
 
-Restarting a load balancer or DNS Pod can temporarily change timing and appear to resolve an issue. But unless I captured what changed, it might destroy the strongest evidence. Similarly, adding DNS replicas or changing a Service type could mask an unrelated endpoint failure.
+## NAT entries did not prove which rule handled the packet
 
-I preferred to investigate the request path in stages: resolve name, reach target, negotiate transport, select Service endpoints, then test application readiness. Each step narrows the next one without requiring the public disclosure of internal addresses.
+Once I saw Service-related NAT rules, it would have been easy to write that kube-proxy was correctly configured and the failure must lie elsewhere. But the host can have a valid-looking rule that was never applied to the affected traffic. Other rules may filter packets after destination translation; connection tracking and source-dependent routing may affect the return leg.
 
-## Request-path analysis: the same error can come from different layers
+I considered whether `iptables`, the active proxy backend or `conntrack` state could explain the partial failures. A conntrack table at capacity can be relevant to intermittent transport errors, but **the available incident evidence did not establish a measured exhaustion event**. I had no basis to call it the root cause.
 
-The hardest part of intermittent connectivity was that clients typically reported a single outcome—timeout, connection failure or an application error—while the underlying request passed through several independently failing systems.
+Docker and K3s could both manage host-network rules in the operating environment. Their coexistence made rule ownership an important question, but it did not prove that Docker overwrote a particular Kubernetes rule during the DNS incident. Nor would blindly flushing rules or switching CNI implementations count as a validated repair. Such actions could destroy the state I needed to inspect and disrupt unrelated workloads.
 
-A better way to analyze it is to **follow one request from the client's perspective**, recording what was established at each boundary.
+The more detailed Pod-IP versus ClusterIP investigation remains a separate local draft while its evidence and public-disclosure boundaries are reviewed. I do not convert that draft's unconfirmed hypotheses into resolved findings here.
 
-| Boundary | What I would capture | What it rules out |
-| --- | --- | --- |
-| Name resolution | Resolver answer, elapsed time, TTL | Incorrect or unstable name-to-address mapping |
-| Reachability | Destination and basic transport result | Path or VIP that cannot be reached |
-| TLS | Handshake result and certificate identity | CA/trust and endpoint-name mismatches |
-| Ingress routing | Selected router/entry point | Incorrect route matching |
-| Service/EndpointSlice | Whether ready destinations exist | Backend selection or readiness mistakes |
-| Application | Representative response and dependency health | A service process that starts but cannot do useful work |
+## The VIP investigation needed a different set of observations
 
-These are different levels of proof. A successful DNS lookup does not establish that the advertised VIP is reachable. A completed TLS handshake does not establish that Traefik selected the intended backend. A running Pod does not establish that the service endpoint is ready.
+A MetalLB VIP exposes a Kubernetes LoadBalancer Service to clients outside the Pod-to-Service DNS path. Depending on deployment, MetalLB can advertise an external address using layer-2 ARP/NDP or BGP. The relevant evidence depends on the configured mode and the client's network location.
 
-### Why timestamps matter
+The notes record concerns about apparently intermittent access through VIPs. They do **not** give me a consistent timeline identifying who advertised the address at each failed request, whether that advertiser changed, or whether the packet reached the receiving node. It would be too strong to say that the VIP repeatedly failed over or that a MetalLB speaker was the proven cause.
 
-Suppose a client fails at 14:00:03, the DNS Pod restarts at 14:00:05, and a MetalLB speaker event appears at 14:00:06. Those events may be related, but **their order alone is insufficient to prove cause**. The client might have cached a resolution result before the DNS restart. Likewise, advertisement activity could be unrelated to the request path.
+Before investigating advertisement changes, I would establish what the client actually experienced. Did name resolution return the expected VIP? Did the client reach a listening TCP endpoint? Did TLS finish? Did Traefik select the intended router? Was an EndpointSlice ready? A successful DNS response for a VIP is not evidence that the VIP is reachable.
 
-A sound investigation needs synchronized timestamps, a consistent client vantage point and enough repeated observations to distinguish coincidence from a repeated mechanism. This is what was missing from my publicly preserved evidence.
+There was one **different incident with stronger evidence**. Adding a LoadBalancer Service caused K3s's built-in ServiceLB to create `svclb-*` resources that requested a host port already used by another exposure path. Altering or deleting that Service removed the contention and restored the older path. MetalLB address advertisement and K3s ServiceLB host-port ownership were separate mechanisms. The [ServiceLB host-port case](/projects/rokaf-service-lb-hostport-conflict/) documents that reversible sequence. It does not establish a cause for the other suspected VIP or ClusterIP failures.
 
-## DNS redundancy and VIP stability are different reliability questions
+## What a restart would and would not tell me
 
-A second resolver instance may improve resilience to the failure of one resolver Pod, but only if the replicas are placed and reached in a way that actually avoids the relevant failure domain. It does not fix a broken upstream resolver or a node-level network path.
+Restarting a DNS or network component might be necessary to restore service, but it also changes transient state: caches, connection tables, timing and controller reconciliation may all shift. A request succeeding afterward demonstrates the endpoint was accessible at the time of the retest. It does not, by itself, identify which earlier component failed.
 
-Similarly, a VIP gives clients a stable *logical destination*. That is not equivalent to permanent reachability. In layer-2 advertisement modes, the network must deliver traffic to the current advertiser. In other modes, the routing fabric has a different role. The appropriate evidence depends on the selected mode, so I did not publish a blanket diagnosis of MetalLB flapping.
+The missing evidence in this case was a repeated request with a consistent caller and a common timeline for the response, resolver status, Service endpoints and—if external VIP traffic was involved—advertisement and transport reachability.
 
-## How I would separate recovery from cause
+Adding CoreDNS replicas can improve tolerance to an individual Pod failure when those replicas actually cover independent failure domains. It cannot automatically correct an unreachable upstream resolver, a broken Service forwarding path or a host-level packet drop. I have not recorded a before/after test establishing that a replica change permanently corrected this incident.
 
-An operational restart can be a reasonable containment step when service continuity matters. However, it changes internal state and may destroy transient evidence. I now distinguish:
+## Current status
 
-1. **Immediate service condition:** Can a representative client complete a request?
-2. **Last known healthy state:** Which source of truth changed first?
-3. **Intervention:** What configuration or process state was changed?
-4. **Post-intervention check:** Did the request succeed from more than one vantage point?
-5. **Root-cause statement:** Is there independent evidence linking the intervention to the original failure mechanism?
+The surviving observations establish that **some Pods experienced DNS or Service-IP access problems**, and that **Flannel interfaces/routes and Service NAT entries existed** when networking was inspected. They also establish that I investigated separate concerns around VIP reachability. They do **not** establish a shared root cause, a measured MetalLB speaker-failover event, conntrack exhaustion or a reproducible low-level fix.
 
-A working endpoint after a restart supports the fourth statement, **not necessarily the fifth**.
+My next controlled test would compare real DNS queries to a ClusterIP and its backend endpoint from affected and unaffected Pod locations. For external VIP traffic I would record the same client's transport result alongside the advertisement mode, network neighbor or routing state, and ready backends. Those paired observations are necessary before a final cause can be reported.
 
-## A safe reproduction plan
-
-For future work, a small local test cluster could generate repeat requests while recording resolver latency, endpoint readiness and advertisement events. The setup would use synthetic names and addresses, not information about the operational environment. Its purpose would be to test whether one candidate failure can reproduce the user-visible symptom, not to claim that an old incident had the same cause.
-
-This is exactly the kind of incomplete investigation I want to preserve. It contains an observed problem and a narrowed question, without rewriting uncertainty into a successful incident report.
-
-## Where the investigation stands
-
-**Confirmed:** these shared layers warrant separate health checks; some reachability behavior was inconsistent; DNS redundancy and VIP behavior deserved investigation.
-
-**Still open:** I have not documented a definitive proof that MetalLB advertisement alone caused every intermittent failure, or that one DNS replica count explains all observations. I also do not have a published timeline correlating each symptom with a packet capture, node event and client request.
-
-## Next verification I would perform
-
-I would use an isolated or sanitized test setup to correlate **resolver responses, advertisement state, application endpoints and client-visible status** at the same timestamps. That would help separate a plausible explanation from a demonstrated cause.
-
-The available logs do not establish a single root cause. A repeated request trace with synchronized resolver, VIP advertisement, endpoint and ingress states is still needed.
-
-[Networking design record](/projects/rokaf-networking-and-tls/) · [ROKAF overview](/projects/independent-on-premises-k3s-platform-engineering/).
+**Related records and documentation:** [K3s networking and TLS](/projects/rokaf-networking-and-tls/) · [K3s ServiceLB host-port contention](/projects/rokaf-service-lb-hostport-conflict/) · [Kubernetes: Debug Services](https://kubernetes.io/docs/tasks/debug/debug-application/debug-service/) · [Kubernetes: Debugging DNS Resolution](https://kubernetes.io/docs/tasks/administer-cluster/dns-debugging-resolution/) · [MetalLB: Troubleshooting](https://metallb.io/troubleshooting/).
