@@ -37,7 +37,7 @@ K3s는 이런 서비스의 공통 실행 환경을 제공했지만 모든 책임
 | 관측성 | [사라진 메트릭의 원인 추적](/projects/rokaf-observability-and-failure-evidence/) — Prometheus WAL과 DCGM Exporter 배치 |
 | RabbitMQ Worker | [Worker는 계속 처리하는데 메시지가 다시 돌아왔다](/projects/rokaf-async-workers-and-idempotency/) — Shovel 메시지 이전, Heartbeat 장애와 Claim·Lease 기반 작업 복구 |
 
-원인이 끝까지 확정되지 않았던 조사도 따로 남겼다. [Langfuse v4 마이그레이션](/projects/rokaf-langfuse-v4-migration-field-notes/)에서는 Timeout이 떠도 내부 진행 상태가 완료일 수 있다는 것을 확인했고, [DNS와 VIP 문제](/projects/rokaf-dns-vip-open-investigations/)에서는 하나의 증상에 여러 경로가 관여할 수 있다는 한계를 남겼다. [GPU 리소스 발견](/projects/rokaf-gpu-discovery-open-investigation/)과 [Control Plane 장애](/projects/rokaf-control-plane-incident-log/)도 마찬가지로 관측과 가설을 구분해 정리했다.
+원인이 끝까지 확정되지 않았던 조사도 따로 남겼다. [Langfuse v4 마이그레이션](/projects/rokaf-langfuse-v4-migration-field-notes/)에서는 Timeout이 떠도 내부 진행 상태가 완료일 수 있다는 것을 확인했고, [DNS와 VIP 문제](/projects/rokaf-dns-vip-open-investigations/)에서는 하나의 증상에 여러 경로가 관여할 수 있다는 한계를 남겼다. [GPU 리소스 발견](/projects/rokaf-gpu-discovery-open-investigation/)과 [Control Plane 장애](/projects/rokaf-control-plane-incident-log/)도 마찬가지로 관측과 가설을 구분해 정리했다. [Linux 메모리 압박과 earlyoom 서비스 오류](/projects/rokaf-memory-pressure-and-service-recovery/)에서는 메모리 포화와 systemd 오류, 이후 프로세스 종료 기록을 서로 다른 사건으로 구분했다.
 
 ## 운영하면서 반복해서 부딪힌 선택
 

@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1320 840" role="img" aria-label="Incident evidence matrix separating March memory saturation, earlyoom configuration errors, July log search and August victim-selection observations">
+  <rect width="1320" height="840" rx="24" fill="#0b1422"/>
+  <text x="48" y="63" fill="#f1f8fe" font-size="31" font-family="Inter,Arial,sans-serif" font-weight="735">Linux memory pressure and earlyoom: recorded evidence</text>
+  <text x="48" y="100" fill="#a9c5d6" font-size="18" font-family="Inter,Arial,sans-serif">Four separate checkpoints; no invented root cause or recovery timeline</text>
+  <path d="M48 126H1272" stroke="#39536d" stroke-width="1.5"/>
+  <text x="64" y="169" fill="#8eb9c9" font-size="15" letter-spacing="1.5" font-family="Inter,Arial,sans-serif">EPISODE</text>
+  <text x="268" y="169" fill="#8eb9c9" font-size="15" letter-spacing="1.5" font-family="Inter,Arial,sans-serif">WHAT WAS OBSERVED</text>
+  <text x="776" y="169" fill="#8eb9c9" font-size="15" letter-spacing="1.5" font-family="Inter,Arial,sans-serif">WHAT THE RECORD DOES NOT PROVE</text>
+  <rect x="48" y="188" width="1224" height="122" rx="14" fill="#203245" stroke="#5d8fb5" stroke-width="1.4"/>
+  <rect x="48" y="188" width="6" height="122" rx="3" fill="#83bce0"/>
+  <path d="M250 206V294 M758 206V294" stroke="#405b73" stroke-width="1.4"/>
+  <text x="68" y="240" fill="#e4f3ff" font-size="23" font-family="Inter,Arial,sans-serif" font-weight="720">March</text>
+  <text x="68" y="278" fill="#aac4d7" font-size="17" font-family="Inter,Arial,sans-serif">Host stall</text>
+  <text x="267" y="229" fill="#f0f9ff" font-size="21" font-family="Inter,Arial,sans-serif" font-weight="690">Memory nearly full; reboot required</text>
+  <text x="267" y="271" fill="#acc7d9" font-size="17" font-family="Inter,Arial,sans-serif">Previous boot journal unavailable</text>
+  <text x="777" y="229" fill="#f6dec5" font-size="21" font-family="Inter,Arial,sans-serif" font-weight="670">Kernel OOM or original consumer</text>
+  <text x="777" y="271" fill="#c9b5a4" font-size="17" font-family="Inter,Arial,sans-serif">No synchronized pressure snapshot</text>
+  <rect x="48" y="327" width="1224" height="122" rx="14" fill="#2d303e" stroke="#9b83b7" stroke-width="1.4"/>
+  <rect x="48" y="327" width="6" height="122" rx="3" fill="#b9a0de"/>
+  <path d="M250 345V433 M758 345V433" stroke="#57536f" stroke-width="1.4"/>
+  <text x="68" y="379" fill="#f1e6ff" font-size="22" font-family="Inter,Arial,sans-serif" font-weight="710">Setup</text>
+  <text x="68" y="417" fill="#c5b8d6" font-size="17" font-family="Inter,Arial,sans-serif">earlyoom 1.9.0</text>
+  <text x="267" y="368" fill="#f7f2ff" font-size="21" font-family="Inter,Arial,sans-serif" font-weight="690">systemd exit 16; restart loop</text>
+  <text x="267" y="408" fill="#c9c0dd" font-size="17" font-family="Inter,Arial,sans-serif">Missing stop executable; -d runs</text>
+  <text x="777" y="368" fill="#f6dec5" font-size="21" font-family="Inter,Arial,sans-serif" font-weight="670">Final unit and stable service state</text>
+  <text x="777" y="408" fill="#c9b5a4" font-size="17" font-family="Inter,Arial,sans-serif">Exit status and stop path are separate</text>
+  <rect x="48" y="466" width="1224" height="122" rx="14" fill="#203245" stroke="#5d8fb5" stroke-width="1.4"/>
+  <rect x="48" y="466" width="6" height="122" rx="3" fill="#83bce0"/>
+  <path d="M250 484V572 M758 484V572" stroke="#405b73" stroke-width="1.4"/>
+  <text x="68" y="518" fill="#e4f3ff" font-size="23" font-family="Inter,Arial,sans-serif" font-weight="720">July</text>
+  <text x="68" y="556" fill="#aac4d7" font-size="17" font-family="Inter,Arial,sans-serif">Log review</text>
+  <text x="267" y="507" fill="#f0f9ff" font-size="21" font-family="Inter,Arial,sans-serif" font-weight="690">No kill message in searched logs</text>
+  <text x="267" y="549" fill="#acc7d9" font-size="17" font-family="Inter,Arial,sans-serif">Retained interval only</text>
+  <text x="777" y="507" fill="#f6dec5" font-size="21" font-family="Inter,Arial,sans-serif" font-weight="670">That pressure never occurred</text>
+  <text x="777" y="549" fill="#c9b5a4" font-size="17" font-family="Inter,Arial,sans-serif">No evidence outside saved logs</text>
+  <rect x="48" y="605" width="1224" height="122" rx="14" fill="#1d3737" stroke="#61aa97" stroke-width="1.4"/>
+  <rect x="48" y="605" width="6" height="122" rx="3" fill="#7acfb2"/>
+  <path d="M250 623V711 M758 623V711" stroke="#3f6964" stroke-width="1.4"/>
+  <text x="68" y="657" fill="#e6fff3" font-size="23" font-family="Inter,Arial,sans-serif" font-weight="720">August</text>
+  <text x="68" y="695" fill="#b0d6c9" font-size="17" font-family="Inter,Arial,sans-serif">Memory spike</text>
+  <text x="267" y="646" fill="#f0fff7" font-size="21" font-family="Inter,Arial,sans-serif" font-weight="690">Host rise; earlyoom victim ~608 MiB</text>
+  <text x="267" y="688" fill="#b5d8ca" font-size="17" font-family="Inter,Arial,sans-serif">Pod charts showed no matching jump</text>
+  <text x="777" y="646" fill="#f6dec5" font-size="21" font-family="Inter,Arial,sans-serif" font-weight="670">Which process or cgroup consumed RAM</text>
+  <text x="777" y="688" fill="#c9b5a4" font-size="17" font-family="Inter,Arial,sans-serif">Single victim RSS cannot explain total</text>
+  <text x="48" y="771" fill="#e2c99f" font-size="17" font-family="Inter,Arial,sans-serif" font-weight="700">earlyoom 1.9.0 exit 16 = swap threshold parameter error; -d = debug, not daemon mode</text>
+  <text x="48" y="815" fill="#92abbc" font-size="14" font-family="Inter,Arial,sans-serif">Illustrative evidence table only; no host identifiers, internal configuration or measured allocation breakdown</text>
+  <text x="1272" y="815" fill="#7899a9" font-size="13" text-anchor="end" font-family="Inter,Arial,sans-serif">OBSERVED / UNKNOWN</text>
+</svg>

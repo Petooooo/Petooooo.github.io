@@ -704,5 +704,16 @@
   "K3s ServiceLB hostPort contention after adding a LoadBalancer Service, distinct from MetalLB VIP advertisement.": "LoadBalancer Service 추가로 발생한 K3s ServiceLB hostPort 충돌과 MetalLB VIP 광고의 역할 차이를 조사했다.",
   "Longhorn Replica Failure and Volume Recovery": "Longhorn Replica 장애와 볼륨 복구",
   "Longhorn Replica Failure and Volume Recovery | Jihwan Park": "Longhorn Replica 장애와 볼륨 복구 | 박지환",
-  "Longhorn degraded replicas, attachment state, volume recovery and the limits of lowering replica count.": "Longhorn Replica 이상, 볼륨 Attach 상태, 복구 과정과 Replica 수를 줄인 Healthy 판정의 한계를 기록했다."
+  "Longhorn degraded replicas, attachment state, volume recovery and the limits of lowering replica count.": "Longhorn Replica 이상, 볼륨 Attach 상태, 복구 과정과 Replica 수를 줄인 Healthy 판정의 한계를 기록했다.",
+  "Linux Memory Pressure and earlyoom Service Failures": "Linux 메모리 압박과 earlyoom 서비스 오류",
+  "Linux Memory Pressure and earlyoom Service Failures | Jihwan Park": "Linux 메모리 압박과 earlyoom 서비스 오류 | 박지환",
+  "K3s host memory exhaustion, earlyoom 1.9.0 systemd exit code 16, and a later process kill that did not identify the cause of a host-wide memory spike.": "K3s 서버의 메모리 포화와 earlyoom 1.9.0의 systemd 오류, 이후 프로세스 종료 기록을 조사했다. 전체 메모리 급증의 원인은 확정하지 못했다.",
+  "Linux Memory & Reliability": "Linux 메모리·안정성",
+  "Memory Pressure": "메모리 압박",
+  "Swap": "Swap",
+  "earlyoom": "earlyoom",
+  "cgroups": "cgroups",
+  "K3s host memory-pressure investigation, earlyoom service diagnosis and process-accounting review": "K3s 호스트 메모리 압박 조사, earlyoom systemd 서비스 진단 및 프로세스별 메모리 사용량 검토",
+  "earlyoom 1.9.0": "earlyoom 1.9.0",
+  "systemd": "systemd"
 }

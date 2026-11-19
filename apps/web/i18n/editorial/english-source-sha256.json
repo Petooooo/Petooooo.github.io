@@ -1,6 +1,6 @@
 {
   "bit-shift-cnn-accelerator-zynq": "5afa94644077341049db4013a5cf8bb9eb8def1d85a0325659127faed9d0f014",
-  "independent-on-premises-k3s-platform-engineering": "c26edb8e5e9ab6de7c9cecd66cbabca624ee6c0d2423b8d906a6a3e73d4b26e2",
+  "independent-on-premises-k3s-platform-engineering": "73a388319e3e39bad187d9b524c92e69232012a656ff3f53e09bdc7b6364e74e",
   "rokaf-async-workers-and-idempotency": "3165850507fc30934dff6ffa627015d8f6609acce4bdf836415e6364e0bab487",
   "rokaf-chat-attachments-object-storage": "1e882ca2caeeaecb25b86cfc051b4c59135ed6ff4f3c624fb86d096a569d67ce",
   "rokaf-clickhouse-replication-migration": "e12220dd0eae7537b7a582a3d806fbb88ac4924c6f94ff5ebb6d9c6375736a61",
@@ -21,5 +21,6 @@
   "rokaf-self-hosted-services-integration": "e840c457fa5b0a8d8f781b117de47afff899106afcecfd81e9c4fdb977d4a58b",
   "rokaf-service-lb-hostport-conflict": "62b5ae58647aa1c3d02ba423a4a99bb6473f689376c3e7d4f0fec5ed45ce1358",
   "rokaf-stateful-storage-and-recovery": "b9aa8d9828619c089f195eff56a5ebe4c6b98e4c658ecc91c4677d1e0c1674da",
-  "tflite-micro-lifecycle-memory-planning": "3da69d122069dde15e01acadb7431cd55f7a496b1a96be7b257ceecda619afc4"
+  "tflite-micro-lifecycle-memory-planning": "3da69d122069dde15e01acadb7431cd55f7a496b1a96be7b257ceecda619afc4",
+  "rokaf-memory-pressure-and-service-recovery": "e136714468f38bd73fd658d5761257530e981f437ecf52d9dce2b09d87bf96f8"
 }

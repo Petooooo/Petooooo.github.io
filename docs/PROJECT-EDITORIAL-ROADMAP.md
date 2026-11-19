@@ -36,6 +36,7 @@ The independent K3s platform article is the **overview/index**. Its topic pages 
 | DNS and VIP reachability | `rokaf-dns-vip-open-investigations` | Intermittent symptom; multiple unconfirmed hypotheses |
 | GPU Operator / NFD visibility | `rokaf-gpu-discovery-open-investigation` | Missing/unexpected labels; full root cause not established |
 | etcd and host disk incidents | `rokaf-control-plane-incident-log` | Restored service and remaining root-cause questions separated |
+| Linux memory pressure and earlyoom | `rokaf-memory-pressure-and-service-recovery` | March near-full memory/reboot, service exit 16 and missing stop path, later victim log without attribution of the host-wide spike; no complete recovery or prevention claim |
 
 These pages explicitly distinguish **observed facts, plausible causes, mitigations and unverified outcomes**. They do not publish internal addresses, replica placement, credentials, military network topology or actual recovery commands.
 
