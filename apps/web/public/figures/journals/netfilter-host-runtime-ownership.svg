@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1360 850" role="img" aria-label="Netfilter hooks and multiple rule owners with a distinct observed xtables lock contention during K3s bootstrap">
+  <rect width="1360" height="850" rx="22" fill="#0b1422"/>
+  <g font-family="Inter,Arial,sans-serif">
+    <text x="46" y="58" font-size="30" font-weight="730" fill="#eef8ff">Host netfilter: packet path and rule ownership</text>
+    <text x="46" y="94" font-size="18" fill="#afc6d5">Conceptual iptables-mode forwarding path; rule writers and startup state are separate questions</text>
+    <path d="M46 117H1314" stroke="#365168" stroke-width="1.4"/>
+    <text x="46" y="157" font-size="15" font-weight="720" letter-spacing="1.4" fill="#96b8d4">FORWARDED PACKET · POSSIBLE HOOKS</text>
+    <rect x="46" y="177" width="390" height="156" rx="15" fill="#183447" stroke="#6daccd" stroke-width="1.7"/>
+    <rect x="485" y="177" width="390" height="156" rx="15" fill="#1d373a" stroke="#71bca6" stroke-width="1.7"/>
+    <rect x="924" y="177" width="390" height="156" rx="15" fill="#35313a" stroke="#b49ac3" stroke-width="1.7"/>
+    <text x="66" y="216" font-size="22" font-weight="710" fill="#eaf6ff">PREROUTING / DNAT</text>
+    <text x="66" y="250" font-size="18" fill="#c5deeb">Service IP and port translation</text>
+    <text x="66" y="282" font-size="16" fill="#a8c6d8">Only when rules and mode apply</text>
+    <text x="505" y="216" font-size="22" font-weight="710" fill="#ebfcf6">FORWARD / filtering</text>
+    <text x="505" y="250" font-size="18" fill="#c5e6d9">Host policy, chain decisions</text>
+    <text x="505" y="282" font-size="16" fill="#a8d2c3">Docker, CNI and policy can act</text>
+    <text x="944" y="216" font-size="22" font-weight="710" fill="#f8effc">POSTROUTING / SNAT</text>
+    <text x="944" y="250" font-size="18" fill="#e2d5e9">Masquerading where applicable</text>
+    <text x="944" y="282" font-size="16" fill="#c4b6d0">Depends on configured traffic path</text>
+    <path d="M439 256H475 M878 256H914" stroke="#e5c390" stroke-width="3" stroke-linecap="round"/>
+    <path d="M465 247L477 256L465 265 M904 247L916 256L904 265" fill="none" stroke="#e5c390" stroke-width="2.2" stroke-linejoin="round"/>
+    <text x="46" y="369" font-size="16" fill="#b0c2d1">Locally generated requests may use OUTPUT instead; not every packet traverses this sequence.</text>
+    <text x="46" y="415" font-size="15" font-weight="720" letter-spacing="1.4" fill="#96b8d4">INDEPENDENT RULE WRITERS · CHECK ACTUAL MODE</text>
+    <rect x="46" y="434" width="612" height="127" rx="14" fill="#1c3144" stroke="#639dc6" stroke-width="1.5"/>
+    <rect x="686" y="434" width="628" height="127" rx="14" fill="#213935" stroke="#76bba1" stroke-width="1.5"/>
+    <text x="68" y="470" font-size="22" font-weight="710" fill="#eaf6ff">Docker networking</text>
+    <text x="68" y="503" font-size="17" fill="#b9d7e8">iptables: DOCKER-USER, port rules, masquerade</text>
+    <text x="68" y="530" font-size="16" fill="#a5c3d8">nftables backend uses a different chain model</text>
+    <text x="708" y="470" font-size="22" font-weight="710" fill="#effbf5">K3s networking</text>
+    <text x="708" y="503" font-size="17" fill="#c2e1d3">kube-proxy: Services; Flannel: Pod routing</text>
+    <text x="708" y="530" font-size="16" fill="#a9cfbf">CNI / network policy: NAT and filtering as configured</text>
+    <text x="46" y="602" font-size="15" font-weight="720" letter-spacing="1.4" fill="#e0c39a">SEPARATE STARTUP RECORD · OBSERVED VS UNKNOWN</text>
+    <rect x="46" y="618" width="612" height="140" rx="14" fill="#38302f" stroke="#c59f79" stroke-width="1.5"/>
+    <rect x="686" y="618" width="628" height="140" rx="14" fill="#1c3936" stroke="#79bba3" stroke-width="1.5"/>
+    <text x="68" y="655" font-size="20" font-weight="710" fill="#f9ebd9">Observed: iptables-restore lock error</text>
+    <text x="68" y="687" font-size="17" fill="#e2cdb7">K3s bootstrap attempt could not acquire lock</text>
+    <text x="68" y="719" font-size="16" fill="#cab8a5">Lock holder not identified</text>
+    <text x="708" y="655" font-size="20" font-weight="710" fill="#e8fbf1">Later: bootstrap done</text>
+    <text x="708" y="687" font-size="17" fill="#c2e4d3">Rules were regenerated on a later attempt</text>
+    <text x="708" y="719" font-size="16" fill="#acccbd">Not proof Docker caused the lock or DNS failure</text>
+    <path d="M46 782H1314" stroke="#35556a" stroke-width="1.2"/>
+    <text x="46" y="810" font-size="16" fill="#adc5d5">Do not infer a packet drop from a lock error; do not flush chains or remove lock files as a generic fix.</text>
+    <text x="1314" y="834" font-size="13" fill="#7998aa" text-anchor="end">Conceptual comparison · no actual topology, policies or addresses</text>
+  </g>
+</svg>

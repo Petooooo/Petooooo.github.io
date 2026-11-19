@@ -2,7 +2,7 @@
 title: "K3s Networking: Pod IP Routing and ClusterIP Services"
 description: "An internal DNS reachability investigation separating Flannel Pod routing, kube-proxy Service translation, DNS responses, host filtering and unverified conntrack hypotheses."
 date: "2026-11-17"
-updated: "2026-11-19"
+updated: "2026-11-20"
 draft: false
 reviewed: true
 reviewStatus: "reviewed"
@@ -80,19 +80,55 @@ Those are read-only inspection examples, not commands copied from a successful i
 
 In the original notes, I had the failed operations and host-state inspection but did not capture that complete side-by-side experiment. A failed Ping and a missing Service-CIDR route did not fill the gap.
 
-## Where iptables and conntrack entered the investigation
+## iptables rules had several possible owners
 
-Once I suspected the Service path, I considered three different points at which a request could fail.
+The Service NAT rules I saw were not the only rules a packet might encounter. Docker had also been used on hosts in the K3s environment, with K3s running its containerd-based workloads. Both runtimes could configure parts of the same host networking stack, even though they did not manage each other's containers.
 
-**Service selection and DNAT.** A node may have `KUBE-SVC-*`-style rules in an iptables-based configuration, but seeing them in a listing is not evidence that the failing packet matched them. I needed to identify the active kube-proxy mode and capture the counters or packet observations associated with the specific request.
+I needed to separate **what a packet traversed** from **who installed the rules**. For forwarded traffic, a simplified iptables-based path includes destination translation at `PREROUTING`, routing and filtering around `FORWARD`, and possible source translation at `POSTROUTING`. Host-generated traffic can instead enter through `OUTPUT`; not every request traverses all three forwarded-packet hooks. The exact rules and their evaluation order depend on the active proxy, firewall backend and chain configuration.
 
-**Host filtering and forwarding.** A destination can be rewritten successfully and still encounter a drop in a filter, network-policy or forwarding stage. For a reply, source/destination state and the reverse path matter as well. Docker and K3s can both introduce host networking rules, making their ownership worth inspecting. I did **not** retain evidence that a Docker chain change caused this outage.
+Docker's iptables backend may install `DOCKER-USER`, other Docker-specific chains, masquerading and published-port rules. Depending on its configuration, Docker can also set the default `FORWARD` policy to `DROP`. K3s networking has separate writers: kube-proxy for Service handling in the applicable mode, Flannel/CNI for Pod forwarding or masquerading, and the network-policy controller for workload filtering. The presence of rules from these owners was a reason to inspect their interactions—not evidence that Docker had damaged Kubernetes rules.
 
-**Connection tracking.** An exhausted or invalid `conntrack` state is one possible explanation for intermittent packets failing, especially when NAT is involved. But I had no measured table occupancy, drop counter, or time-correlated trace establishing exhaustion here. Calling it the cause would have exceeded the evidence.
+<figure className="project-concept-figure">
+  <a href="/figures/journals/netfilter-host-runtime-ownership.svg" target="_blank" rel="noopener noreferrer" aria-label="Open diagram of host netfilter hooks, rule ownership and the separate xtables lock investigation">
+    <img src="/figures/journals/netfilter-host-runtime-ownership.svg" alt="Conceptual forwarded-packet stages PREROUTING, FORWARD and POSTROUTING, with independent Docker, Kubernetes Service and CNI or network-policy rule owners. A separate panel records an observed K3s iptables-restore lock failure and a subsequent bootstrap-done checkpoint, without attributing the lock to Docker." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Possible host rule ownership in an iptables-based datapath. The diagram does not reproduce the live ruleset or establish which component held the xtables lock.</figcaption>
+</figure>
 
-The iptables and nftables tools also need care. An operator can look at a legacy or compatibility rule view that does not match the effective Service proxy implementation. This is a reason to check the actual mode and rule owner; it is **not** proof that a legacy/nftables mismatch occurred.
+The rules themselves also change meaning across backends. In Docker's **iptables** backend, `DOCKER-USER` is an early user-policy point in the forwarding chain. Docker's **nftables** backend does not create the same `DOCKER-USER` chain; nftables base chains and priorities matter instead. I did not record enough version-specific host output to say an iptables/nftables frontend mismatch caused this incident.
 
-Deleting firewall chains or replacing the CNI before tracing a packet could both disrupt unrelated traffic and erase the state that would have helped explain the failure. The records do not show a controlled ruleset change followed by repeatable success.
+For the DNS failure, the inspection I actually had showed Service NAT entries, not the complete effective ordering of translation, policy filters and return-state handling. A `KUBE-SVC-*`-style entry being present would not show whether the affected packet matched it. Nor did I have a measured `conntrack` table limit, an exhaustion counter or a packet trace proving a connection-tracking failure.
+
+## A separate K3s bootstrap error involved the xtables lock
+
+Another network-related operational record offered firmer evidence, but at a **different point in the lifecycle**. During K3s startup, the log contained an iptables bootstrap failure:
+
+```text
+Failed to bootstrap IPTables:
+failed to apply partial iptables-restore
+```
+
+The accompanying failure indicated that `iptables-restore` could not acquire the xtables lock while another process held it. This was a problem **applying rules**, not proof that an existing Pod packet had been dropped by a Docker chain.
+
+During troubleshooting, `/run/xtables.lock` was removed and K3s was restarted. The lock file appeared again. The first restore attempts still failed, while later logs showed rules being regenerated and `bootstrap done`. **What I could verify was the later K3s bootstrap checkpoint; I could not attribute that result to removing the file, or identify the process that originally held the lock.**
+
+The lock file's mere existence is normal: `iptables` uses it to coordinate exclusive access. Removing its pathname is not a general repair procedure and does not establish that the underlying lock holder has stopped. The `iptables-restore` utility supports waiting for the exclusive lock with `-w`, but I did not verify that changing K3s's invocation to use this option was an implemented remediation.
+
+This incident is useful precisely because it separates two problems: **rule-programming contention at startup** and **packet forwarding after rules exist**. The first was observed in a log and followed by a later successful bootstrap. No retained trace shows that it was the cause of the earlier Pod-to-ClusterIP DNS symptom.
+
+## What I would inspect before changing a rule
+
+For a repeat failure, I would record the effective firewall backend and the relevant chain policies on the affected host at the same time as a real test request. Read-only inspection can start with commands such as:
+
+```bash
+sudo iptables -S FORWARD
+sudo iptables -t nat -S
+sudo nft list ruleset
+```
+
+These are examples of observations to collect in an authorized maintenance context, **not outputs from the original failure**. Actual rules can disclose internal networks and must not be pasted into the public case study. I would also correlate the packet's incoming interface, the Service's selected Endpoint, policy counters, `conntrack` state and the return path. A rule with a matching name may not be on the packet's active path.
+
+I would not blindly flush `iptables` chains, change the host's default forwarding policy, disable Docker's rule management or swap CNIs as a diagnostic shortcut. Those actions can cut off unrelated services and destroy the very state needed for attribution. The retained record does **not** establish a Docker-caused `FORWARD DROP`, an nftables mismatch, conntrack exhaustion or a permanent firewall fix.
 
 ## The comparison I would use next
 
@@ -128,10 +164,10 @@ This incident is also distinct from [the ServiceLB host-port conflict](/projects
 
 ## Current evidence and remaining checks
 
-**Observed:** some Pods had DNS/Service-IP access failures; a Flannel interface was UP; Pod-network routes existed; and Service-related NAT entries were visible. Another recorded request to a Pod-range destination timed out. Those observations occurred in troubleshooting, but they are not a full packet timeline from which I can reconstruct a single causal chain.
+**Observed:** some Pods had DNS/Service-IP access failures; a Flannel interface was UP; Pod-network routes existed; and Service-related NAT entries were visible. Another recorded request to a Pod-range destination timed out. In a separate startup episode, iptables bootstrap failed on the xtables lock and a later attempt logged `bootstrap done`. Those observations are not one synchronized packet timeline or a proven common root cause.
 
 **Not verified:** a specific FORWARD rule dropping packets, conntrack exhaustion, an iptables/nftables mismatch, a corrupt Service backend selection, a Flannel overlay defect, or a permanent fix delivered by changing the CNI.
 
 If the incident recurred, I would first capture a real query from an affected Pod, compare it with a direct endpoint request, and then examine the effective proxy and host filtering path on the source node. I would repeat the same request from an unaffected location and keep the return traffic in the trace. Until those observations exist, the cause remains open.
 
-**Related records and documentation:** [CoreDNS and MetalLB VIP reachability](/projects/rokaf-dns-vip-open-investigations/) · [K3s networking and TLS](/projects/rokaf-networking-and-tls/) · [Kubernetes — Virtual IPs and Service Proxies](https://kubernetes.io/docs/reference/networking/virtual-ips/) · [Kubernetes — Debug Services](https://kubernetes.io/docs/tasks/debug/debug-application/debug-service/) · [K3s — Basic Network Options](https://docs.k3s.io/networking/basic-network-options/) · [Docker — Firewall rules](https://docs.docker.com/engine/network/firewall-iptables/).
+**Related records and documentation:** [CoreDNS and MetalLB VIP reachability](/projects/rokaf-dns-vip-open-investigations/) · [K3s networking and TLS](/projects/rokaf-networking-and-tls/) · [Kubernetes — Virtual IPs and Service Proxies](https://kubernetes.io/docs/reference/networking/virtual-ips/) · [Kubernetes — Debug Services](https://kubernetes.io/docs/tasks/debug/debug-application/debug-service/) · [K3s — Basic Network Options](https://docs.k3s.io/networking/basic-network-options/) · [Docker — Firewall rules](https://docs.docker.com/engine/network/firewall-iptables/) · [Docker — nftables backend](https://docs.docker.com/engine/network/firewall-nftables/) · [iptables — Lock file](https://man7.org/linux/man-pages/man8/iptables.8.html) · [iptables-restore — Wait for lock](https://man7.org/linux/man-pages/man8/iptables-restore.8.html).

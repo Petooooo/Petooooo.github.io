@@ -56,19 +56,50 @@ kubectl -n kube-system get endpointslices \
 
 이 비교가 없었던 탓에 DNS 이름 해석 실패를 CoreDNS 애플리케이션 장애로 단정할 수도, kube-proxy의 Service 변환 문제로 확정할 수도 없었다.
 
-## iptables와 conntrack을 의심했던 이유
+## iptables 규칙을 누가 관리하는가
 
-Service NAT 규칙을 살피면서 몇 가지 가능한 장애 지점을 검토했다. 다만 모두 당시의 원인으로 확인된 것은 아니다.
+이 환경에서는 Docker가 사용되던 호스트에 K3s의 containerd 워크로드도 운영됐다. 서로 다른 런타임이지만, 둘 다 같은 호스트의 네트워크 규칙에 영향을 줄 수 있었다. 그때 확인한 Service NAT 규칙만으로는 어느 규칙 작성자가 실제 요청에 영향을 줬는지 알 수 없었다.
 
-첫 번째는 Service 변환이다. iptables 모드에서는 `KUBE-SVC-*` 계열 규칙이 Endpoint 선택에 관여할 수 있다. 하지만 규칙을 출력해서 봤다는 사실은 그 요청이 해당 규칙에 매칭됐다는 의미가 아니다. 실제 프록시 모드와 해당 시각의 패킷·카운터를 확인해야 한다.
+패킷의 경로와 규칙의 소유권을 분리해 볼 필요가 있었다. iptables를 사용하는 환경에서 호스트를 통과하는 패킷은 `PREROUTING`에서 목적지가 변환될 수 있고, 라우팅 결정 뒤 `FORWARD`에서 필터링을 거치며 `POSTROUTING`에서 출발지가 변환될 수도 있다. 호스트가 직접 생성한 트래픽은 `OUTPUT`을 사용할 수 있으므로 모든 요청이 똑같은 경로를 지나지는 않는다.
 
-두 번째는 호스트의 필터링과 포워딩이었다. 목적지가 DNAT된 뒤에도 FORWARD 단계나 Network Policy에서 차단될 수 있고, 요청은 통과했지만 반환 패킷이 실패할 수도 있다. Docker와 K3s가 같은 호스트에서 각각 규칙을 설치하는 환경이라면 실제 적용 순서와 어느 구성 요소가 규칙을 만들었는지도 확인해야 한다.
+Docker의 iptables Backend는 `DOCKER-USER` 등 별도 체인과 Masquerade·포트 게시 규칙을 사용한다. 설정에 따라 `FORWARD` 기본 정책을 `DROP`으로 바꾸기도 한다. K3s에서는 kube-proxy가 Service 변환을, Flannel·CNI가 Pod 전달과 필요한 Masquerade를, Network Policy 컨트롤러가 정책 필터링을 담당할 수 있다. 다만 **당시에 Docker가 Kubernetes의 규칙을 실제로 변경하거나 차단했다고 입증한 자료는 없다.** 여러 구성 요소가 함께 규칙을 관리한다는 점 때문에 조사 범위를 넓힌 것이다.
 
-세 번째는 `conntrack`이다. NAT는 연결 상태의 영향을 받을 수 있고, 테이블이 꽉 차거나 상태가 맞지 않으면 일부 통신에서 문제가 나타날 수 있다. 그러나 **당시에 conntrack 용량 고갈을 보여주는 카운터나 동일 시각 로그를 확보하지 못했다.** 가능성을 확인했던 것이지, 고갈로 인한 장애라고 확정한 것은 아니다.
+{{figure /figures/journals/netfilter-host-runtime-ownership.svg | 호스트를 통과하는 패킷의 Netfilter Hook과 Docker·K3s 네트워크 구성 요소의 규칙 작성 범위를 비교했다. 별도의 K3s 기동 사건에서 확인된 xtables 잠금 경합과 이후 Bootstrap 완료도 따로 표시했다. 실제 규칙이나 내부 배치도는 아니다.}}
 
-iptables와 nftables의 관계도 비슷했다. 두 명령이 서로 다른 규칙 표시를 제공할 수 있으므로 어떤 프론트엔드와 프록시 모드가 실제로 사용되는지 알아야 한다. 그렇다고 기존 로그에 `legacy/nft` 충돌이 확인됐던 것은 아니다.
+특히 `DOCKER-USER`는 Docker가 iptables Backend를 사용할 때의 체인이다. Docker의 nftables Backend는 같은 체인을 새로 만들지 않고 자체 Base Chain과 Priority를 사용한다. 두 환경에서 규칙을 확인하는 방법이 같다고 가정할 수 없다. 그렇다고 기존 로그가 실제로 iptables/nftables의 불일치를 증명하는 것은 아니다.
 
-실제 패킷이 어느 규칙을 통과하는지 모른 채 전체 iptables 체인을 비우거나 CNI를 바꾸는 방식은 피해야 했다. 다른 서비스의 통신까지 끊을 수 있고, 원인을 조사할 상태 자체를 지워버릴 수 있기 때문이다. 이번 사건에서는 특정 규칙 수정 이후 문제가 재현 가능하게 복구됐다는 자료가 없다.
+Service의 `KUBE-SVC-*` 규칙이 존재해도 패킷이 거기를 통과했다고 볼 수 없다. `conntrack` 고갈 역시 생각해 볼 수 있는 원인이었지만, 당시 사용량·한도·Drop 카운터를 같은 시각에 측정하지 못했다. 이 문제들의 실제 원인은 아직 확인되지 않았다.
+
+## 별도의 K3s 기동 과정에서 xtables 잠금 오류가 있었다
+
+다른 시점의 K3s 기동 과정에는 조금 더 구체적인 기록이 남았다.
+
+```text
+Failed to bootstrap IPTables:
+failed to apply partial iptables-restore
+```
+
+함께 나타난 메시지는 다른 프로세스가 xtables Lock을 점유해 `iptables-restore`가 잠금을 얻지 못했다는 내용이었다. 이는 **규칙을 적용하는 작업이 실패한 것**이지, 앞에서 조사한 DNS 요청이 특정 Docker 규칙에 의해 Drop됐다는 증거는 아니다.
+
+당시에는 `/run/xtables.lock` 파일을 삭제하고 K3s를 재시작하는 시도도 있었다. 파일은 다시 나타났고 첫 규칙 복원은 실패했지만, 이후 규칙이 재생성되고 `bootstrap done` 로그가 확인됐다. 분명히 확인한 결과는 **나중에 Bootstrap 완료가 관측됐다는 사실**이다. 파일을 삭제한 조치 때문에 복구됐는지, 어느 프로세스가 처음 잠금을 잡았는지는 확인되지 않았다.
+
+iptables는 정상 동작 중에도 `/run/xtables.lock`을 사용해 규칙 변경을 조정한다. 그러므로 잠금 파일이 있다는 이유만으로 삭제하는 것은 올바른 복구 방법이 아니다. 잠금 파일 경로를 없앤다고 그 잠금을 잡고 있던 프로세스까지 종료되지도 않는다. `iptables-restore`에는 잠금 획득을 기다리는 `-w` 옵션이 있지만, K3s에 실제 적용하고 검증한 설정 변경은 아니다.
+
+이 사건은 **규칙을 작성하는 과정의 잠금 경합**과 **작성된 규칙을 통과하는 패킷 전달 문제**를 나눠 기록할 수 있는 사례였다. 두 증상을 하나의 원인으로 묶을 만한 동일 시각 패킷 기록은 확보하지 못했다.
+
+## 규칙을 바꾸기 전에 살펴볼 상태
+
+같은 통신 장애가 다시 발생한다면 먼저 실제 Firewall Backend와 기본 정책, NAT와 필터 체인을 읽기 전용으로 확인할 것이다.
+
+```bash
+sudo iptables -S FORWARD
+sudo iptables -t nat -S
+sudo nft list ruleset
+```
+
+이 명령은 검사의 예시일 뿐, 원래 장애에서 얻은 출력이 아니다. 실제 규칙에는 내부 주소와 서비스 구조가 포함될 수 있으므로 그대로 공개하지 않는다. 또 동일한 요청을 보내면서 Interface, Endpoint, 규칙 카운터, conntrack과 반환 패킷을 함께 확인해야 어느 단계에서 실패했는지 좁힐 수 있다.
+
+실제 패킷이 어느 규칙을 통과하는지 모른 채 전체 iptables 체인을 비우거나 기본 `FORWARD` 정책을 바꾸고, Docker 규칙 관리를 끄거나 CNI를 교체하는 일은 피하려 한다. 다른 서비스까지 중단될 수 있기 때문이다. **이번 기록에는 Docker가 Drop을 만들었다거나 nftables 충돌·conntrack 고갈을 해결했다는 검증 결과가 없다.**
 
 ## 다음 재현에서는 어떤 순서로 비교할까
 
@@ -99,7 +130,7 @@ iptables와 nftables의 관계도 비슷했다. 두 명령이 서로 다른 규�
 
 ## 현재까지 확인한 범위
 
-기록으로 확인할 수 있는 사실은 일부 Pod의 DNS·Service IP 접근 실패, Flannel 인터페이스와 Pod Route의 존재, Service NAT 규칙의 존재다. 별도로 Pod 주소 대역 목적지에 대한 Timeout도 있었다. 이것들을 하나의 인과관계로 연결할 패킷 추적 기록은 남아 있지 않다.
+기록으로 확인할 수 있는 사실은 일부 Pod의 DNS·Service IP 접근 실패, Flannel 인터페이스와 Pod Route의 존재, Service NAT 규칙의 존재다. 별도로 Pod 주소 대역 목적지에 대한 Timeout이 있었고, 다른 기동 과정에서는 xtables 잠금 오류 이후 `bootstrap done`을 확인했다. 이것들을 하나의 원인으로 연결할 패킷 추적 기록은 남아 있지 않다.
 
 따라서 **실제 FORWARD 규칙의 Drop, conntrack 고갈, iptables/nftables 충돌, Flannel Overlay 결함이나 Cilium 전환을 통한 복구** 중 어느 것도 확인된 최종 원인·해결책이라고 기록하지 않는다.
 
@@ -113,3 +144,6 @@ iptables와 nftables의 관계도 비슷했다. 두 명령이 서로 다른 규�
 - [Kubernetes — Debug Services](https://kubernetes.io/docs/tasks/debug/debug-application/debug-service/)
 - [K3s — Basic Network Options](https://docs.k3s.io/networking/basic-network-options/)
 - [Docker — Firewall rules](https://docs.docker.com/engine/network/firewall-iptables/)
+- [Docker — nftables Backend](https://docs.docker.com/engine/network/firewall-nftables/)
+- [iptables — Lock file](https://man7.org/linux/man-pages/man8/iptables.8.html)
+- [iptables-restore — 잠금 대기 옵션](https://man7.org/linux/man-pages/man8/iptables-restore.8.html)

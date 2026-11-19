@@ -35,7 +35,7 @@ The independent K3s platform article is the **overview/index**. Its topic pages 
 | --- | --- | --- |
 | Langfuse v4 data migration | `rokaf-langfuse-v4-migration-field-notes` | Step 2 timeout differed from stored progress; Steps 1–5 and historical/new data checks completed November 17, 2026 |
 | DNS and VIP reachability | `rokaf-dns-vip-open-investigations` | Intermittent symptom; multiple unconfirmed hypotheses |
-| Pod IP vs ClusterIP datapath | `rokaf-k3s-cni-service-datapath` | Partial DNS/Service failures with Flannel/routes/NAT present; no verified packet-level root cause or CNI remediation |
+| Pod IP vs ClusterIP datapath | `rokaf-k3s-cni-service-datapath` | Partial DNS/Service failures with Flannel/routes/NAT present; no verified packet-level root cause or CNI remediation. A25 host netfilter rule ownership and a separate observed xtables bootstrap lock event were integrated here, rather than inventing a Docker-caused resolved incident |
 | GPU Operator / NFD visibility | `rokaf-gpu-discovery-open-investigation` | Missing/unexpected labels; full root cause not established |
 | etcd and host disk incidents | `rokaf-control-plane-incident-log` | Restored service and remaining root-cause questions separated |
 | Linux memory pressure and earlyoom | `rokaf-memory-pressure-and-service-recovery` | March near-full memory/reboot, service exit 16 and missing stop path, later victim log without attribution of the host-wide spike; no complete recovery or prevention claim |

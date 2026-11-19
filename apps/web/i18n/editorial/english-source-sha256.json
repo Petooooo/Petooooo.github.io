@@ -24,5 +24,5 @@
   "tflite-micro-lifecycle-memory-planning": "3da69d122069dde15e01acadb7431cd55f7a496b1a96be7b257ceecda619afc4",
   "rokaf-memory-pressure-and-service-recovery": "e136714468f38bd73fd658d5761257530e981f437ecf52d9dce2b09d87bf96f8",
   "rokaf-storage-placement-and-failure-domains": "f59e15f3204afc9d5649190186d2742ad7e3a2d99761dcd5bfa20a0e58c02a47",
-  "rokaf-k3s-cni-service-datapath": "d550d936ea39be0927b7423ea238c20db83de5c2e0125a55aceac3cbf72adef6"
+  "rokaf-k3s-cni-service-datapath": "489b94f6681fd7e7850867f6caa11d70e04716a7e188f94f9edd88e97519bec5"
 }
