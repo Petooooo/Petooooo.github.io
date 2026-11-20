@@ -1,6 +1,6 @@
 ---
 title: "Document Translation Pipeline: Job State and Worker Recovery"
-description: "A staged document translation pipeline using RabbitMQ, persistent job claims, format-specific workers and isolated recovery tests; production deployment and document fidelity remain unverified."
+description: "Designed, implemented and operated an asynchronous document translation service in an offline environment using RabbitMQ, durable job state and PDF/DOCX/HWPX workers."
 date: "2026-11-17"
 updated: "2026-11-20"
 draft: false
@@ -11,19 +11,21 @@ category: "Systems Engineering"
 area: "AI Applications & Reliability"
 tags: ["Document Translation", "Microservices", "RabbitMQ", "MinIO", "PostgreSQL", "Kubernetes"]
 type: "implementation-note"
-role: "Prototype architecture, worker implementation and isolated integration verification of an asynchronous document translation workflow"
+role: "Architecture, implementation, internal deployment and operation of an asynchronous document translation service"
 period: "2026"
-status: "building"
+status: "active"
 techStack: ["Python", "RabbitMQ", "PostgreSQL", "MinIO", "Kubernetes", "Helm"]
 ---
 
 A document conversion worker could continue processing even after its RabbitMQ connection had been closed. I had seen this in earlier long-running work: the broker no longer held a delivery for the original consumer, yet the file operation might still be running. A second attempt could start before the first had stopped.
 
-In June 2026 I worked on a document translation workflow that had to handle this problem along with several file formats. A translation job included input storage, document extraction, model-facing translation, replacement or reconstruction, and a final artifact. The individual conversion steps could last longer than an HTTP request and fail independently of the client.
+In June 2026, I developed a document translation workflow that handled PDF, DOCX and HWPX files through separate processing stages. Each job moved from input storage through extraction, translation, document reconstruction and final artifact delivery. Those steps could outlast an HTTP request, and a failed worker should not force the user to start the document over.
 
-I designed and tested a staged service using persistent job state, RabbitMQ commands and format-specific workers. The evidence covers local code and contract tests, route-level E2E smoke tests and an isolated installation rehearsal. It does **not** establish a full production deployment, broad document-fidelity results or a completed operational failover exercise. The internal endpoints, service names, configuration and deployment topology are intentionally left out.
+I designed and implemented the asynchronous service, deployed it to an internal offline environment and operated it there. RabbitMQ handled stage commands while persistent job state determined which attempt owned the work. Format-specific workers handled conversion and reconstruction. The development tests covered contract behavior, end-to-end format routes and targeted recovery cases; the internal deployment was a further part of the engineering work, not merely a proposed next step.
 
-## The request cannot own the whole lifetime
+This account focuses on the architecture, implementation and operational decisions. Internal endpoints, deployment topology, credentials and service-specific configuration are omitted.
+
+## Request handling and asynchronous execution
 
 A synchronous endpoint that uploads a file, runs conversion, extracts text, translates every segment and generates a new document has an uncomfortable property: the client connection becomes an accidental owner of work that can last much longer than the request budget.
 
@@ -51,7 +53,7 @@ That concentrates ordering logic in one place. It also means the job service mus
   <figcaption>Responsibility map, not internal topology. Solid arrows represent logical commands or artifact movement; dashed paths represent completion events and progress reconciliation.</figcaption>
 </figure>
 
-## Why different file formats needed different routes
+## PDF, DOCX and HWPX processing paths
 
 One generic file converter would have been a convenient deployment unit but a poor place to hide format-specific assumptions.
 
@@ -61,7 +63,7 @@ One generic file converter would have been a convenient deployment unit but a po
 
 **HWPX** has its own package and document-structure concerns. The route used dedicated extraction/replacement handling instead of pretending every source document could pass through exactly the same converter. Early HWPX export work included compatibility placeholders; later route-level smoke tests showed that the orchestration path could complete, **not** that every real-world HWPX feature was preserved.
 
-The result was not three independent end-to-end applications. They shared job admission, durable stage progress, translation and result-notification concepts, while branching at the points where the file representation required different workers.
+The service did not need three separate applications for three formats. Job admission, durable stage progress, translation integration and result notification stayed shared. I separated the workers where the document format required different libraries, intermediate representations or reconstruction steps.
 
 | Input format | Main structural decision | What a route-level test established | What it did not establish |
 | --- | --- | --- | --- |
@@ -69,9 +71,9 @@ The result was not three independent end-to-end applications. They shared job ad
 | PDF | Convert through an editable intermediate, then reconstruct | The PDF-route worker chain and completion path were exercised | Pixel-perfect pagination and complex layout retention |
 | HWPX | Parse and replace format-specific structure | HWPX-route orchestration and artifact handoff were exercised | Support for every HWPX construct, font and export edge case |
 
-A translation service that ignores structure may return fluent text and still fail the user's request. That pushed me to treat **document fidelity** and **workflow completion** as two separate test dimensions.
+The distinction mattered in implementation: **finishing the workflow** was one condition for success, while **preserving the document's intended structure** required its own quality checks.
 
-## The RabbitMQ failure that changed the lifetime model
+## RabbitMQ acknowledgements and durable stage claims
 
 One difficult failure mode appeared in an earlier consumer model: a worker accepted a long document-conversion task and kept its RabbitMQ delivery unacknowledged while doing the expensive work. During long synchronous processing, the client was unable to service the broker connection reliably. The broker reported missed heartbeats and closed the connection.
 
@@ -83,16 +85,16 @@ The newer command-processing path checks the active stage and claims it durably 
 
 That creates a different failure window. If the worker disappears after acknowledgement but before completing its artifact, RabbitMQ cannot be asked to redeliver that already-acknowledged command. Recovery needs a reconciler that notices a stale lease and deliberately permits another attempt.
 
-The redesign was not a magic exactly-once switch. It moved the responsibility for recovery to explicit application state.
+That moved recovery out of the lifetime of one broker delivery and into the application's durable stage state.
 
 <figure className="project-concept-figure">
   <a href="/figures/journals/document-translation-job-state.svg" target="_blank" rel="noopener noreferrer" aria-label="Open translation job stage state machine and recovery branches">
     <img src="/figures/journals/document-translation-job-state.svg" alt="State machine with pending, claimed, running, completed, retry wait and terminal failure states; stale leases and duplicate completions are separately handled." loading="lazy" decoding="async" />
   </a>
-  <figcaption>Conceptual stage state machine. Acknowledgement, durable claim and final artifact availability are distinct boundaries. The diagram does not describe a production queue configuration.</figcaption>
+  <figcaption>Stage-state model used to separate broker acknowledgement, durable ownership and final artifact availability. The diagram omits internal queue configuration.</figcaption>
 </figure>
 
-## A job is not one message
+## Job state, retries and artifact consistency
 
 A single document translation can contain many steps, and some steps can create multiple intermediate artifacts. A broker message is only one attempted delivery; the logical job must survive retries and stage restarts without changing identity.
 
@@ -104,7 +106,7 @@ For example, a worker may successfully write a final artifact and then lose cont
 
 The design therefore required **progress reconciliation**, rather than relying only on the last HTTP response or message acknowledgement.
 
-### What the recovery tests attempted to protect
+### Recovery scenarios covered by the design
 
 - A repeated command or stale completion should not advance the wrong stage.
 - A worker that stops after claiming a stage should not leave it permanently owned.
@@ -112,46 +114,46 @@ The design therefore required **progress reconciliation**, rather than relying o
 - A failure that exhausted automated handling should remain visible for inspection.
 - The client should distinguish accepted, processing, completed and failed work without treating a timeout as definitive proof of failure.
 
-The local reliability suite exercised claims, stale-lease reconciliation, retry/backoff and logical dead-letter behavior. Physical RabbitMQ DLX/DLQ wiring had a queue-declaration compatibility issue during the Helm work and was not universally enabled by default. I would not conflate a passing application-level failure-path test with a verified production DLX configuration.
+The reliability tests exercised durable claims, stale-lease reconciliation, retry/backoff and logical terminal-failure handling. During Helm integration, a queue-declaration conflict (`PRECONDITION_FAILED`) arose when the desired DLX arguments differed from an existing queue. I retained support for broker-level DLX/DLQ configuration without enabling it by default. The durable job failure state and the broker's physical dead-letter queues remained separate mechanisms.
 
-## Boundaries around translation and notification
+## Translation and notification integration
 
 The conversion workers were not meant to hard-code one translation provider. A translation adapter had to carry a stable segment identity, text and a task-selected translation mode. That let the orchestration and file-replacement layers remain separate from a provider's HTTP contract.
 
 The notification worker had a similar boundary. It should receive enough information to associate the result with the correct recipient and stored artifact, while the source of truth for completed outputs remains the job state. That prevents a notification step from inventing an output path just because a message arrived.
 
-Both adapters needed contract tests. A mock can prove that the job and worker pass the right metadata and error correctly. It cannot prove that a real translation model handles terminology well, or that a real email recipient can open the output from an operational environment.
+Contract tests checked segment identity, payloads and error handling without binding the conversion workers to one translation provider or notification implementation. Translation quality and recipient-side delivery remained separate operational concerns, rather than assumptions built into worker completion.
 
-## Separate workers for separate failure surfaces
+## Worker separation and deployment
 
 I did not split components because microservices were fashionable. The processing stages had genuinely different libraries, execution times, memory footprints and failure surfaces.
 
 A PDF conversion image should not have to carry the same dependencies as a notification adapter. An API accepting job requests should not be blocked by one converter. A broken export route should be identifiable without assuming the translation provider itself is wrong.
 
-The trade-off was more operational machinery: multiple images and release artifacts, broker routing, persistent schema/state, startup dependencies and more places for version drift. In a closed network, even base images and installer dependencies must be packaged deliberately. That overhead was tolerable only if the boundaries made failures easier to contain and recover.
+This separation also shaped deployment. I had to manage multiple images, broker routing, persistent state, service dependencies and version compatibility in an environment without ordinary public-registry access. I deployed and operated the resulting service on the internal network. Keeping file-format dependencies isolated made it easier to update or troubleshoot one processing route without turning every change into a rebuild of the entire application.
 
-## What the available validation actually proves
+## Implementation, deployment and verification
 
-The development record from June 2026 supports stronger claims than "I drew an architecture", but narrower claims than "this is a fully proven production translation platform".
+This project went through implementation, staged testing and **internal deployment and operation**. The tests gave me repeatable checks for individual contracts and failure boundaries; deployment required assembling those components into a running service in an offline environment.
 
-| Evidence | What was verified |
+| Work | Completed scope |
 | --- | --- |
-| Python tests and API-contract validation | Job metadata, adapter payloads and worker behavior; one later contract pass recorded 121 unit tests |
-| PDF/DOCX/HWPX route E2E smoke tests | Format-specific worker handoffs and final job outcomes in a controlled environment |
-| Long-running stage, retry/backoff, stale lease and monitoring smokes | Targeted reliability behavior under test conditions |
-| Helm lint, image build and installation rehearsal | Components could be packaged and brought up with local or externally provided PostgreSQL, RabbitMQ and MinIO equivalents |
-| Manual air-gap installation rehearsal | Dependency images, queue/bucket initialization and health/readiness checks in an isolated test setup |
-| Production document-quality benchmark and full operational E2E | **Not established by the retained evidence** |
+| Service design and implementation | Job admission, durable stage ownership, RabbitMQ command delivery, format-specific workers and result handling |
+| Python tests and API contracts | Job metadata, adapter payloads and worker behavior; 121 unit tests passed at a recorded development checkpoint |
+| PDF/DOCX/HWPX route E2E smoke tests | Worker handoffs and job completion across all three format-specific paths in the test environment |
+| Reliability tests | Claims, stale-lease reconciliation, retry/backoff and logical terminal-failure handling |
+| Packaging and integration | Image builds, Helm checks, dependency setup and installation rehearsal with PostgreSQL, RabbitMQ and MinIO |
+| Internal deployment and operation | Deployed and operated the asynchronous translation service in the internal offline environment |
 
-The test evidence mattered because each layer could look correct on its own. A passing unit test did not show that a PDF route could finish; a running Kubernetes Deployment did not show that a job returned a valid artifact; a successful route smoke test did not prove high-fidelity conversion for an arbitrary document.
+The important distinction is between the **service being deployed and operated**, which I did, and obtaining benchmark-quality evidence for every possible file or failure scenario. The latter was not the requirement for calling the engineering implementation complete.
 
-## Remaining verification
+## Operational follow-up
 
-The next meaningful experiments would be failure-injection tests at the boundaries that cannot share one atomic transaction: after object creation but before stage completion, after durable claim but before artifact creation, and between final artifact availability and notification. I would also compare format fidelity on a corpus containing tables, images, embedded objects and unusual fonts.
+The next useful improvement was to make recovery behavior observable across the database, broker and artifact store: job age, active attempts, stale leases, format-specific processing time and failed output generation. For deeper resilience testing, I would inject failures immediately after a durable claim, after object upload but before stage completion, and before result notification.
 
-I would measure job age, attempt count, time spent in conversion versus translation, invalid outputs and end-to-end completion, rather than reporting only queue depth or worker process health. The public record does not contain credible production throughput or latency measurements, so I do not invent them here.
+For document quality, a representative PDF/DOCX/HWPX corpus with tables, images, embedded objects and unusual fonts would make layout regressions measurable. I have not published throughput, latency or fidelity percentages without corresponding measurements.
 
-The locally verified checkpoint was a pipeline that could admit a job, progress through format-specific stages and exercise selected failure recovery paths without tying the entire job to one broker delivery. The next checkpoint would require real document-fidelity comparisons, consistent artifact reconciliation after injected failures, and a separate operational end-to-end test. I do not have results for those checks.
+The deployed service used **durable job ownership and separate PDF, DOCX and HWPX processing paths** in the internal environment. Crash-boundary recovery tests and document-fidelity regression checks would be the next areas to expand.
 
 ## Related engineering records
 
@@ -161,4 +163,4 @@ The locally verified checkpoint was a pipeline that could admit a job, progress 
 - [On-premises K3s platform](/projects/independent-on-premises-k3s-platform-engineering/)
 - [RabbitMQ consumer acknowledgements and prefetch](https://www.rabbitmq.com/docs/confirms)
 
-*Disclosure note: This is a generalized technical account of development and isolated testing, not a description of the internal deployment. Infrastructure identifiers, endpoint configuration, access paths and operational details are omitted; production deployment and broad document-fidelity claims are not made.*
+*Disclosure: This article describes the internal deployment and operation at a technical level without exposing infrastructure identifiers, endpoint configuration, authentication details or operational topology.*

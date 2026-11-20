@@ -1,6 +1,6 @@
 {
   "bit-shift-cnn-accelerator-zynq": "5afa94644077341049db4013a5cf8bb9eb8def1d85a0325659127faed9d0f014",
-  "independent-on-premises-k3s-platform-engineering": "6731952d5155cfa8530cf40050c4119c066559294fdfc6e67cdb2ec0a5fca3bb",
+  "independent-on-premises-k3s-platform-engineering": "955654f97701f84b1b4f144ae354d307c6728a80cd134b9d35b6391b4c879ff6",
   "rokaf-async-workers-and-idempotency": "b97ca1cf330a2bcc6107480e9326719f32aacc138c1010d544a713a1b1613d65",
   "rokaf-chat-attachments-object-storage": "1e882ca2caeeaecb25b86cfc051b4c59135ed6ff4f3c624fb86d096a569d67ce",
   "rokaf-clickhouse-replication-migration": "e12220dd0eae7537b7a582a3d806fbb88ac4924c6f94ff5ebb6d9c6375736a61",
@@ -25,5 +25,5 @@
   "rokaf-memory-pressure-and-service-recovery": "e136714468f38bd73fd658d5761257530e981f437ecf52d9dce2b09d87bf96f8",
   "rokaf-storage-placement-and-failure-domains": "f59e15f3204afc9d5649190186d2742ad7e3a2d99761dcd5bfa20a0e58c02a47",
   "rokaf-k3s-cni-service-datapath": "489b94f6681fd7e7850867f6caa11d70e04716a7e188f94f9edd88e97519bec5",
-  "document-translation-pipeline": "95a04e25bb831f924f3f0dae299c2553372887c3d6f127cc6236e73f202de4aa"
+  "document-translation-pipeline": "19ceed6a4eb7460a0036bdcf35e66d6bb9e47ff6e72e5eac9aef074217624f29"
 }
