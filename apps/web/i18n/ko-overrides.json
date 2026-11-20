@@ -848,5 +848,6 @@
   "Implemented a Verilog five-stage RISC CPU with three forwarding paths, load-use and branch stalls, synchronous register-file timing and RTL tests.": "Verilog 기반 5단계 RISC CPU를 구현하고, 세 가지 Forwarding과 Load-use·Branch Stall, 동기식 Register File 타이밍을 테스트했다.",
   "Pipeline datapath, control signals, data/control hazard handling and testbench implementation in a two-person project": "2인 프로젝트에서 파이프라인 데이터 경로·제어 신호·Hazard 처리와 Testbench 구현",
   "Forwarding": "Forwarding",
-  "RTL Simulation": "RTL 시뮬레이션"
+  "RTL Simulation": "RTL 시뮬레이션",
+  "How a conflict-aware TFLM planner used operator-level last-read constraints, output-first BFS ordering and C++ offset placement to reduce peak tensor arena usage in three evaluations.": "연산 중 입력의 마지막 Read 시점을 이용한 Conflict Data와 출력 우선 BFS, C++ Offset 배치로 TFLite Micro의 Peak Buffer 사용량을 줄인 구현 기록."
 }
