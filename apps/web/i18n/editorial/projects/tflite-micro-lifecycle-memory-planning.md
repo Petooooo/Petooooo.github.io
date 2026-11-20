@@ -249,3 +249,35 @@ Tiny U-Net에는 크기가 큰 버퍼와 Lifetime이 긴 버퍼가 더 많이 �
 ### 4. 세 실험의 Peak Memory 비교
 
 {{figure /figures/journals/tflm-result-peak-summary.svg | 원본 보고서에 기재된 Byte 수치를 기준으로 세 실험의 Before·After를 비교한 그래프다. 각 실험 안에서는 같은 축척을 사용했고, 원본 감소율은 별도로 표시했다.}}
+
+## 원본 배치 로그에서 다시 확인한 결과
+
+감소율만 보여주면 그 숫자가 어떤 과정을 거쳐 나왔는지 알기 어렵다. 직접 만든 버퍼 실험은 다행히 원본 보고서에 각 버퍼의 **크기, 활성 구간, 최종 Offset**이 모두 남아 있다. 그래서 이번에는 임의로 막대의 길이를 맞추지 않고, 실제로 기록된 주소와 활성 구간을 기준으로 메모리 배치를 다시 그렸다.
+
+Person Detect와 Tiny U-Net도 수동으로 작성했던 Conflict Data 배열을 원본에서 확인했다. 다만 두 모델의 모든 버퍼 Offset을 현재 완전한 기계 판독 데이터로 확보한 것은 아니다. 앞에서 보여준 모델별 결과 그림은 실제 Peak 수치와 배치 양상을 설명하는 재구성이고, 아래의 구성 버퍼 테스트처럼 개별 Offset까지 복원한 결과와는 구분했다.
+
+### 구성한 버퍼 실험 — 원본 그림 10~16
+
+{{figure /figures/journals/tflm-report-figure-10.svg | 원본 그림 10. 테스트에 사용한 여덟 개의 AddBuffer 호출을 Size와 First/Last Use까지 그대로 옮겼다. 임의로 새 버퍼를 만든 것이 아니다.}}
+
+{{figure /figures/journals/tflm-report-figure-11.svg | 원본 그림 11. 플래너 비교 이전에 출력한 초기 버퍼 목록이다. 여기에 적힌 Offset은 각 플래너가 최종으로 계산한 배치와 구분해야 한다.}}
+
+{{figure /figures/journals/tflm-report-figure-12.svg | 원본 그림 12. 기존 Greedy Planner의 정렬 순서와 실제 Offset이다. 7, 4, 6, 5번 버퍼를 먼저 배치했으며, 전체 Size의 합계가 아니라 가장 높은 끝 주소가 Peak를 결정한다.}}
+
+{{figure /figures/journals/tflm-report-figure-13.svg | 원본 그림 13의 배치 정보를 정확한 Size·Offset·Lifetime으로 다시 그렸다. 가로축은 실제 Byte 주소이고 세로축은 버퍼 활성 시점이다. 기존 방식의 Peak는 4,101 bytes다.}}
+
+{{figure /figures/journals/tflm-report-figure-14.svg | 원본 그림 14. 직접 구성한 테스트에서 사용한 Conflict Data는 (2,3,−256), (3,4,−256), (4,6,−256) 세 관계다.}}
+
+{{figure /figures/journals/tflm-report-figure-15.svg | 원본 그림 15. 개선 Planner가 결정한 배치 순서는 7, 5, 1, 0, 6, 4, 3, 2다. Non-Conflict Buffer를 먼저 처리하고, Conflict 관계를 갖는 버퍼를 역방향으로 따라간다.}}
+
+{{figure /figures/journals/tflm-report-figure-16.svg | 원본 그림 16의 실제 Offset으로 다시 그린 배치다. 3번 [2564,3585)과 4번 [2308,3333), 4번과 6번 [2052,3076)은 주소가 일부 겹친다. 2번과 3번은 굳이 중복 배치하지 않았다. Peak는 3,585 bytes다. 이 그림은 계획된 주소 공유를 보여주며, 실제 연산 정확성의 증명과는 구분해야 한다.}}
+
+여기서 흥미로운 것은 **메모리를 재사용할 수 있다고 해서 모든 버퍼를 억지로 겹치게 하지 않았다는 점**이다. 3–4번과 4–6번은 허용된 영역을 공유했지만, 2–3번은 다른 위치에 놓는 편이 결과적으로 유리했다. 배치 순서와 Conflict 범위를 모두 고려해야 했던 이유가 실제 수치에 드러난다.
+
+### 실제 모델에 전달한 Conflict Data — 원본 그림 19와 24
+
+{{figure /figures/journals/tflm-report-figure-19.svg | 원본 그림 19의 Person Detect Conflict Data 31개 항목을 다시 작성했다. 경계가 0인 관계도 제외하지 않았다. 팀원이 계산해 전달한 모델별 데이터이며, 자동 프로파일러가 생성한 결과는 아니다.}}
+
+{{figure /figures/journals/tflm-report-figure-24.svg | 원본 그림 24의 Tiny U-Net Conflict Data 44개 항목이다. 큰 음수 경계와 일반적인 인접 관계 외의 Pair도 보여, Size와 Lifetime 정보만으로 안전한 메모리 중복을 정할 수 없다는 점을 드러낸다.}}
+
+원본 보고서에는 이 밖에도 두 모델의 버퍼 출력과 긴 메모리 배치 화면(그림 17~18, 20~23, 25~26)이 있다. 앞쪽의 실험 결과 SVG는 그 자료를 참고한 요약이지만, 정확하게 판독되지 않은 개별 Offset을 새로 만들어 넣지는 않았다. **수치까지 다시 계산할 수 있는 결과와, 원본 화면의 경향을 설명한 그림을 구분하는 것**이 기록으로서 더 중요하다고 생각한다.

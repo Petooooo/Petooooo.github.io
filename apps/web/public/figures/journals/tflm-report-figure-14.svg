@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1260" height="580" viewBox="0 0 1260 580" role="img">
+<rect width="1260" height="580" rx="20" fill="#0e1a2c"/>
+<text x="42" y="67" font-family="Arial,sans-serif" font-size="32" font-weight="700" fill="#f0f7ff">Conflict Data: three safe pairs</text>
+<text x="44" y="108" font-family="Arial,sans-serif" font-size="18" fill="#9bb2ca">Source report · Figure 14</text>
+<path d="M42 129H1218" stroke="#334a64"/>
+<rect x="80" y="169" width="1097" height="335" rx="11" fill="#1a2b42" stroke="#36536c"/>
+<text x="130" y="203" font-family="Arial,sans-serif" font-size="17" fill="#a6bcd0">Input</text>
+<text x="610" y="203" font-family="Arial,sans-serif" font-size="17" fill="#a6bcd0">Output</text>
+<text x="825" y="203" font-family="Arial,sans-serif" font-size="17" fill="#a6bcd0">Boundary</text>
+<g font-family="Arial,sans-serif" font-size="34" font-weight="700">
+<text x="130" y="238" fill="#b6e1fd">2</text><text x="430" y="238" fill="#f7c269">→</text><text x="610" y="238" fill="#b6e1fd">3</text><text x="825" y="238" fill="#95ebd2">−256</text>
+<text x="130" y="333" fill="#b6e1fd">3</text><text x="430" y="333" fill="#f7c269">→</text><text x="610" y="333" fill="#b6e1fd">4</text><text x="825" y="333" fill="#95ebd2">−256</text>
+<text x="130" y="428" fill="#b6e1fd">4</text><text x="430" y="428" fill="#f7c269">→</text><text x="610" y="428" fill="#b6e1fd">6</text><text x="825" y="428" fill="#95ebd2">−256</text>
+</g>
+<text x="44" y="550" font-family="Arial,sans-serif" font-size="16" fill="#9badc2">Manually prepared entries; not automatically profiled</text>
+</svg>

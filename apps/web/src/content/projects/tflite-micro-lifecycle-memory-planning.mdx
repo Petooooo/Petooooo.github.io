@@ -299,3 +299,33 @@ This result mattered because the algorithm was not restricted to the tiny hand-b
   </a>
   <figcaption>Exact byte totals transcribed from the 2024 report. Bars within each pair use a common scale; percentages in the report are retained as quoted.</figcaption>
 </figure>
+
+## From the report: source-verified allocation traces
+
+The percentage chart is the end of the story, not the evidence that led to it. The constructed-buffer experiment is especially useful because its original report preserves every buffer size, lifetime and final offset. I used those records to reproduce the two memory maps below **at their recorded byte positions**, rather than inventing a convenient arrangement of colored strips.
+
+For Person Detect and Tiny U-Net, I can also reproduce the manually prepared Conflict Data arrays. The complete per-buffer offsets for those larger model traces are not asserted here: the preceding figures are reconstructions of peak values and placement patterns, not an executable log replay.
+
+### Constructed test — original Figures 10–16
+
+<figure className="project-concept-figure"><a href="/figures/journals/tflm-report-figure-10.svg" target="_blank" rel="noopener noreferrer"><img src="/figures/journals/tflm-report-figure-10.svg" alt="Exact eight AddBuffer calls transcribed from original Figure 10, including sizes and first/last-use times." loading="lazy" decoding="async" /></a><figcaption>Figure 10 · The eight exact `AddBuffer(size, first, last)` calls in the constructed test. These are inputs to the experiment, not synthetic new buffers.</figcaption></figure>
+
+<figure className="project-concept-figure"><a href="/figures/journals/tflm-report-figure-11.svg" target="_blank" rel="noopener noreferrer"><img src="/figures/journals/tflm-report-figure-11.svg" alt="Original Figure 11's buffer ID, size, initial offset, and lifetime fields." loading="lazy" decoding="async" /></a><figcaption>Figure 11 · The initial buffer records printed before comparing planner outputs. Their offsets are not to be confused with either planner's final layout.</figcaption></figure>
+
+<figure className="project-concept-figure"><a href="/figures/journals/tflm-report-figure-12.svg" target="_blank" rel="noopener noreferrer"><img src="/figures/journals/tflm-report-figure-12.svg" alt="Exact Greedy sorting order, sizes, offsets, and lifetimes from original Figure 12." loading="lazy" decoding="async" /></a><figcaption>Figure 12 · The baseline Greedy placement starts with buffer 7, then 4, 6 and 5, followed by the remaining buffers. The peak is determined by the farthest end address, not by the sum of every size.</figcaption></figure>
+
+<figure className="project-concept-figure"><a href="/figures/journals/tflm-report-figure-13.svg" target="_blank" rel="noopener noreferrer"><img src="/figures/journals/tflm-report-figure-13.svg" alt="Time versus address visualization calculated from the report's exact Greedy offsets and lifetimes, reaching 4,101 bytes." loading="lazy" decoding="async" /></a><figcaption>Figure 13 · A true vector memory map regenerated from the documented buffer intervals and offsets. The horizontal axis is byte address; each row shows buffers active at that step. Greedy peak: 4,101 bytes.</figcaption></figure>
+
+<figure className="project-concept-figure"><a href="/figures/journals/tflm-report-figure-14.svg" target="_blank" rel="noopener noreferrer"><img src="/figures/journals/tflm-report-figure-14.svg" alt="The actual three Conflict Data input-output pairs and minus 256 boundaries from original Figure 14." loading="lazy" decoding="async" /></a><figcaption>Figure 14 · All three explicitly supplied relations in the hand-built experiment: (2,3,−256), (3,4,−256), and (4,6,−256).</figcaption></figure>
+
+<figure className="project-concept-figure"><a href="/figures/journals/tflm-report-figure-15.svg" target="_blank" rel="noopener noreferrer"><img src="/figures/journals/tflm-report-figure-15.svg" alt="Exact conflict-aware output-first placement order and final offsets from original Figure 15." loading="lazy" decoding="async" /></a><figcaption>Figure 15 · The modified order is 7, 5, 1, 0, 6, 4, 3, 2. The planner first places non-conflict buffers, then walks conflict-linked buffers in reverse dependency order.</figcaption></figure>
+
+<figure className="project-concept-figure"><a href="/figures/journals/tflm-report-figure-16.svg" target="_blank" rel="noopener noreferrer"><img src="/figures/journals/tflm-report-figure-16.svg" alt="Time versus address memory map using exact conflict-aware offsets from original Figure 16, reaching 3,585 bytes." loading="lazy" decoding="async" /></a><figcaption>Figure 16 · Exact recorded offsets give a 3,585-byte peak. Buffer 3 occupies [2,564, 3,585) while buffer 4 occupies [2,308, 3,333); buffer 4 also overlaps buffer 6's [2,052, 3,076) range. Buffer 2 does not need to overlap buffer 3. These are address-sharing facts, not by themselves an inference-correctness proof.</figcaption></figure>
+
+### Model-specific Conflict Data — original Figures 19 and 24
+
+<figure className="project-concept-figure"><a href="/figures/journals/tflm-report-figure-19.svg" target="_blank" rel="noopener noreferrer"><img src="/figures/journals/tflm-report-figure-19.svg" alt="31 manually calculated Person Detect Conflict Data entries transcribed from the source report." loading="lazy" decoding="async" /></a><figcaption>Figure 19 · All 31 Person Detect entries transcribed from the original handwritten-to-code dataset, including zero boundaries. This is supplied model metadata, not the output of an implemented automatic profiler.</figcaption></figure>
+
+<figure className="project-concept-figure"><a href="/figures/journals/tflm-report-figure-24.svg" target="_blank" rel="noopener noreferrer"><img src="/figures/journals/tflm-report-figure-24.svg" alt="44 manually calculated Tiny U-Net Conflict Data entries transcribed from the source report." loading="lazy" decoding="async" /></a><figcaption>Figure 24 · The 44 Tiny U-Net entries include larger negative overlap boundaries and cross-branch pairs, underlining why tensor size alone cannot determine a safe in-place placement.</figcaption></figure>
+
+The original report also contains longer planner listings and full allocation screenshots (Figures 17–18, 20–23, 25–26). They informed the earlier result comparisons. I have deliberately not assigned fictitious offsets to those model traces just to make another vector chart look complete. The exact constructed-buffer traces and the manually supplied model constraints above are the records that can be reconstructed numerically without that risk.
