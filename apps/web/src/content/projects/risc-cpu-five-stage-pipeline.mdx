@@ -1,6 +1,6 @@
 ---
-title: "Five-Stage RISC CPU: Pipeline Hazards and Forwarding"
-description: "Designed and verified a five-stage Verilog RISC CPU with forwarding, stalls and control-hazard handling on an FPGA-oriented datapath."
+title: "RISC TOY: Five-Stage Pipeline, Forwarding and Stall Control"
+description: "Implemented a Verilog five-stage RISC CPU with three forwarding paths, load-use and branch stalls, synchronous register-file timing and RTL tests."
 date: "2024-06-28"
 updated: "2026-11-20"
 draft: false
@@ -9,71 +9,237 @@ reviewStatus: "reviewed"
 sensitivity: public
 category: "Computer Engineering"
 area: "Processor Architecture"
-tags: ["Verilog", "RISC", "CPU Pipeline", "Hazard Detection", "FPGA", "Computer Architecture"]
+tags: ["Verilog", "RISC", "CPU Pipeline", "Hazard Detection", "Forwarding", "Computer Architecture", "RTL Simulation"]
 type: "implementation-note"
-role: "Datapath, control logic, hazard handling and testbench implementation in a two-person project"
+role: "Pipeline datapath, control signals, data/control hazard handling and testbench implementation in a two-person project"
 period: "May–Jun 2024"
 status: "archived"
-techStack: ["Verilog", "FPGA", "RTL Simulation", "Testbench"]
+techStack: ["Verilog", "RTL Simulation", "Testbench"]
 ---
 
-I built a **five-stage pipelined RISC processor in Verilog** as a two-person undergraduate project in May–June 2024. I implemented the processor system, including the datapath, control logic and pipeline hazard handling, and checked execution with my own instruction sequences and testbenches.
+In May–June 2024, I worked on **RISC TOY**, a two-person project to implement a five-stage, 32-bit-instruction RISC processor in Verilog. I implemented and analyzed the pipeline datapath and control logic, including **operand forwarding, load-use stalls, branch/jump handling and register-file writeback timing**. I also prepared instruction sequences for simulation and checked the resulting register waveforms.
 
-The interesting part was not merely splitting instruction execution into five stages. It was keeping the architectural result correct when several instructions occupied the datapath at once.
+The original project report is a thirteen-page engineering document with the pipeline block diagram, control expressions, RTL excerpts and testbench results. Reading it again reveals more of the work than a conventional “five-stage CPU” summary: the hard part was coordinating **when an instruction, its operands and its control signals become valid** across modules that do not all expose results at the same instant.
 
-*This retrospective was written in November 2026 from the project details preserved in my CV and earlier engineering discussions. The date above marks the project period, not the original publication of this page.*
+*This article is a November 2026 reconstruction of work performed in 2024. The displayed project period is historical; it is not the date this article was first published. Short RTL excerpts are adapted from the original report; the diagrams have been redrawn for readability.*
 
-## The five pipeline stages
+## Architecture: what crossed each pipeline register
 
-The processor followed **IF → ID → EX → MEM → WB**. Fetch obtained the next instruction; decode read registers and interpreted control signals; execution performed arithmetic or calculated an address; memory handled load/store activity; writeback committed the result to the register file.
-
-The stages were connected by pipeline registers. Control and data had to travel together: a destination register selected during decode still mattered when the producing instruction reached writeback.
+The processor used the familiar **Instruction Fetch (IF), Instruction Decode (ID), Execute (EX), Memory Access (MEM) and Writeback (WB)** stages. That description is only useful if the interface between stages is made explicit.
 
 <figure className="project-concept-figure">
-  <a href="/figures/journals/risc-five-stage-hazards.svg" target="_blank" rel="noopener noreferrer" aria-label="Open five-stage processor and hazard controls figure">
-    <img src="/figures/journals/risc-five-stage-hazards.svg" alt="Five-stage IF, ID, EX, MEM and WB datapath with forwarding, load-use stalls and branch control" loading="lazy" decoding="async" />
+  <a href="/figures/journals/risc-five-stage-hazards.svg" target="_blank" rel="noopener noreferrer" aria-label="Open RISC TOY pipeline datapath and forwarding architecture">
+    <img src="/figures/journals/risc-five-stage-hazards.svg" alt="RISC TOY pipeline: PC and instruction fetch, decode and register file, ALU execution, data memory and writeback. Feedback paths show the branch target, MEM and WB operand bypasses, load result and stall controls." loading="lazy" decoding="async" />
   </a>
-  <figcaption>The five-stage RISC datapath and the locations where forwarding, stalls and branch control affect execution.</figcaption>
+  <figcaption>Redrawn from the original RISC TOY design report. The diagram shows functional data/control paths rather than an FPGA placement or a cycle-accurate timing waveform.</figcaption>
 </figure>
 
-## Forwarding values that were not yet written back
+| Stage | Implemented responsibility | Representative signals |
+| --- | --- | --- |
+| IF | Choose sequential `PC + 4` or branch `target`; request the instruction; hold fetch during a stall | `PC`, `IREQ`, `IADDR`, `INST_M` |
+| ID | Latch an instruction, select source registers and read the synchronous register file; detect branch opcodes | `INST`, `STORE`, `rb_ADDR_M`, `rc_ADDR_M`, `valB_M`, `valC_M` |
+| EX | Execute arithmetic, shifts, memory-address generation and branch conditions; select forwarded operands | `op_EX`, `valB`, `valC`, `ALU_OUT_M`, `BRANCH` |
+| MEM | Carry the destination and memory control; access Data Memory or retain a result | `dest_MEM`, `DRW_MEM`, `DREQ_MEM`, `MOUT_M` |
+| WB | Commit arithmetic or memory results to the register file at the required synchronous boundary | `dest_WB`, `WEN_WB` and the report's `*_MA` writeback signals |
 
-A dependent instruction can reach EX before its predecessor has written a result into the register file. Waiting for every value to arrive in WB would make the pipeline unnecessarily idle.
+The report's instruction fields explain several otherwise surprising choices. The opcode was read from `INST[31:27]`; source-register fields included `INST[21:17]` and `INST[16:12]`; the destination field was `INST[26:22]`. The execution path carried **17-bit and 22-bit offsets**, along with a shift-mode bit, a five-bit shift amount and a three-bit branch condition. In the implementation, these values were saved by the EX pipeline register instead of being decoded again from an instruction that had already advanced.
 
-I implemented **forwarding logic** so execution could select a newer result from a later pipeline stage rather than using an older register-file value. That required comparing the source registers of the current instruction with destination registers of in-flight instructions, while respecting which instructions actually produce a value.
+The design had separate **instruction-memory and data-memory interfaces**, plus a register file. That matters because instruction fetch, a load/store request and register-file writeback each have their own timing and control signals.
 
-Forwarding is not just a multiplexer added at the end: the relevant control and data must be present at the correct cycle. A forwarding select that arrives too late is as damaging as forwarding the wrong register.
+## Instruction fetch: PC changes were conditional
 
-## Stalling load-use dependencies
+The IF logic incremented `PC` by **four bytes** for normal sequential execution. A branch or jump redirected it to the computed `target`. Neither action should happen while an earlier instruction needs the pipeline held.
 
-An immediate consumer of a load is different. The loaded value may not exist early enough for the next instruction's EX stage, even though arithmetic results can be forwarded.
+An abbreviated expression from the original IF register describes the decision:
 
-I added **hazard detection and stalls** for the load-use case. The pipeline had to preserve the waiting instruction, keep the required program-counter/decode state, and prevent the dependent instruction from using stale data. After the value became available, execution could continue.
+```verilog
+if (start) begin
+    if (!BRANCH) begin
+        if (stall_MEM || stall_ID > 0)
+            PC <= PC;
+        else
+            PC <= PC + 4;
+    end else begin
+        PC <= target;
+    end
+end else begin
+    start <= 1'b1;
+end
+```
 
-The stall control also had to avoid accidentally replaying an instruction that had already committed a side effect.
+`start` also participated in controlling `IREQ`, the instruction-memory request. The design retained an intermediate `INST_M` value before the ID pipeline register captured `INST` on a clock edge. **A held PC and a held instruction are not the same signal**: if one advances while the other is frozen, instruction execution and the associated control bits can become misaligned.
 
-## Control hazards and PC updates
+I therefore treated an instruction fetch as an operation with both an address and a valid pipeline state. This was particularly important in the branch and load-use paths, where the next fetched instruction could not always proceed.
 
-Branches and jumps introduced another issue: instructions fetched along a speculative sequential path might not be the instructions that should execute. I handled **branch/jump control hazards** through the pipeline control and PC-selection logic, accounting for instructions that needed to be held or invalidated when control flow changed.
+## Decode and register-file timing
 
-I used deliberately small instruction sequences to expose these cases. Testing only a long program's final register state can conceal a bad pipeline decision if later instructions happen to overwrite the evidence.
+ID decoded the instruction and selected the register file's two read addresses. The original report includes a special case for **`ST` and `STR`**: for stores, the second value required by the datapath comes from a different instruction field than for ordinary arithmetic instructions.
 
-## Validation and outcome
+The relevant RTL decision was:
 
-| Case | Implementation or verification focus |
-| --- | --- |
-| Independent arithmetic | Instruction decode, arithmetic path and writeback |
-| Back-to-back dependencies | Forwarded operands and destination-register matching |
-| Load followed by dependent instruction | Hazard detection and correct stall behavior |
-| Branch and jump sequences | PC change and wrong-path instruction handling |
-| Mixed sequences | Timing of pipeline registers and visible architectural state |
+```verilog
+rb_ADDR_M <= INST[21:17];
 
-The completed project was a **working RTL processor design with custom testbench verification of data and control hazards**. I did not preserve cycle-by-cycle benchmark data or a reproducible synthesis report in the material used to write this article, so I have not invented frequency, IPC or LUT figures.
+if (STORE)
+    rc_ADDR_M <= INST[26:22];
+else
+    rc_ADDR_M <= INST[16:12];
+```
 
-Working through these cases made the interface between **instruction-set behavior and microarchitectural timing** tangible. This project later informed the way I thought about scheduling, buffer lifetimes and hardware datapaths in other systems work.
+This was more than an encoding detail. A store's value can depend on an earlier instruction just as an ALU operand can. Selecting the correct register address is the first step; making sure the **latest value** reaches the store is the forwarding problem that follows.
 
-## Related projects
+The register file in the project had **synchronous behavior**. The report describes a clock boundary between address/operand preparation and capture into the EX pipeline register. That delay affected the saved `next_PC_ID` value and the later writeback design. For this implementation, the timing of the register file could not be treated as an ideal combinational read/write abstraction.
 
-- [Systolic Array Matrix Multiplication on FPGA](/projects/fpga-systolic-array-matrix-multiplication/)
+## Execute: one datapath, several instruction families
+
+The original RTL covered immediate arithmetic (`ADDI`, `ANDI`, `ORI`, `MOVI`), register arithmetic/logic (`ADD`, `SUB`, `NEG`, `NOT`, `AND`, `OR`, `XOR`), shifts/rotate (`LSR`, `ASR`, `SHL`, `ROR`), branches/jumps (`BR`, `BRL`, `J`, `JL`) and memory operations (`LD`, `LDR`, `ST`, `STR`).
+
+The EX stage selected among signed or zero-extended offsets, register operands, immediate and register-defined shift amounts, arithmetic results and effective addresses. Those results also determined the memory and register-file control flags that traveled onward.
+
+One concrete RTL choice was the **rotate-right operation**. Unlike logical or arithmetic shifts, a rotate preserves the shifted-out bits by wrapping them around. The project formed an extended value from the operand and selected the lower 32 bits after shifting:
+
+```verilog
+// Concept excerpt from the original ROR implementation
+assign ROR_0 = {valB, valB} >> shamt;
+assign ROR_1 = {valB, valB} >> valC[4:0];
+
+// select ROR_0[31:0] or ROR_1[31:0]
+// according to the instruction's shift-mode bit
+```
+
+This is a useful example of why instruction decoding, width and signedness all matter. An implementation can appear correct for one operand but fail for another if the intermediate value is not wide enough or the wrong shift interpretation is used.
+
+## Data hazards: three concrete forwarding cases
+
+The project report separates **three data-dependency cases**, rather than speaking about forwarding as a single generic feature.
+
+| Dependency | Example from the test design | What made it hazardous | Implemented path |
+| --- | --- | --- | --- |
+| Immediately preceding ALU result | `ADD ...` followed by an instruction reading its destination | Register file still has the older value | Forward `ALU_OUT_MEM` from MEM |
+| ALU result with an instruction in between | Producer, unrelated instruction, then consumer | Producer has advanced beyond MEM | Forward `ALU_OUT_WB` from WB |
+| Load result required by a later instruction | `LDR R1, ...` followed by `ADD R3, R1, R2` | Data comes from memory rather than directly from the ALU | Stall until memory data is ready, then forward `MOUT` |
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/risc-hazard-control-timeline.svg" target="_blank" rel="noopener noreferrer" aria-label="Open data and control hazard decision paths">
+    <img src="/figures/journals/risc-hazard-control-timeline.svg" alt="Three original RISC TOY dependency cases: MEM ALU bypass, WB ALU bypass and load result after a one-cycle stall. Branch and jump opcodes use a two-cycle decode-side stall." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>The three forwarding cases and two distinct stall controls, summarized directly from the report's RTL and hazard analysis.</figcaption>
+</figure>
+
+For each source operand, I compared the current instruction's register address with the destination of an instruction already in MEM or WB. The original expressions used both the register-file write flag and the data-memory request/write flags to decide whether the value being forwarded was a valid ALU result or a load result.
+
+Here is the report's operand-B forwarding structure, reformatted without changing its decision order:
+
+```verilog
+assign valB =
+    (dest_MEM == rb_ADDR) && (!WEN_MEM && !DREQ_MEM)
+        ? ALU_OUT_MEM :
+    (dest_WB  == rb_ADDR) && (!WEN_WB && !DREQ_MEM)
+        ? ALU_OUT_WB :
+    (dest_MEM == rb_ADDR) && (!DRW_MEM && DREQ_MEM)
+        ? MOUT :
+    valB_EX;
+```
+
+The same pattern was used for `valC`, and the store write-data path `DWDATA` had its own destination comparisons. **The final fallback was the operand already captured from the register file**; forwarding was conditional, not the default.
+
+One subtlety is worth preserving rather than silently “cleaning up” the historical code: the second branch above tests `!DREQ_MEM` even when choosing a WB-stage result. That is how the expression is written in the original report, not a modernized proof that every simultaneous WB/MEM combination is handled correctly. A targeted regression would need to check cases in which the MEM-stage instruction and WB-stage instruction have different memory-control values.
+
+## Load-use: a stall before forwarding
+
+An ALU result may be available soon enough for a bypass. A **load's useful data comes later**, after a Data Memory access. Forwarding immediately from an ALU address calculation would give the consumer the address rather than the loaded value.
+
+For this case, the project generated `stall_MEM`. The report describes a **one-cycle hold** for the affected earlier pipeline stages and explains that the stall is subsequently cleared. The dependent instruction can then use the value retrieved from memory through the load-forwarding path.
+
+A shortened version of the documented detection condition is:
+
+```verilog
+// Dependency on a load currently in MEM
+load_read = !DRW_MEM && DREQ_MEM;
+
+if (load_read &&
+    ((dest_MEM == rb_ADDR) ||
+     (dest_MEM == rc_ADDR) ||
+     (store_instruction && dest_MEM == dest_EX))) begin
+    stall_MEM <= 1'b1;
+end
+```
+
+The excerpt is a **readable reduction of the condition**, not a complete replacement module. The report's actual `always` block includes reset handling, stall clearing and explicit checks for `ST`/`STR` opcodes 21 and 22.
+
+Including the store case mattered. The value being written to memory can depend on an unfinished load even when that dependency is not one of the ALU's ordinary input registers. Without checking the store data, a processor can compute the correct address while still writing the wrong value.
+
+The hold also propagated to the IF/ID/EX-side register updates. When `stall_MEM` was active, the relevant sequential blocks retained their values. In the MEM register logic the report also suppressed an unintended register write by changing `WEN_MEM` during the stall path. Those are **state-preservation rules**, not simply a counter that delays a consumer instruction.
+
+## Control hazards: two decode-side stall cycles
+
+The branch/jump path was implemented differently from the load-use case. The report identifies four control-transfer opcodes: **`BR` (15), `BRL` (16), `J` (17) and `JL` (18)**.
+
+A branch was detected from **`INST_M[31:27]`**, the buffered instruction before it was committed to the decode pipeline register. That was deliberate: recognizing the control transfer only after an additional register capture would allow the incorrect sequential path to advance further.
+
+The `stall_ID` register advanced through **1 → 2 → 0**, holding earlier pipeline activity for two cycles as the branch target became available:
+
+```verilog
+if (stall_ID == 2'd2)
+    stall_ID <= 2'd0;
+else if (stall_ID == 2'd1)
+    stall_ID <= 2'd2;
+else if (INST_M[31:27] == 5'd15 ||
+         INST_M[31:27] == 5'd16 ||
+         INST_M[31:27] == 5'd17 ||
+         INST_M[31:27] == 5'd18)
+    stall_ID <= 2'd1;
+```
+
+EX evaluated the branch condition and selected `target`. The conditions documented in the report included Never, Always, Zero, Nonzero, Plus and Minus. The `BRL` and `JL` instructions also carried a return/link address through the ALU-result path for writeback.
+
+The report describes **three cycles until the intended target instruction is reached**, with a two-cycle decode-side hold as its chosen control strategy. These are not interchangeable claims: the three-cycle description refers to the control-flow delay in the pipeline, while **`stall_ID` takes two explicit stall states**. A new waveform should compare PC, `INST_M`, `INST`, `BRANCH` and `stall_ID` cycle by cycle rather than infer a timing diagram solely from prose.
+
+## Writeback: why the register file changed the timing
+
+A less visible problem appeared at the WB boundary. The report notes that the **synchronous register file** did not behave as if a value written in WB were instantly available for a read performed earlier in the same logical instruction progression.
+
+Simply passing the final WB pipeline register's output directly into the register-file write path could make the data visible too late for the expected operand read. The project therefore introduced an additional set of `*_MA` signals taken from the **Memory Access result** to drive the writeback interface at the required time.
+
+```verilog
+// Abbreviated from the report's Write Back block
+ALU_OUT_MA <= ALU_OUT_MEM;
+dest_MA    <= dest_MEM;
+WEN_MA     <= WEN_MEM;
+MOUT_MA    <= MOUT_M;
+op_MA      <= op_MEM;
+```
+
+This was a concrete integration problem between a stage-level architecture and actual module timing. Drawing five pipeline boxes did not resolve it; the correct source of the write signal depended on the register file's edge behavior.
+
+## Verification: instruction sequences and register waveforms
+
+I built a custom **instruction test sequence** with addresses from **PC 0 through PC 380**, initialized registers with known values and mixed arithmetic, logic, shifts, loads, stores and control transfers. The report records both the instruction sequence and register-state expectations.
+
+The following are **selected checkpoints transcribed from the original test plan**, not newly run simulation output:
+
+| Test sequence / checkpoint | Expected observation | Path exercised |
+| --- | --- | --- |
+| `MOVI R1, 1` followed by `ADDI R0, R1, 32` | `R0 = 33` | Register arithmetic and source dependency |
+| `ADD R6, R7, R8` with initial `R7 = 7` and `R8 = 8` | `R6 = 15` | ALU result and writeback |
+| `LD R21, R31, 512` followed by `ADDI R22, R21, 57` | `R21 = -308`, then `R22 = -251` | Load data feeding an immediate consumer |
+| `LD R0, R31, 1924` followed by `ST R0, R31, 1928` and `LD R1, R31, 1928` | The report lists `R0 = 154` and `R1 = 154` | Load/store data path and reload |
+| `J` / `JL` / `BR` / `BRL` tests near PC 348 | Compared normal progression with a redirect back to **PC 0** | Branch target, fetch hold and control flow |
+
+The result section also includes a multi-register waveform image: one case proceeds without a taken branch, while the other redirects the PC to zero. This is useful **simulation evidence for the original implementation**. It is not a formal proof of every instruction/flag combination, and the published article does not invent a timing closure, frequency, IPC or FPGA resource-utilization result that the report did not provide.
+
+For a more demanding regression today, I would focus on **simultaneous dependencies**: both source registers matching different pipeline destinations, a load followed by a store using its data, branch detection while another stall is active, and WB bypass when a memory operation occupies MEM. Those are inspection targets suggested by the recorded code, not tests I am claiming were run in 2024.
+
+## What this project established
+
+The implemented processor joined several real pieces of RTL engineering: a stage-by-stage datapath, custom instruction decoding, synchronous register-file integration, **three operand-forwarding cases**, **one-cycle load-use stalls**, **two-cycle decode-side branch stalls**, and a custom instruction-level testbench with recorded register waveforms.
+
+Revisiting the original source made one thing especially clear: the difficulty was not writing Verilog for `ADD` or drawing the IF/ID/EX/MEM/WB pipeline. It was deciding **which version of a value an instruction should see**, then making the pipeline retain or advance exactly the right state when that value was not ready.
+
+The same reasoning about visibility, ownership and timing became useful later in the Systolic Array, CNN accelerator and runtime memory-planning projects. In this CPU project, it was visible at the individual clock boundary.
+
+## Related implementation records
+
+- [FPGA Systolic Array: Matrix Multiplication Dataflow](/projects/fpga-systolic-array-matrix-multiplication/)
 - [Bit-Shift CNN Accelerator on Zynq FPGA](/projects/bit-shift-cnn-accelerator-zynq/)
-- [FreeRTOS Multi-Board Mini-Desktop](/projects/freertos-multiboard-mini-desktop/)
+- [FreeRTOS Mini-Desktop: Tasks and Multi-Board Coordination](/projects/freertos-multiboard-mini-desktop/)

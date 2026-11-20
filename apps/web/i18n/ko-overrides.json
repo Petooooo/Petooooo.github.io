@@ -842,5 +842,11 @@
   "Sep–Dec 2024": "2024년 9~12월",
   "Ten concurrent tasks across three STM32 boards, with UART/GPIO communication and mutex-based coordination.": "STM32 보드 3대에서 FreeRTOS Task 10개를 실행하고 UART·GPIO 통신과 Mutex 동기화를 구현했다.",
   "The two highlighted undergraduate projects are based on their original 2024 report and team poster. Earlier implementations appear below in project-period order; all historical write-ups are 2026 retrospectives, not posts published at the time.": "위의 핵심 두 프로젝트는 2024년 보고서와 팀 포스터를 바탕으로 정리했다. 아래에는 이전 구현 프로젝트를 실제 수행 순서로 배치했다. 이 글들은 당시 게시물이 아니라 2026년에 다시 작성한 기술 기록이다.",
-  "Undergraduate · 2023–2024": "학부 프로젝트 · 2023~2024"
+  "Undergraduate · 2023–2024": "학부 프로젝트 · 2023~2024",
+  "RISC TOY: Five-Stage Pipeline, Forwarding and Stall Control": "RISC TOY: 5단계 파이프라인·Forwarding·Stall 구현",
+  "RISC TOY: Five-Stage Pipeline, Forwarding and Stall Control | Jihwan Park": "RISC TOY: 5단계 파이프라인·Forwarding·Stall 구현 | 박지환",
+  "Implemented a Verilog five-stage RISC CPU with three forwarding paths, load-use and branch stalls, synchronous register-file timing and RTL tests.": "Verilog 기반 5단계 RISC CPU를 구현하고, 세 가지 Forwarding과 Load-use·Branch Stall, 동기식 Register File 타이밍을 테스트했다.",
+  "Pipeline datapath, control signals, data/control hazard handling and testbench implementation in a two-person project": "2인 프로젝트에서 파이프라인 데이터 경로·제어 신호·Hazard 처리와 Testbench 구현",
+  "Forwarding": "Forwarding",
+  "RTL Simulation": "RTL 시뮬레이션"
 }

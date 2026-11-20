@@ -1,28 +1,81 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1260 490" width="1260" height="490" role="img" aria-labelledby="title desc">
-<title id="title">Five-stage RISC CPU datapath</title>
-<desc id="desc">Pipeline stages, forwarding and stalls</desc>
-<defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#0d1424"/><stop offset="1" stop-color="#111f33"/></linearGradient><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M0 0L10 5L0 10Z" fill="#7fdbc7"/></marker></defs>
-<rect width="1260" height="490" rx="20" fill="url(#bg)"/><rect x="1" y="1" width="1258" height="488" rx="19" fill="none" stroke="#31465c" stroke-width="2"/>
-<text x="64" y="77" font-size="34" font-family="Inter, Noto Sans KR, Segoe UI, sans-serif" font-weight="750" fill="#f4f7fc">Five-stage RISC CPU datapath</text>
-<text x="64" y="113" font-family="Inter, Noto Sans KR, Segoe UI, sans-serif" font-size="21" fill="#9eb6cb">Pipeline stages, forwarding and stalls</text><path d="M64 148H1196" stroke="#31465c" stroke-width="2"/>
-<g font-family="Inter, Noto Sans KR, Segoe UI, sans-serif"><rect x="64" y="204" width="213.6" height="111" rx="14" fill="#1b2b43" stroke="#527e9e" stroke-width="1.7"/>
-<text x="170.8" y="264" font-size="17" font-weight="700" text-anchor="middle" fill="#e7f2ff">IF: Fetch</text>
-<path d="M279.6 259h10" stroke="#7fdbc7" stroke-width="2.5" marker-end="url(#arrow)"/>
-<rect x="291.6" y="204" width="213.6" height="111" rx="14" fill="#1b3545" stroke="#509b98" stroke-width="1.7"/>
-<text x="398.40000000000003" y="264" font-size="17" font-weight="700" text-anchor="middle" fill="#e7f2ff">ID: Decode</text>
-<path d="M507.20000000000005 259h10" stroke="#7fdbc7" stroke-width="2.5" marker-end="url(#arrow)"/>
-<rect x="519.2" y="204" width="213.6" height="111" rx="14" fill="#1b2b43" stroke="#527e9e" stroke-width="1.7"/>
-<text x="626" y="264" font-size="17" font-weight="700" text-anchor="middle" fill="#e7f2ff">EX: Execute</text>
-<path d="M734.8000000000001 259h10" stroke="#7fdbc7" stroke-width="2.5" marker-end="url(#arrow)"/>
-<rect x="746.8" y="204" width="213.6" height="111" rx="14" fill="#1b3545" stroke="#509b98" stroke-width="1.7"/>
-<text x="853.5999999999999" y="264" font-size="17" font-weight="700" text-anchor="middle" fill="#e7f2ff">MEM: Memory</text>
-<path d="M962.4 259h10" stroke="#7fdbc7" stroke-width="2.5" marker-end="url(#arrow)"/>
-<rect x="974.4" y="204" width="213.6" height="111" rx="14" fill="#1b2b43" stroke="#527e9e" stroke-width="1.7"/>
-<text x="1081.2" y="264" font-size="17" font-weight="700" text-anchor="middle" fill="#e7f2ff">WB: Writeback</text>
-<rect x="64" y="366" width="364" height="56" rx="10" fill="#121f31" stroke="#355067"/>
-<text x="246" y="401" text-anchor="middle" font-size="16" fill="#c7d9ec">Forwarding selects recent results</text>
-<rect x="452" y="366" width="364" height="56" rx="10" fill="#121f31" stroke="#355067"/>
-<text x="634" y="401" text-anchor="middle" font-size="16" fill="#c7d9ec">Load-use hazard inserts a stall</text>
-<rect x="840" y="366" width="364" height="56" rx="10" fill="#121f31" stroke="#355067"/>
-<text x="1022" y="401" text-anchor="middle" font-size="16" fill="#c7d9ec">Branch / jump updates the PC</text></g>
-<text x="64" y="466" font-family="Inter, Noto Sans KR, Segoe UI, sans-serif" font-size="16" fill="#8ea8bd">Conceptual RTL datapath; no board-specific placement or timing figure</text></svg>
+<svg xmlns="http://www.w3.org/2000/svg" width="1320" height="740" viewBox="0 0 1320 740" role="img" aria-labelledby="title desc">
+<title id="title">RISC TOY pipeline and forwarding paths</title>
+<desc id="desc">Five-stage RTL pipeline from fetch to register write, with branch target feedback, MEM ALU forwarding, WB ALU forwarding, load-result bypass and two distinct stall controls.</desc>
+<defs>
+ <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#0c1524"/><stop offset="1" stop-color="#112039"/></linearGradient>
+ <marker id="arrow-cyan" markerWidth="9" markerHeight="9" refX="8" refY="4" orient="auto"><path d="M0 0L8 4L0 8Z" fill="#5fd3d0"/></marker>
+ <marker id="arrow-purple" markerWidth="9" markerHeight="9" refX="8" refY="4" orient="auto"><path d="M0 0L8 4L0 8Z" fill="#b49cfa"/></marker>
+ <marker id="arrow-orange" markerWidth="9" markerHeight="9" refX="8" refY="4" orient="auto"><path d="M0 0L8 4L0 8Z" fill="#f4b875"/></marker>
+ <style>
+ text{font-family:Inter,'Noto Sans KR','Segoe UI',sans-serif;fill:#e0eaf7}
+ .title{font-size:32px;font-weight:760;fill:#f3f8ff}
+ .sub{font-size:18px;fill:#a3bbce}
+ .stage{font-size:25px;font-weight:770;fill:#f5faff}
+ .feature{font-size:16px;fill:#d5e5f6}
+ .small{font-size:14px;fill:#9fbbd1}
+ .legend{font-size:18px;font-weight:690;fill:#f4faff}
+ .cap{font-size:17px;fill:#b9d0e2}
+ .label{font-size:16px;fill:#c7eaf2}
+ </style>
+</defs>
+<rect width="1320" height="740" rx="22" fill="url(#bg)"/>
+<rect x="1" y="1" width="1318" height="738" rx="21" fill="none" stroke="#2c445e" stroke-width="2"/>
+<text class="title" x="52" y="67">RISC TOY · Pipeline and bypass paths</text>
+<text class="sub" x="53" y="106">Instruction flow and control signals from the original 2024 RTL design</text>
+<path d="M53 135H1267" stroke="#33485f" stroke-width="2"/>
+<!-- Branch feedback -->
+<path d="M677 235V185H156V237" fill="none" stroke="#f4b875" stroke-width="3" marker-end="url(#arrow-orange)"/>
+<rect x="316" y="162" width="255" height="31" rx="15" fill="#283243"/>
+<text class="label" x="443" y="184" text-anchor="middle" fill="#ffc88a">BRANCH target → PC</text>
+<!-- Stages -->
+<g>
+ <rect x="53" y="239" width="218" height="158" rx="17" fill="#192c40" stroke="#4e8caa" stroke-width="2"/>
+ <rect x="299" y="239" width="218" height="158" rx="17" fill="#172d40" stroke="#4e8caa" stroke-width="2"/>
+ <rect x="545" y="239" width="218" height="158" rx="17" fill="#172e40" stroke="#5fc7b7" stroke-width="2"/>
+ <rect x="791" y="239" width="218" height="158" rx="17" fill="#172d40" stroke="#4e8caa" stroke-width="2"/>
+ <rect x="1037" y="239" width="230" height="158" rx="17" fill="#182a42" stroke="#8e81c5" stroke-width="2"/>
+ <text x="75" y="278" class="stage">IF · Fetch</text>
+ <text x="75" y="311" class="feature">PC / instruction</text>
+ <text x="75" y="337" class="small">IREQ · INST_M</text>
+ <text x="75" y="367" class="small">PC + 4 or target</text>
+ <text x="321" y="278" class="stage">ID · Decode</text>
+ <text x="321" y="311" class="feature">Register file</text>
+ <text x="321" y="337" class="small">INST · STORE</text>
+ <text x="321" y="367" class="small">rb_ADDR / rc_ADDR</text>
+ <text x="567" y="278" class="stage">EX · Execute</text>
+ <text x="567" y="311" class="feature">ALU / branch</text>
+ <text x="567" y="337" class="small">valB · valC</text>
+ <text x="567" y="367" class="small">ALU_OUT · BRANCH</text>
+ <text x="813" y="278" class="stage">MEM · Access</text>
+ <text x="813" y="311" class="feature">Data memory</text>
+ <text x="813" y="337" class="small">ALU_OUT_MEM</text>
+ <text x="813" y="367" class="small">MOUT / DREQ</text>
+ <text x="1059" y="278" class="stage">WB · Register</text>
+ <text x="1059" y="311" class="feature">Commit result</text>
+ <text x="1059" y="337" class="small">dest / WEN</text>
+ <text x="1059" y="367" class="small">*_MA write path</text>
+</g>
+<!-- forward pipeline -->
+<path d="M271 318H298M517 318H544M763 318H790M1009 318H1036" fill="none" stroke="#5fd3d0" stroke-width="3.2" marker-end="url(#arrow-cyan)"/>
+<!-- three feedback lanes, from MEM and WB to EX -->
+<path d="M901 398V450H624V399" stroke="#5fd3d0" stroke-width="3" fill="none" marker-end="url(#arrow-cyan)"/>
+<rect x="675" y="430" width="194" height="31" rx="12" fill="#17343d"/>
+<text class="label" x="772" y="451" text-anchor="middle">MEM ALU forwarding</text>
+<path d="M1136 398V502H674V400" stroke="#b49cfa" stroke-width="3" fill="none" marker-end="url(#arrow-purple)"/>
+<rect x="768" y="484" width="192" height="31" rx="12" fill="#322c4a"/>
+<text class="label" x="864" y="505" text-anchor="middle">WB ALU forwarding</text>
+<path d="M981 399V557H725V399" stroke="#f4b875" stroke-width="3" fill="none" marker-end="url(#arrow-orange)"/>
+<rect x="838" y="540" width="159" height="31" rx="12" fill="#3b3026"/>
+<text class="label" x="917" y="561" text-anchor="middle">Load: MOUT</text>
+<!-- stall signal strip -->
+<rect x="53" y="601" width="1214" height="83" rx="13" fill="#12273a" stroke="#3c6177" stroke-width="1.8"/>
+<text x="80" y="630" class="legend">Pipeline hold</text>
+<text x="80" y="661" class="cap">stall_MEM: 1-cycle load-use hold</text>
+<path d="M435 622V666" stroke="#3c6177" stroke-width="2"/>
+<text x="460" y="642" class="legend">Branch hold</text>
+<text x="460" y="666" class="cap">stall_ID: 1 → 2 → 0 (two cycles)</text>
+<path d="M891 622V666" stroke="#3c6177" stroke-width="2"/>
+<text x="917" y="640" class="legend">Shared rule</text>
+<text x="917" y="665" class="cap">Hold PC and pipeline state</text>
+<text x="53" y="717" class="small">Redrawn from the 2024 report · functional control paths, not a cycle-accurate waveform or FPGA routing diagram</text>
+</svg>

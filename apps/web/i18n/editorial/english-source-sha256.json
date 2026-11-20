@@ -27,7 +27,7 @@
   "rokaf-k3s-cni-service-datapath": "e132b7eb612f18a9367e680509a1e16f0b1d123d7709264bf40fd909a1a85a7a",
   "document-translation-pipeline": "19ceed6a4eb7460a0036bdcf35e66d6bb9e47ff6e72e5eac9aef074217624f29",
   "rokaf-central-gpu-platform-kai-jupyterhub": "4dd9ab8d75443ee3e5eb27858a29fd3dc315988f60514018bfda9d42992e3f6e",
-  "risc-cpu-five-stage-pipeline": "10c1c39f0126bb66c70600cc30ecefa026d8e3804dfb528157934fd476b5d0a1",
+  "risc-cpu-five-stage-pipeline": "5c0ff47e994e6ca690907623da229dbd609239353bf3c1b50d0c71204929c4c1",
   "freertos-multiboard-mini-desktop": "fc12493c0467e5524d0be4dea1120f43927ab110917bc5056a6aa574236005c5",
   "fpga-systolic-array-matrix-multiplication": "0e7f2016b4b001efd85a0c3cc9433c2338a7c1685ca867d5b27c3626261ca0f8",
   "python-tokenizer-lex-yacc": "abea04a54cd3012e4aa40b90ae92e33463606d0d520fff0c9af1a915e4a3e836",

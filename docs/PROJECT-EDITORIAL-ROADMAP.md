@@ -32,6 +32,8 @@ Earlier CV brainstorming also mentioned **Crime Prevention IoT** (Nov–Dec 2023
 
 The earlier **Systolic Array** and **PyTokenizer** CV entries were previously deprioritized from the short CV. They are now preserved in the broader Projects archive, while the short CV still highlights the four principal systems/hardware projects. All six new articles include manually edited Korean versions and conceptual diagrams.
 
+**Original-report revision, 2026-11-20 — RISC TOY:** Re-examined the user's original 13-page `RISC CPU 설계.pdf` and expanded `risc-cpu-five-stage-pipeline` into a detailed datapath, instruction-decode, synchronous writeback, forwarding/hazard and testbench analysis. Replaced its simplified diagram and added a second hazard-decision figure, both localized. Source/accuracy audit: `docs/RISC-CPU-ORIGINAL-REPORT-REVIEW-2026-11-20.md`. **Next source-based rewrite:** `freertos-multiboard-mini-desktop` against the original 64-page results report; correct the GPIO-vs-UART responsibilities before that article is considered source-verified.
+
 ## ROKAF engineering records — published
 
 The independent K3s platform article is the **overview/index**. Its topic pages are expanded first-person engineering journals, not technology name lists.
