@@ -53,7 +53,7 @@ end
 
 ## ID: Instruction Field와 Register File의 실제 타이밍
 
-ID에서는 Instruction을 해석하고 Register File에서 읽을 두 주소를 결정했다. 이 과정에서도 명령어 종류에 따라 예외가 있었다. 바로 **Store 명령어 `ST`와 `STR`**이다.
+ID에서는 Instruction을 해석하고 Register File에서 읽을 두 주소를 결정했다. 이 과정에서도 명령어 종류에 따라 예외가 있었다. **Store 명령어 `ST`와 `STR`의 주소 선택 방식이 달랐다.**
 
 일반적인 연산에서는 `rb`와 `rc`를 Source Register로 읽지만, Store에서는 메모리에 기록할 데이터를 읽기 위해 다른 필드를 사용해야 했다. 원본의 주소 선택 로직은 다음과 같다.
 
@@ -127,7 +127,7 @@ ADD R3, R1, R2
 
 첫 번째 명령어와 현재 명령어 사이에 다른 명령어가 한 개 있는 경우도 처리해야 했다. 이때 결과를 만드는 명령어는 이미 WB에 도달했을 수 있으므로 MEM만 비교해서는 부족하다.
 
-그래서 `dest_WB`를 현재 Source Register 주소와 비교하고, 조건이 맞으면 **`ALU_OUT_WB`**를 사용하도록 했다.
+그래서 `dest_WB`를 현재 Source Register 주소와 비교하고, 조건이 맞으면 **WB 단계의 `ALU_OUT_WB` 값을 사용하도록 했다.**
 
 ### Case 3: Load 결과는 곧바로 Forwarding할 수 없었다
 

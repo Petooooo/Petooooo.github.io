@@ -18,7 +18,7 @@ GPU 서버에 GPU Operator를 설치하던 중 로그에 `no nfd label found`라
 
 GPU를 Kubernetes에서 사용하기까지는 여러 곳을 통과한다. 호스트 운영체제와 NVIDIA 드라이버가 장치를 인식해야 하고, 컨테이너 런타임이 필요한 장치 인터페이스를 제공해야 한다. Node Label을 기록하는 탐지 구성 요소와 Kubernetes에 GPU 확장 리소스를 등록하는 Device Plugin도 구분해야 한다.
 
-특히 중요한 차이가 **Node Label과 `status.allocatable`**이었다. 라벨은 노드에 어떤 장치나 기능이 있는지 설명하는 메타데이터다. 반면 Device Plugin과 kubelet이 등록하는 `nvidia.com/gpu` 같은 확장 리소스는 스케줄러가 Pod의 GPU 요청을 계산할 때 사용하는 값이다.
+특히 중요하게 봐야 할 부분은 **Node Label과 `status.allocatable`의 차이**다. 라벨은 노드에 어떤 장치나 기능이 있는지 설명하는 메타데이터다. 반면 Device Plugin과 kubelet이 등록하는 `nvidia.com/gpu` 같은 확장 리소스는 스케줄러가 Pod의 GPU 요청을 계산할 때 사용하는 값이다.
 
 라벨이 보인다고 자동으로 GPU가 할당 가능한 것은 아니다. 반대로 어떤 종류의 GPU 특성 라벨이 기대와 다르다고 해서 반드시 `nvidia.com/gpu` 수량도 0이라고 단정할 수는 없다. 두 값을 실제로 비교해야 한다.
 

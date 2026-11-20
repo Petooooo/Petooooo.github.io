@@ -12,7 +12,7 @@ Outline은 페이지를 보여주는 데 필요한 일반 HTTP 요청 외에도 
 
 당시에는 Nginx의 WebSocket 처리를 점검했다. 필요할 때 HTTP/1.1을 사용하도록 하고, `Upgrade`와 `Connection` 헤더를 전달하도록 설정했다. `/realtime`로 들어오는 요청도 확인했으며, 지속적인 연결에 영향을 줄 수 있는 Buffering과 Timeout 설정도 검토했다.
 
-설정을 바꾼 뒤에는 응답이 **`101 Switching Protocols`**로 바뀌었다. 이 숫자는 이전에 보던 `400`과 성격이 다르다. 서버가 WebSocket으로 프로토콜을 전환하는 요청을 받아들였다는 뜻이기 때문이다.
+설정을 바꾼 뒤에는 **`101 Switching Protocols` 응답이 확인됐다.** 이 숫자는 이전에 보던 `400`과 성격이 다르다. 서버가 WebSocket으로 프로토콜을 전환하는 요청을 받아들였다는 뜻이기 때문이다.
 
 처음에는 이 정도면 편집 문제도 해결됐다고 생각했다. 하지만 곧 그 판단이 너무 빨랐다는 걸 알았다. `101`은 연결이 만들어진 사실을 알려줄 뿐, 모든 PC에서 모든 편집 결과가 저장됐다는 것까지 확인해주지는 않는다.
 
@@ -60,7 +60,7 @@ OAuth 로그인은 화면에서 버튼을 누르고 GitLab에 다녀오는 것�
 
 ## 공개 접속 주소를 바꾸니 또 다른 오류가 나왔다
 
-몇 달 뒤인 6월에는 Outline의 외부 접속 주소를 변경하면서 OIDC Callback 문제를 만났다. GitLab이 **`The redirect URI included is not valid`**라고 응답했다.
+몇 달 뒤인 6월에는 Outline의 외부 접속 주소를 변경하면서 OIDC Callback 문제를 만났다. GitLab은 **`The redirect URI included is not valid` 오류를 반환했다.**
 
 2월의 `ETIMEDOUT`과는 다른 종류의 실패였다. 이번에는 요청을 보내지 못한 문제가 아니라, 인증 제공자가 전달된 Redirect URI를 유효하지 않다고 판단한 것이다.
 

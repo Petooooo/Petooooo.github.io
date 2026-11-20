@@ -24,12 +24,13 @@ const processor = unified()
   .use(rehypeStringify, { allowDangerousHtml: true });
 
 const esc = (s) => s.replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;');
+const inlineCaption = (caption) => esc(caption).replace(/`([^`\n]+)`/g, '<code>$1</code>');
 function figures(text) {
-  return text.replace(/^\{\{figure\s+(\/figures\/[^\s|]+\.svg)\s*\|\s*(.+)\}\}\s*$/gm, (_, src, caption) => (
+  return text.replace(/^\{\{figure\s+(\/figures\/[^\s|]+\.svg)\s*\|\s*(.+)\}\}[ \t]*$/gm, (_, src, caption) => (
     '<figure class="project-concept-figure">\n'
-    + '  <a href="' + esc(src) + '" target="_blank" rel="noopener noreferrer" aria-label="' + esc(caption) + '">\n'
-    + '    <img src="' + esc(src) + '" alt="' + esc(caption) + '" loading="lazy" decoding="async" />\n'
-    + '  </a>\n  <figcaption>' + esc(caption) + '</figcaption>\n</figure>'
+    + '  <a href="' + esc(src) + '" target="_blank" rel="noopener noreferrer" aria-label="' + esc(caption.replaceAll('`', '')) + '">\n'
+    + '    <img src="' + esc(src) + '" alt="' + esc(caption.replaceAll('`', '')) + '" loading="lazy" decoding="async" />\n'
+    + '  </a>\n  <figcaption>' + inlineCaption(caption) + '</figcaption>\n</figure>\n\n'
   ));
 }
 
@@ -60,7 +61,21 @@ for (const entry of await readdir(projectSource)) {
   const koreanFigures = new Set([...translated.matchAll(/\{\{figure\s+(\/figures\/[^\s|]+\.svg)\s*\|/g)].map(x=>x[1]));
   const missing = [...originalFigures].filter(x=>!koreanFigures.has(x));
   if(missing.length) throw new Error(slug + ': missing diagrams: ' + missing.join(', '));
-  const html = String(await processor.process(figures(translated)));
+  const ast = await processor.run(processor.parse(figures(translated)));
+  const markdownLeaks = [];
+  function checkRenderedNode(node, insideCode = false) {
+    const ignored = insideCode || (node.type === 'element' && ['pre', 'code', 'script', 'style'].includes(node.tagName));
+    if (node.type === 'text' && !ignored) {
+      const value = node.value ?? '';
+      if (/(?:^|\n)#{1,6}[ \t]+\S/m.test(value)) markdownLeaks.push('unrendered heading: ' + value.slice(0, 110));
+      if (value.includes('**')) markdownLeaks.push('unrendered emphasis: ' + value.slice(0, 110));
+      if (value.includes('`')) markdownLeaks.push('unrendered inline code: ' + value.slice(0, 110));
+    }
+    for (const child of node.children ?? []) checkRenderedNode(child, ignored);
+  }
+  checkRenderedNode(ast);
+  if (markdownLeaks.length) throw new Error(slug + ': Korean Markdown rendering failed:\n' + markdownLeaks.slice(0, 8).join('\n'));
+  const html = String(processor.stringify(ast));
   if (!html.includes('<h2>') || !html.includes('<p>')) {
     throw new Error(slug + ': expected narrative paragraphs and sections');
   }
