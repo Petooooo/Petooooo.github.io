@@ -1,0 +1,116 @@
+---
+title: "Shared GPU Platform: KAI Scheduler and JupyterHub"
+description: "Built and operated a centrally managed GPU computing environment on air-gapped K3s, bringing in KAI Scheduler and providing shared notebook access through JupyterHub."
+date: "2026-11-20"
+updated: "2026-11-20"
+draft: false
+reviewed: true
+reviewStatus: "reviewed"
+sensitivity: sanitized
+category: "Systems Engineering"
+area: "AI Infrastructure"
+tags: ["K3s", "GPU", "KAI Scheduler", "JupyterHub", "Kubernetes", "GPU Operator", "Scheduling"]
+type: "implementation-note"
+role: "Design, offline introduction, deployment and operation of central GPU scheduling and shared notebook infrastructure"
+period: "2025–Present"
+status: "active"
+techStack: ["K3s", "KAI Scheduler", "JupyterHub", "Kubernetes", "NVIDIA GPU Operator", "NVIDIA Device Plugin"]
+---
+
+The central goal of my GPU cluster work was not to attach an accelerator to one application. It was to **make a pool of GPUs available through one managed platform**, so different AI workloads could share the infrastructure without each team having to operate its own GPU host.
+
+I built and operated that environment on K3s inside an isolated network. As the platform evolved, I **brought in, deployed and operated KAI Scheduler** for GPU-aware workload scheduling and **built and operated JupyterHub** as an interactive entry point for users. The work spanned cluster resource management, container deployment, user-facing notebook sessions and the operational problems that emerge when several workloads depend on the same accelerators.
+
+This is an account of an implemented, operating environment—not a proposed scheduler evaluation. I omit the installation's actual node layout, accounts, internal image locations and cluster policy settings.
+
+## One GPU pool, different workloads
+
+A shared accelerator platform serves workloads with different lifetimes. Some users need an interactive environment for exploration and model development. Others submit longer-running training or processing jobs. Model serving has a different set of scheduling and latency requirements.
+
+Before centralizing the platform, the practical challenge was that GPU capacity could be scattered across individual hosts and applications. Seeing an idle device did not mean another user had a convenient, repeatable way to use it. Central operations needed common answers for **who runs a workload, which resources it requests, where Kubernetes places it and how the result is operated**.
+
+K3s provided the common execution and control environment. NVIDIA's GPU integration exposed accelerator resources to Kubernetes. I then added two different pieces to the platform: KAI Scheduler for scheduling decisions, and JupyterHub for interactive access to compute environments.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/central-gpu-kai-jupyterhub.svg" target="_blank" rel="noopener noreferrer" aria-label="Open shared GPU service architecture with KAI scheduling and JupyterHub sessions">
+    <img src="/figures/journals/central-gpu-kai-jupyterhub.svg" alt="Conceptual central GPU platform: JupyterHub creates interactive notebook Pods, KAI Scheduler manages explicitly selected AI workloads, and Kubernetes GPU discovery and admission connect both paths to a shared accelerator pool. No physical node placement or automatic KAI integration for all notebooks is implied." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Operational responsibility map. JupyterHub and KAI Scheduler provide different entry points and controls over a common Kubernetes GPU pool. A JupyterHub notebook uses KAI scheduling only if its Pod is explicitly configured to select that scheduler.</figcaption>
+</figure>
+
+## KAI Scheduler in the internal cluster
+
+I introduced **KAI Scheduler into the closed-network environment**, deployed it on the Kubernetes platform and operated it as part of the GPU scheduling setup. This moved the project beyond increasing the device plugin's advertised GPU count: I could manage AI-workload placement through a scheduler designed for accelerator-intensive jobs.
+
+There are two distinct responsibilities here. The **NVIDIA device plugin and GPU Operator** make GPU capabilities visible and usable from a Kubernetes Pod. **KAI Scheduler** decides placement for workloads directed to it, using its queue and scheduling policies. Installing an AI-specific scheduler does not replace the device plugin or manufacture GPU memory.
+
+KAI's documented scheduling model provides queue-oriented management, priority and fairness mechanisms, and support for placing coordinated workloads. Those capabilities were part of why the product fit the platform's direction. They should not be mistaken for a claim that I enabled and benchmarked every queue, preemption or gang-scheduling policy in our environment.
+
+A second scheduler also does not automatically own every Pod. For a workload to use the KAI path, its scheduling configuration must select the appropriate scheduler and, where required, the queue. Other Kubernetes workloads can continue through their configured scheduler. That distinction matters when debugging a Pending job: the requested GPU resource, the selected scheduler and the queue state must be examined together.
+
+## JupyterHub as the user-facing compute environment
+
+KAI addressed scheduling, but users also needed a way to work with the GPUs. I **built and operated JupyterHub** on the same internal platform so users could access interactive notebook environments without being responsible for the underlying GPU-host lifecycle.
+
+JupyterHub's Kubernetes integration creates a user-specific notebook server as a Pod. From the platform side, this means a notebook session is not just a browser page: it depends on a usable container image, identity/session handling, an available node, sufficient requested resources and a working network route back to the user.
+
+I treated JupyterHub as an access and session-management layer, distinct from the device plugin and scheduler. The notebook environment and AI job scheduler could rely on the same centrally operated GPU resources without being the same subsystem.
+
+I do not assume that every JupyterHub single-user Pod was scheduled by KAI: that requires an explicit KubeSpawner/Pod scheduling configuration. The verified deployment experience is **operating JupyterHub and KAI Scheduler in the shared GPU environment**. The exact per-profile scheduler selection and quota settings are implementation details that would need separate configuration evidence before being described as enabled policies.
+
+## Central resource management meant more than placement
+
+Centralizing GPUs exposed several layers of operational responsibility.
+
+| Layer | Responsibility in the shared platform | What I needed to distinguish |
+| --- | --- | --- |
+| K3s | Shared workload lifecycle and scheduling interfaces | A Pod being created versus being usable |
+| NVIDIA GPU integration | Driver/device discovery and GPU resource advertisement | A physical GPU existing versus an allocatable Kubernetes resource |
+| KAI Scheduler | Placement of participating AI workloads | Pending due to scheduling or queue state versus image/runtime failures |
+| JupyterHub | Notebook access and user-session lifecycle | A working login versus a successfully started user server |
+| GPU sharing policy | Whole-device, time-sliced or hardware-partitioned access as appropriate | More logical slots versus real VRAM and execution capacity |
+| Platform operations | Internal image availability, storage, networking and observability | A healthy component versus a completed user workload |
+
+This became a central operating model rather than independent GPU machines configured by whoever needed compute. I was responsible for deploying and running the shared components, not for claiming that every application using the GPUs had the same usage pattern or service-level objective.
+
+### Time-slicing and scheduling solved different problems
+
+I had also configured NVIDIA GPU **time-slicing**, which allows multiple logical accesses to the same physical GPU. That was about the **allocation model of the device**. KAI Scheduler addressed **which eligible workload should be placed**, while JupyterHub addressed **how a user receives an interactive compute session**.
+
+These layers complement one another, but none substitutes for another. Additional time-sliced resource replicas do not allocate new physical VRAM. A scheduling decision does not verify that a model fits in device memory. A notebook login does not prove that the corresponding Pod initialized its GPU runtime.
+
+I kept the detailed distinction between time-slicing, whole-GPU allocation and MIG in a separate [GPU resource-sharing record](/projects/rokaf-gpu-scheduling-and-capacity/).
+
+## Offline delivery and day-two operation
+
+Because the cluster was isolated from ordinary public package and image distribution, introducing another scheduler or notebook platform was not a simple matter of referencing an external chart and leaving the rest to a public registry. **Software and container dependencies had to be brought into the internal environment** and made available through the platform's controlled deployment process.
+
+Operating the combination also meant separating faults by layer. A user unable to start a notebook might be waiting on a GPU allocation, an unavailable notebook image, a storage attachment, or a broken session/proxy route. A Pending AI job might be constrained by its scheduler/queue settings or requested accelerators. Both look like "the GPU platform is unavailable" from the outside but require different checks.
+
+The most useful operational distinction was between **resource management** and **user experience**: the scheduler manages placement; JupyterHub manages sessions; the GPU stack makes the device usable; and the common platform keeps the supporting runtime, storage and access paths available.
+
+## Implemented scope and engineering results
+
+| Workstream | Completed work |
+| --- | --- |
+| Central GPU infrastructure | Built and operated a shared K3s-based GPU computing environment |
+| GPU scheduling | Brought KAI Scheduler into the offline environment, deployed it and operated it |
+| Interactive computing | Built and operated JupyterHub as a notebook access service |
+| GPU resource allocation | Configured time-slicing and evaluated whole-device and MIG approaches separately |
+| Platform integration | Operated the common image, Kubernetes networking and workload infrastructure supporting these services |
+| Capacity and fairness evaluation | Relevant to scheduler design; no invented utilization improvement, queue-policy rollout or measured fairness result is presented |
+
+The result was a **centrally managed GPU platform with an operating scheduler and interactive notebook service**. I had implemented the infrastructure through which users and workloads could share accelerator resources, not merely compared GPU-scheduling products on paper.
+
+A deeper case study of queue policy or notebook-specific GPU allocation would require the actual sanitized policy and workload results. Those details are separate from the already completed KAI and JupyterHub deployment and operation.
+
+## Related engineering records and documentation
+
+- [Kubernetes GPU sharing: Time-slicing and MIG](/projects/rokaf-gpu-scheduling-and-capacity/)
+- [GPU Operator and NFD discovery investigation](/projects/rokaf-gpu-discovery-open-investigation/)
+- [K3s platform engineering and operations](/projects/independent-on-premises-k3s-platform-engineering/)
+- [Offline image supply and CI](/projects/rokaf-private-artifacts-and-ci/)
+- [KAI Scheduler source and feature documentation](https://github.com/kai-scheduler/KAI-Scheduler)
+- [KAI Scheduler quickstart: selecting a scheduler and queue](https://github.com/kai-scheduler/KAI-Scheduler/blob/main/docs/quickstart/README.md)
+- [Zero to JupyterHub with Kubernetes: user resources](https://z2jh.jupyter.org/en/latest/jupyterhub/customizing/user-resources.html)
+- [Zero to JupyterHub: configuration reference](https://z2jh.jupyter.org/en/latest/resources/reference.html)

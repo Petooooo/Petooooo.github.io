@@ -1,4 +1,4 @@
-2025년 7월 부대에 배치된 이후 폐쇄망에서 AI 서비스를 지원하는 온프레미스 K3s 플랫폼을 직접 구축하고 운영했다. 처음부터 완성된 설계도를 받아 그대로 설치하는 작업은 아니었다. 서비스가 늘어날 때마다 이미지 배포, 네트워크 접근, 인증서, 저장소, 데이터베이스, GPU 자원, 장애 복구까지 서로 얽힌 문제를 하나씩 해결해야 했다.
+2025년 7월 부대에 배치된 이후 폐쇄망에서 AI 서비스를 지원하는 온프레미스 K3s 플랫폼을 직접 구축하고 운영했다. 특히 **여러 GPU를 중앙에서 관리하고 사용자에게 제공하는 공용 연산 환경**을 만든 일이 중요한 축이었다. KAI Scheduler를 직접 반입·배포해 운영했고, JupyterHub를 구축해 Notebook 환경도 실제 서비스로 제공했다. 이미지 배포, 네트워크, 저장소, 데이터베이스와 장애 복구까지 그 공용 환경을 유지하는 데 필요한 문제들을 함께 다뤘다.
 
 플랫폼 설계와 최초 배포, 운영 중 장애 조사와 개선을 맡았지만, 여기에서 돌아가는 모든 애플리케이션을 내가 개발했다는 뜻은 아니다. 내가 책임졌던 일은 각 서비스가 **실제로 배포되고, 접근할 수 있으며, 필요한 권한을 가지고, 문제가 생겼을 때 복구할 수 있는 환경**을 만드는 것이었다.
 
@@ -34,12 +34,13 @@ K3s는 이런 서비스의 공통 실행 환경을 제공했지만 모든 책임
 | Outline 인증과 편집 | [Outline WebSocket·OAuth·TLS 장애](/projects/rokaf-internal-app-auth-and-tls/) — GitLab 연결 Timeout, WebSocket Upgrade, 브라우저 인증서와 이미지 요청 문제 |
 | 서비스 연동 | [자체 호스팅 서비스 연동](/projects/rokaf-self-hosted-services-integration/) — SMTP, Helm 환경변수, 파일 저장소와 Registry 클라이언트의 의존성 |
 | 외부 접속 | [ServiceLB와 호스트 포트 충돌](/projects/rokaf-service-lb-hostport-conflict/) — VIP 주소와 포트 자원의 소유권 |
-| GPU | [스케줄링과 실제 가용 용량](/projects/rokaf-gpu-scheduling-and-capacity/) — Time-slicing, MIG, VRAM, 복구 시 배치 |
+| 중앙 GPU 관리 플랫폼 | [KAI Scheduler·JupyterHub 구축과 운영](/projects/rokaf-central-gpu-platform-kai-jupyterhub/) — 폐쇄망 반입, 공용 GPU 자원 관리, 사용자 Notebook 환경 제공 |
+| GPU 자원 공유 정책 | [Time-slicing과 MIG의 차이](/projects/rokaf-gpu-scheduling-and-capacity/) — VRAM 경합, 논리 슬롯, 장애 시 배치 용량 |
 | 관측성 | [사라진 메트릭의 원인 추적](/projects/rokaf-observability-and-failure-evidence/) — Prometheus WAL과 DCGM Exporter 배치 |
 | RabbitMQ Worker | [RabbitMQ 메시지 재전달과 Worker 중복 처리](/projects/rokaf-async-workers-and-idempotency/) — Shovel 메시지 이전, Heartbeat 장애와 Claim·Lease 기반 작업 복구 |
 | 문서 번역 파이프라인 | [작업 상태·Lease·재시도](/projects/document-translation-pipeline/) — PDF·DOCX·HWPX Worker와 영속 Job 상태를 설계·구현하고 내부망에 배포·운영 |
 
-원인이 끝까지 확정되지 않았던 조사도 따로 남겼다. [Langfuse v4 마이그레이션](/projects/rokaf-langfuse-v4-migration-field-notes/)에서는 Timeout이 떠도 내부 진행 상태가 완료일 수 있다는 것을 확인했고, [DNS와 VIP 문제](/projects/rokaf-dns-vip-open-investigations/)에서는 하나의 증상에 여러 경로가 관여할 수 있다는 한계를 남겼다. [Pod IP·ClusterIP 전달 경로 조사](/projects/rokaf-k3s-cni-service-datapath/)에서는 Flannel 인터페이스와 NAT 규칙의 존재만으로 요청 성공을 증명할 수 없었던 과정을 정리했다. [GPU 리소스 발견](/projects/rokaf-gpu-discovery-open-investigation/)과 [Control Plane 장애](/projects/rokaf-control-plane-incident-log/)도 마찬가지로 관측과 가설을 구분해 정리했다. [Linux 메모리 압박과 earlyoom 서비스 오류](/projects/rokaf-memory-pressure-and-service-recovery/)에서는 메모리 포화와 systemd 오류, 이후 프로세스 종료 기록을 서로 다른 사건으로 구분했다.
+원인이 끝까지 확정되지 않았던 조사도 따로 남겼다. [Langfuse v4 마이그레이션](/projects/rokaf-langfuse-v4-migration-field-notes/)에서는 Timeout이 떠도 내부 진행 상태가 완료일 수 있다는 것을 확인했고, [DNS와 VIP 문제](/projects/rokaf-dns-vip-open-investigations/)에서는 하나의 증상에 여러 경로가 관여할 수 있다는 한계를 남겼다. [K3s iptables 규칙 적용 장애와 Pod 통신 경로](/projects/rokaf-k3s-cni-service-datapath/)에서는 iptables 규칙 초기화 문제를 복구한 과정과, 별도로 원인이 남아 있던 Pod·ClusterIP 통신 문제를 구분했다. [GPU 리소스 발견](/projects/rokaf-gpu-discovery-open-investigation/)과 [Control Plane 장애](/projects/rokaf-control-plane-incident-log/)도 마찬가지로 관측과 가설을 구분해 정리했다. [Linux 메모리 압박과 earlyoom 서비스 오류](/projects/rokaf-memory-pressure-and-service-recovery/)에서는 메모리 포화와 systemd 오류, 이후 프로세스 종료 기록을 서로 다른 사건으로 구분했다.
 
 ## 운영하면서 반복해서 부딪힌 선택
 

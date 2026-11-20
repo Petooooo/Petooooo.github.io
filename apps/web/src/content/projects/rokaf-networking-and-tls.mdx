@@ -2,7 +2,7 @@
 title: "K3s Networking: Traefik, MetalLB and TLS"
 description: "IP-based TLS, ServiceLB host-port contention, WebSocket proxy behavior and separate DNS/VIP investigations."
 date: "2026-11-15"
-updated: "2026-11-19"
+updated: "2026-11-20"
 draft: false
 reviewed: true
 reviewStatus: "reviewed"
@@ -85,7 +85,7 @@ Not every investigation ended with a similarly reversible fix. CoreDNS reliabili
 
 I also considered whether Docker and K3s rules could interfere on the same host. That remained a hypothesis, not a confirmed explanation for every Pod-to-Service failure. It would be particularly misleading to claim that disabling ServiceLB solved later CNI, resolver and VIP anomalies. The port-contention incident and the open datapath questions crossed different failure boundaries.
 
-Where I lacked a synchronized client request, DNS answer, VIP advertisement state and endpoint observation, I kept the cause open rather than writing a clean but unsupported “fixed MetalLB” conclusion.
+In a **separate K3s startup incident**, I also recovered the iptables rule-bootstrap phase after `iptables-restore` encountered xtables lock contention. The rules were regenerated and K3s later logged `bootstrap done`. That was a completed operational recovery checkpoint—not evidence that the unrelated intermittent Pod-to-ClusterIP failure had the same cause.
 
 ## The client became my starting point
 

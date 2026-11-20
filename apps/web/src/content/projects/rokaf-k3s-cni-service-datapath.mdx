@@ -1,6 +1,6 @@
 ---
 title: "K3s Networking: Pod IP Routing and ClusterIP Services"
-description: "An internal DNS reachability investigation separating Flannel Pod routing, kube-proxy Service translation, DNS responses, host filtering and unverified conntrack hypotheses."
+description: "K3s iptables bootstrap recovery and a separate Pod-to-ClusterIP DNS investigation, separating observed rule-application success from unresolved packet-path causes."
 date: "2026-11-17"
 updated: "2026-11-20"
 draft: false
@@ -21,7 +21,7 @@ An application kept failing during startup because it could not resolve an inter
 
 Those observations looked reassuring but did not explain the failing request. A route to a **Pod IP** and a working connection to a **Service ClusterIP** depend on different packet-processing steps. I had checked that several pieces were installed; I had not shown that the affected DNS request actually crossed them.
 
-The surviving incident notes describe partial DNS and Service-IP reachability failures. In a separate request I also saw a timeout toward a destination in a Pod address range. Neither observation came with a synchronized packet capture or a proven rule-level root cause. I wanted to preserve the troubleshooting method without turning a suspected iptables or CNI problem into a fictional completed repair.
+The DNS and Service-IP reachability investigation remained a separate packet-path problem: the records did not preserve a synchronized capture identifying its failing rule. **I also worked through an iptables rule-application failure during K3s startup and recovered a successful rule bootstrap**, as the later regenerated rules and `bootstrap done` log showed. The recovered startup and the still-open DNS investigation should not be mistaken for one incident.
 
 ## Two addresses, two packet paths
 
@@ -99,7 +99,7 @@ The rules themselves also change meaning across backends. In Docker's **iptables
 
 For the DNS failure, the inspection I actually had showed Service NAT entries, not the complete effective ordering of translation, policy filters and return-state handling. A `KUBE-SVC-*`-style entry being present would not show whether the affected packet matched it. Nor did I have a measured `conntrack` table limit, an exhaustion counter or a packet trace proving a connection-tracking failure.
 
-## A separate K3s bootstrap error involved the xtables lock
+## K3s iptables Bootstrap Recovery
 
 Another network-related operational record offered firmer evidence, but at a **different point in the lifecycle**. During K3s startup, the log contained an iptables bootstrap failure:
 
@@ -110,11 +110,11 @@ failed to apply partial iptables-restore
 
 The accompanying failure indicated that `iptables-restore` could not acquire the xtables lock while another process held it. This was a problem **applying rules**, not proof that an existing Pod packet had been dropped by a Docker chain.
 
-During troubleshooting, `/run/xtables.lock` was removed and K3s was restarted. The lock file appeared again. The first restore attempts still failed, while later logs showed rules being regenerated and `bootstrap done`. **What I could verify was the later K3s bootstrap checkpoint; I could not attribute that result to removing the file, or identify the process that originally held the lock.**
+I investigated the lock contention while restoring the K3s network rule initialization. During that work I removed `/run/xtables.lock` and restarted K3s; the lock file appeared again, and the first restore attempts still failed. I continued the recovery until the rules were regenerated and K3s logged **`bootstrap done`**. **The iptables bootstrap interruption was cleared and K3s completed its rule-initialization phase.** The surviving record does not identify which process originally held the lock or prove that deleting the file was the step that fixed it.
 
 The lock file's mere existence is normal: `iptables` uses it to coordinate exclusive access. Removing its pathname is not a general repair procedure and does not establish that the underlying lock holder has stopped. The `iptables-restore` utility supports waiting for the exclusive lock with `-w`, but I did not verify that changing K3s's invocation to use this option was an implemented remediation.
 
-This incident is useful precisely because it separates two problems: **rule-programming contention at startup** and **packet forwarding after rules exist**. The first was observed in a log and followed by a later successful bootstrap. No retained trace shows that it was the cause of the earlier Pod-to-ClusterIP DNS symptom.
+This was an actual **rule-bootstrap recovery**, not just an architectural hypothesis: K3s progressed from a failed iptables-restore attempt to regenerated rules and a completed bootstrap. It remains distinct from the intermittent **Pod-to-ClusterIP DNS failure**, for which the available packet-path evidence did not determine a single root cause.
 
 ## What I would inspect before changing a rule
 
@@ -128,7 +128,7 @@ sudo nft list ruleset
 
 These are examples of observations to collect in an authorized maintenance context, **not outputs from the original failure**. Actual rules can disclose internal networks and must not be pasted into the public case study. I would also correlate the packet's incoming interface, the Service's selected Endpoint, policy counters, `conntrack` state and the return path. A rule with a matching name may not be on the packet's active path.
 
-I would not blindly flush `iptables` chains, change the host's default forwarding policy, disable Docker's rule management or swap CNIs as a diagnostic shortcut. Those actions can cut off unrelated services and destroy the very state needed for attribution. The retained record does **not** establish a Docker-caused `FORWARD DROP`, an nftables mismatch, conntrack exhaustion or a permanent firewall fix.
+I would not blindly flush `iptables` chains, change the host's default forwarding policy, disable Docker's rule management or swap CNIs as a diagnostic shortcut. Those actions can cut off unrelated services and destroy the very state needed for attribution. The retained packet-path record does **not** establish Docker-caused `FORWARD DROP`, an nftables mismatch or conntrack exhaustion as the cause of the separate DNS incident. This does not undo the observed success of the K3s iptables bootstrap recovery.
 
 ## Pod IP and ClusterIP Diagnostic Comparisons
 
@@ -164,9 +164,11 @@ This incident is also distinct from [the ServiceLB host-port conflict](/projects
 
 ## Observed Packet-path Evidence and Next Checks
 
-**Observed:** some Pods had DNS/Service-IP access failures; a Flannel interface was UP; Pod-network routes existed; and Service-related NAT entries were visible. Another recorded request to a Pod-range destination timed out. In a separate startup episode, iptables bootstrap failed on the xtables lock and a later attempt logged `bootstrap done`. Those observations are not one synchronized packet timeline or a proven common root cause.
+**Completed operational recovery:** K3s initially failed to apply iptables rules because of xtables lock contention. After troubleshooting and restarting, the rules were regenerated and **`bootstrap done` confirmed the successful bootstrap checkpoint**. The exact lock holder and causal intervention were not retained.
 
-**Not verified:** a specific FORWARD rule dropping packets, conntrack exhaustion, an iptables/nftables mismatch, a corrupt Service backend selection, a Flannel overlay defect, or a permanent fix delivered by changing the CNI.
+**Separate investigation:** some Pods experienced DNS/Service-IP access failures despite a visible Flannel interface, Pod routes and Service NAT rules. A Pod-range request also timed out. These observations were not collected as one synchronized packet trace.
+
+**Still open for the DNS path:** whether an effective `FORWARD` filter, conntrack, Service proxying or the Flannel return path interrupted the failing traffic. A change to Cilium was evaluated, not deployed as the confirmed repair.
 
 If the incident recurred, I would first capture a real query from an affected Pod, compare it with a direct endpoint request, and then examine the effective proxy and host filtering path on the source node. I would repeat the same request from an unaffected location and keep the return traffic in the trace. Until those observations exist, the cause remains open.
 

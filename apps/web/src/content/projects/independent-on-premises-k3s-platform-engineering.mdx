@@ -1,8 +1,8 @@
 ---
 title: "On-Premises K3s Platform: Design and Operations"
-description: "Design and operation of an on-premises K3s platform, covering CI, storage, networking, databases, access and GPU workloads."
+description: "Independently built and operated an air-gapped K3s platform, including centrally managed GPUs with KAI Scheduler and JupyterHub, storage, CI and service recovery."
 date: "2026-11-15"
-updated: "2026-11-19"
+updated: "2026-11-20"
 draft: false
 reviewed: true
 sensitivity: sanitized
@@ -17,7 +17,7 @@ status: "active"
 techStack: ["Linux", "K3s", "Longhorn", "Nexus3", "Traefik", "MinIO"]
 ---
 
-> **ROKAF engineering portfolio · sanitized.** After my unit assignment in July 2025, I independently built and operated a closed-network, on-premises K3s platform supporting AI systems. I also received an award from the **ROKAF Chief of Staff** in recognition of this work. This page is the index to detailed technical records, not a diagram of internal military infrastructure.
+> **ROKAF engineering portfolio · sanitized.** After my unit assignment in July 2025, I independently built and operated a closed-network, on-premises K3s platform supporting AI systems. A major part of that work was **centralizing GPU resources**: I brought in and operated KAI Scheduler and built and operated JupyterHub so GPU computing could be provided through a shared environment. I also received an award from the **ROKAF Chief of Staff** in recognition of this work. This page is the index to detailed technical records, not a diagram of internal military infrastructure.
 
 <div className="grid gap-4 border-y border-white/10 py-5 sm:grid-cols-3">
   <div><p className="text-xl font-semibold text-white">Platform ownership</p><p className="mt-1 text-xs text-slate-400">Design, deployment, operation and troubleshooting</p></div>
@@ -27,7 +27,7 @@ techStack: ["Linux", "K3s", "Longhorn", "Nexus3", "Traefik", "MinIO"]
 
 ## The engineering challenge
 
-My responsibility was to move from isolated service operations toward an environment where **deployment, availability and recovery** could be reasoned about as a coherent platform.
+My responsibility was to move from isolated service and GPU-host operations toward a **centrally managed compute platform**, where users and workloads could share accelerator capacity and where deployment, availability and recovery could be handled together.
 
 K3s provided a common orchestration layer, but the difficult questions were below and around it: where images came from, whether a private CA was trusted, how stateful services recovered, which identities had permission to operate them, and how GPU workloads shared constrained hardware.
 
@@ -58,7 +58,8 @@ I recorded the work by problem, rather than hiding every decision inside a singl
 | **Outline authentication and editing** | [Outline WebSocket, OAuth and TLS](/projects/rokaf-internal-app-auth-and-tls/) — GitLab userinfo timeouts, WebSocket recovery and client-side certificate/file failures |
 | **Service integration** | [Self-hosted Service Integration](/projects/rokaf-self-hosted-services-integration/) — mail, Helm env injection, object store, registry clients and service-level readiness |
 | **Service exposure contention** | [ServiceLB HostPort Contention](/projects/rokaf-service-lb-hostport-conflict/) — distinguishing K3s ServiceLB hostPort claims from MetalLB VIP responsibilities |
-| **GPU systems** | [GPU placement and capacity](/projects/rokaf-gpu-scheduling-and-capacity/) — the difference between utilization, isolation and failover |
+| **Central GPU platform** | [KAI Scheduler and JupyterHub deployment and operation](/projects/rokaf-central-gpu-platform-kai-jupyterhub/) — shared accelerator management, AI workload scheduling and interactive notebook access |
+| **GPU sharing policies** | [GPU placement and capacity](/projects/rokaf-gpu-scheduling-and-capacity/) — time-slicing, VRAM contention, MIG comparison and failover headroom |
 | **Observability** | [Prometheus WAL and GPU Observability](/projects/rokaf-observability-and-failure-evidence/) — Prometheus WAL pressure, node-exporter gaps and DCGM placement failures |
 | **RabbitMQ worker reliability** | [RabbitMQ Redelivery and Worker Idempotency](/projects/rokaf-async-workers-and-idempotency/) — Shovel migration, missed heartbeats, duplicate processing and durable stage claims |
 | **Document translation pipeline** | [Job state and worker recovery](/projects/document-translation-pipeline/) — designed, implemented and operated internally with PDF/DOCX/HWPX workers, durable claims and retry reconciliation |
@@ -71,7 +72,7 @@ Not every difficult incident ended with a verified single root cause. Keeping th
 | --- | --- |
 | [Langfuse v4 migration](/projects/rokaf-langfuse-v4-migration-field-notes/) | A timeout conflicted with a persisted completed phase and nine completed chunks; later errors came from other layers |
 | [DNS and VIP reachability](/projects/rokaf-dns-vip-open-investigations/) | Intermittent symptoms with multiple plausible network, resolver and backend hypotheses |
-| [Pod IP routing and ClusterIP Services](/projects/rokaf-k3s-cni-service-datapath/) | Flannel and Pod routes were present during partial DNS failures; the Service translation, filter and return path were not proven |
+| [K3s iptables bootstrap and Pod/Service packet paths](/projects/rokaf-k3s-cni-service-datapath/) | Recovered a successful K3s iptables rule bootstrap after xtables lock contention; investigated a separate Pod-to-ClusterIP DNS failure whose rule-level cause remained open |
 | [GPU discovery and labels](/projects/rokaf-gpu-discovery-open-investigation/) | Resource/label discovery did not behave as expected; full cause needed further evidence |
 | [Control-plane and disk incidents](/projects/rokaf-control-plane-incident-log/) | etcd and read-only disk symptoms required separating recovery from host-level root-cause proof |
 | [Linux memory pressure and earlyoom](/projects/rokaf-memory-pressure-and-service-recovery/) | Memory saturation, earlyoom systemd argument/path errors and a later process kill with no confirmed source of the host-wide spike |

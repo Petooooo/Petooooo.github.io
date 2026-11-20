@@ -1,6 +1,6 @@
 # Portfolio project editorial roadmap
 
-Updated: 2026-11-19
+Updated: 2026-11-20
 
 This document separates **published engineering records** from **candidate articles requiring source review**. It is not an official military systems inventory. Public entries exclude internal diagrams, hosts, network addresses, identities, credentials and production runbooks.
 
@@ -26,7 +26,8 @@ The independent K3s platform article is the **overview/index**. Its topic pages 
 | Database HA and migrations | `rokaf-database-ha-and-langfuse-migrations` |
 | ServiceAccount RBAC, OAuth2, Keycloak and OpenFGA | `rokaf-identity-rbac-and-policy` |
 | Traefik, MetalLB, DNS and private TLS | `rokaf-networking-and-tls` |
-| GPU scheduling and capacity choices | `rokaf-gpu-scheduling-and-capacity` |
+| Central GPU infrastructure: KAI Scheduler and JupyterHub deployment and operations | `rokaf-central-gpu-platform-kai-jupyterhub` |
+| GPU allocation and time-slicing/MIG comparison | `rokaf-gpu-scheduling-and-capacity` |
 | RabbitMQ workers, retries and idempotency | `rokaf-async-workers-and-idempotency` |
 | Asynchronous document translation pipeline | `document-translation-pipeline` |
 
@@ -36,7 +37,7 @@ The independent K3s platform article is the **overview/index**. Its topic pages 
 | --- | --- | --- |
 | Langfuse v4 data migration | `rokaf-langfuse-v4-migration-field-notes` | Step 2 timeout differed from stored progress; Steps 1–5 and historical/new data checks completed November 17, 2026 |
 | DNS and VIP reachability | `rokaf-dns-vip-open-investigations` | Intermittent symptom; multiple unconfirmed hypotheses |
-| Pod IP vs ClusterIP datapath | `rokaf-k3s-cni-service-datapath` | Partial DNS/Service failures with Flannel/routes/NAT present; no verified packet-level root cause or CNI remediation. A25 host netfilter rule ownership and a separate observed xtables bootstrap lock event were integrated here, rather than inventing a Docker-caused resolved incident |
+| Pod IP vs ClusterIP datapath, with separate iptables bootstrap repair | `rokaf-k3s-cni-service-datapath` | K3s iptables-restore initially hit xtables lock contention; the later rule regeneration and `bootstrap done` establish completed bootstrap recovery. A different Pod-to-ClusterIP DNS failure still lacks packet-level attribution; no Docker/FORWARD/nftables cause was invented |
 | GPU Operator / NFD visibility | `rokaf-gpu-discovery-open-investigation` | Missing/unexpected labels; full root cause not established |
 | etcd and host disk incidents | `rokaf-control-plane-incident-log` | Restored service and remaining root-cause questions separated |
 | Linux memory pressure and earlyoom | `rokaf-memory-pressure-and-service-recovery` | March near-full memory/reboot, service exit 16 and missing stop path, later victim log without attribution of the host-wide spike; no complete recovery or prevention claim |
@@ -44,6 +45,9 @@ The independent K3s platform article is the **overview/index**. Its topic pages 
 These pages explicitly distinguish **observed facts, plausible causes, mitigations and unverified outcomes**. They do not publish internal addresses, replica placement, credentials, military network topology or actual recovery commands.
 
 ## Follow-ups still needing stronger evidence
+
+- KAI Scheduler's exact configured queue and fairness policies, per-workload placement results, and the scheduler used by individual JupyterHub notebook Pods: do not infer these simply from both components operating in the same GPU cluster.
+- A separate Pod-to-ClusterIP network outage's exact drop/translation point: distinguish its unresolved root cause from the **completed K3s iptables bootstrap recovery**.
 
 - System observability and dashboards: actual implemented metrics, logs and operational benefit.
 - Deeper individual RabbitMQ incident: a sanitized failure/retry case with preserved outcome.

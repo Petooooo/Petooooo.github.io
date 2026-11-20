@@ -2,6 +2,8 @@ GPU를 여러 서비스가 나눠 사용하도록 설정하면서 처음에는 �
 
 이런 상황에서 Kubernetes가 GPU 리소스를 몇 개 노출하는지만 보고 서비스 수용량을 판단하는 것은 위험했다. 나는 실제로 Time-slicing을 구성하면서 **스케줄러가 배치할 수 있는 자원**과 **모델이 메모리와 지연시간 조건 안에서 쓸 수 있는 자원**을 나눠 생각하려 했다.
 
+이것은 내가 구축한 전체 GPU 플랫폼의 일부다. 실제로 **KAI Scheduler를 폐쇄망에 반입·배포하고 JupyterHub를 구축해 운영**하면서 GPU를 중앙에서 관리하는 체계도 마련했다. 그 경험은 [공유 GPU 플랫폼 구축과 운영 기록](/projects/rokaf-central-gpu-platform-kai-jupyterhub/)에 별도로 정리했다. 이 글에서는 Time-slicing과 MIG의 기술적 차이에 집중한다.
+
 ## 논리 GPU 슬롯을 늘린다는 의미
 
 NVIDIA Device Plugin은 GPU를 Kubernetes의 확장 리소스로 노출한다. 일반적인 GPU 전체 할당에서는 Pod가 물리 장치의 자원을 독점적으로 사용하도록 배치한다.
@@ -75,5 +77,6 @@ GPU 서비스의 Replica가 여러 개라면 하나가 중단돼도 접속 주�
 
 - [NVIDIA GPU Operator의 Time-slicing](https://docs.nvidia.com/datacenter/cloud-native/gpu-operator/latest/gpu-sharing.html)
 - [NVIDIA MIG 가이드](https://docs.nvidia.com/datacenter/tesla/mig-user-guide/latest/introduction.html)
+- [KAI Scheduler·JupyterHub 기반 공유 GPU 플랫폼](/projects/rokaf-central-gpu-platform-kai-jupyterhub/)
 - [GPU 리소스 발견 조사](/projects/rokaf-gpu-discovery-open-investigation/)
 - [DCGM Exporter와 메트릭 누락](/projects/rokaf-observability-and-failure-evidence/)

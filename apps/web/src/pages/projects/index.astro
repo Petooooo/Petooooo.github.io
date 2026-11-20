@@ -10,6 +10,7 @@ import { withBase } from "@/lib/urls";
 const projects = (await getCollection("projects")).filter(isPublishedEntry).sort(byDateDesc);
 
 const rokafOrder = [
+  "rokaf-central-gpu-platform-kai-jupyterhub",
   "rokaf-private-artifacts-and-ci",
   "rokaf-offline-gitops-delivery",
   "rokaf-observability-and-failure-evidence",
@@ -68,8 +69,8 @@ const highlights = [
     href: "/projects/independent-on-premises-k3s-platform-engineering/",
     result: "K3s / Linux",
     metric: "Independently built & operated · Jul 2025–Present",
-    description: "After my July 7 assignment, independently built and operated K3s-based infrastructure, handling service deployment, private artifacts, storage, troubleshooting, and recovery.",
-    tags: ["Kubernetes", "Longhorn", "Nexus"]
+    description: "Built and operated a closed-network K3s platform, centralizing shared GPU access with KAI Scheduler and JupyterHub alongside private CI, storage and service recovery.",
+    tags: ["Kubernetes", "KAI Scheduler", "JupyterHub"]
   }
 ];
 ---

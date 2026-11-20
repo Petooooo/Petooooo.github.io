@@ -2,7 +2,7 @@
 title: "Kubernetes GPU Sharing: Time-Slicing and MIG"
 description: "GPU time-slicing configuration and comparison with whole-device and MIG allocation, including memory contention and failover capacity."
 date: "2026-11-15"
-updated: "2026-11-19"
+updated: "2026-11-20"
 draft: false
 reviewed: true
 sensitivity: sanitized
@@ -19,6 +19,8 @@ techStack: ["Kubernetes", "GPU", "NVIDIA", "Scheduling", "MIG", "Reliability"]
 When I started placing AI workloads on a shared Kubernetes cluster, the first number to look at seemed obvious: GPU utilization. But an idle-looking device is not necessarily wasted capacity. A model can reserve most of its memory while using relatively little compute, and a second model can fail to start even though the utilization graph looks quiet.
 
 I configured GPU sharing with time-slicing and spent time separating two problems that are easy to conflate: **whether Kubernetes sees a schedulable resource** and **whether the application can actually run within its memory and latency budget**. I also evaluated whole-GPU assignment and MIG where the hardware supports it. Those are different ownership models, not successive optimization steps.
+
+This was one part of the larger system I built: **a centrally managed GPU platform with KAI Scheduler and JupyterHub deployed and operating in the internal environment**. The [central GPU platform record](/projects/rokaf-central-gpu-platform-kai-jupyterhub/) covers scheduling and user notebook access; this article concentrates on the device-sharing and capacity choices.
 
 ## A logical GPU slot is not a GPU partition
 
@@ -143,6 +145,7 @@ I configured time-slicing and evaluated MIG on supported hardware as a different
 - [NVIDIA GPU Operator — Time-Slicing GPUs in Kubernetes](https://docs.nvidia.com/datacenter/cloud-native/gpu-operator/latest/gpu-sharing.html)
 - [NVIDIA Multi-Instance GPU — user guide](https://docs.nvidia.com/datacenter/tesla/mig-user-guide/latest/introduction.html)
 - [NVIDIA Kubernetes device plugin — shared access modes](https://github.com/NVIDIA/k8s-device-plugin)
+- [Central GPU platform: KAI Scheduler and JupyterHub](/projects/rokaf-central-gpu-platform-kai-jupyterhub/)
 - [GPU discovery investigation](/projects/rokaf-gpu-discovery-open-investigation/)
 - [Prometheus WAL pressure and DCGM Exporter placement](/projects/rokaf-observability-and-failure-evidence/)
 - [On-premises platform overview](/projects/independent-on-premises-k3s-platform-engineering/)

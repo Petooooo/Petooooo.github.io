@@ -35,11 +35,12 @@ const infrastructure = [
     period: "Jul 2025–Present",
     title: "ROKAF · Independent On-Premises K3s Engineering",
     href: "/projects/independent-on-premises-k3s-platform-engineering/",
-    subtitle: "AI Systems Infrastructure · Closed-network platform design and operations",
+    subtitle: "AI Systems Infrastructure · Shared GPU platform and closed-network operations",
     detail: "ROKAF Chief of Staff Award · 2026",
     highlights: [
       "Independently established, operated and troubleshot an on-premises K3s platform supporting AI services.",
-      "Worked across private artifact delivery, networking, persistent storage, database HA, identity and GPU service operations.",
+      "Built and operated a centrally managed GPU environment, including KAI Scheduler deployment and JupyterHub notebook access.",
+      "Worked across private image delivery, networking, persistent storage, database HA and service recovery.",
       "Detailed technical records are linked below; sensitive environment details are intentionally omitted."
     ]
   }
@@ -51,7 +52,8 @@ const engineeringRecords = [
   ["Database HA", "MongoDB, PostgreSQL, ClickHouse/Keeper and Langfuse migrations", "/projects/rokaf-database-ha-and-langfuse-migrations/"],
   ["Identity & access", "ServiceAccount RBAC, OAuth2, Keycloak/OpenFGA design", "/projects/rokaf-identity-rbac-and-policy/"],
   ["Service networking", "Traefik, load balancing and private TLS", "/projects/rokaf-networking-and-tls/"],
-  ["GPU infrastructure", "Placement, time-slicing options and degraded capacity", "/projects/rokaf-gpu-scheduling-and-capacity/"],
+  ["Central GPU platform", "KAI Scheduler and JupyterHub deployment and operation", "/projects/rokaf-central-gpu-platform-kai-jupyterhub/"],
+  ["GPU allocation", "Time-slicing, MIG comparison and real VRAM constraints", "/projects/rokaf-gpu-scheduling-and-capacity/"],
   ["Async processing", "RabbitMQ workers, retries and idempotent effects", "/projects/rokaf-async-workers-and-idempotency/"]
 ];
 
@@ -81,7 +83,7 @@ const selectedProjects = [
 
 const skills = [
   ["Programming", ["C", "C++", "Python", "Shell", "TypeScript", "SQL", "Verilog"]],
-  ["Linux & systems", ["Linux", "Git", "Docker", "Kubernetes / K3s", "Longhorn", "Traefik", "CI/CD"]],
+  ["Linux & systems", ["Linux", "Git", "Docker", "Kubernetes / K3s", "KAI Scheduler", "JupyterHub", "Longhorn", "Traefik", "CI/CD"]],
   ["Data & infrastructure", ["ClickHouse", "MinIO", "MongoDB", "Nexus", "RabbitMQ"]],
   ["Hardware & embedded", ["FPGA", "Zynq", "Vivado", "Quartus", "STM32", "Arduino", "Raspberry Pi"]]
 ];

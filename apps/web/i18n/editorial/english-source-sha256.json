@@ -1,6 +1,6 @@
 {
   "bit-shift-cnn-accelerator-zynq": "6b25cba32ae8dc129df6384a1feb80b674f0834f90c465df11af2eacedba0e48",
-  "independent-on-premises-k3s-platform-engineering": "9361b51a87a9a2ac4949e4e20276fdb84273edcd43654ef153f9cc30010c45ce",
+  "independent-on-premises-k3s-platform-engineering": "8c023405af757fa314e14bf505bb004ac5ff1125b463ceb324b9f117961be354",
   "rokaf-async-workers-and-idempotency": "7558d5dd905afa6d50b7dac66858c2f3199234be77d36331ed234ec224c4403e",
   "rokaf-chat-attachments-object-storage": "1e882ca2caeeaecb25b86cfc051b4c59135ed6ff4f3c624fb86d096a569d67ce",
   "rokaf-clickhouse-replication-migration": "2e30e06627899201082179d0e10e40114bb6d33d8c2de14dae012690ae8d6635",
@@ -8,11 +8,11 @@
   "rokaf-database-ha-and-langfuse-migrations": "cdd5de14e250e5d072cc766154d26bb88c34883191014b5a939b4d4850e36dca",
   "rokaf-dns-vip-open-investigations": "01ef14de054161ae1cee470291284b70ec86f5ad92cc1477711286f3600140f7",
   "rokaf-gpu-discovery-open-investigation": "152d248d4986afbf40bf9c446a239d6501aa2c1b0fa64c73b1ea9cc3de8f9b08",
-  "rokaf-gpu-scheduling-and-capacity": "99f01c30d004e82635247f2d3151730e88e64846d26fea9ffc42c4c6f0ddad1d",
+  "rokaf-gpu-scheduling-and-capacity": "f0985acb114a1fe6f85df1cc2635ded98f9166f177bfdbe45295f766f1b2d121",
   "rokaf-identity-rbac-and-policy": "925549610b245cf5f7859035821d72852693626452f4b5755a72db74cc044818",
   "rokaf-internal-app-auth-and-tls": "7aef20a670629d3413a93a5d4622a956c6366a9ffb530f964a9f57cbf17fc2e5",
   "rokaf-langfuse-v4-migration-field-notes": "16aac53203939da726f29c55d4797308300370866ddb218cfaaf0b1edbdf0ba6",
-  "rokaf-networking-and-tls": "9f92234f7785d4cd4b6525f13f91047bf831346cae962e0f187be36ae6ccbcc1",
+  "rokaf-networking-and-tls": "7966d3ee355888fb8fc5a3e7149ffa5cc103217e876b04464fd0b2046e8647a1",
   "rokaf-object-storage-migration": "4e3165b7c21b56bfe9a81178f859d24b3eab4a5920ebcd18958a8e8deda23e9c",
   "rokaf-observability-and-failure-evidence": "20d70c373deed726ad973cb5de1f0d7cfdeaf1eed57d710c54235ce7d433f3d4",
   "rokaf-offline-gitops-delivery": "1171efc844e23f8229a0424314ef2f79ba2b732ca7e5565737f877103f1e4925",
@@ -24,6 +24,7 @@
   "tflite-micro-lifecycle-memory-planning": "3da69d122069dde15e01acadb7431cd55f7a496b1a96be7b257ceecda619afc4",
   "rokaf-memory-pressure-and-service-recovery": "f0652feb8caf2c12765e778ba469933a29a38192dfc87d5f0b96d9f1bd4d005a",
   "rokaf-storage-placement-and-failure-domains": "f59e15f3204afc9d5649190186d2742ad7e3a2d99761dcd5bfa20a0e58c02a47",
-  "rokaf-k3s-cni-service-datapath": "6d6953aee0e2336a9b0523f85bf632ca8a38f9fec15d02d1b6b1337d25c5a240",
-  "document-translation-pipeline": "19ceed6a4eb7460a0036bdcf35e66d6bb9e47ff6e72e5eac9aef074217624f29"
+  "rokaf-k3s-cni-service-datapath": "e132b7eb612f18a9367e680509a1e16f0b1d123d7709264bf40fd909a1a85a7a",
+  "document-translation-pipeline": "19ceed6a4eb7460a0036bdcf35e66d6bb9e47ff6e72e5eac9aef074217624f29",
+  "rokaf-central-gpu-platform-kai-jupyterhub": "4dd9ab8d75443ee3e5eb27858a29fd3dc315988f60514018bfda9d42992e3f6e"
 }

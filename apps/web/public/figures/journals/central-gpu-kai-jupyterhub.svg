@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1320 780" width="1320" height="780" role="img" aria-labelledby="title desc">
+  <title id="title">Centrally managed GPU platform</title>
+  <desc id="desc">Conceptual responsibilities: JupyterHub provides user notebook sessions, KAI Scheduler handles opted-in AI workload placement, and both rely on a shared K3s GPU resource pool. The diagram is not an internal network topology or proof that all notebooks used KAI.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0d1526"/>
+      <stop offset="100%" stop-color="#131e31"/>
+    </linearGradient>
+    <linearGradient id="well" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#14283c"/>
+      <stop offset="100%" stop-color="#183246"/>
+    </linearGradient>
+    <marker id="arr" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0L8 4L0 8Z" fill="#72d0c9"/></marker>
+    <style>
+      text { font-family: Inter, 'Noto Sans KR', 'Segoe UI', sans-serif; fill: #dbe7f6; }
+      .header { font-size: 34px; font-weight: 750; letter-spacing: -.6px; fill: #f4f8ff; }
+      .sub { font-size: 18px; fill: #9fb5cc; }
+      .eyebrow { font-size: 15px; font-weight: 720; letter-spacing: 1.5px; fill: #70e2d2; }
+      .cardhead { font-size: 28px; font-weight: 730; fill: #f6f9ff; }
+      .body { font-size: 19px; fill: #cad9e9; }
+      .small { font-size: 17px; fill: #9fb5cc; }
+      .key { font-size: 21px; font-weight: 700; fill: #e4f5f2; }
+      .foot { font-size: 16px; fill: #94a8bd; }
+    </style>
+  </defs>
+  <rect width="1320" height="780" rx="24" fill="url(#bg)"/>
+  <rect x="1.5" y="1.5" width="1317" height="777" rx="22" fill="none" stroke="#355066" stroke-width="2"/>
+  <text id="heading" class="header" x="62" y="72">Centrally managed GPU platform</text>
+  <text class="sub" x="62" y="108">Interactive sessions and AI jobs use a common Kubernetes GPU pool</text>
+  <path d="M62 140H1258" stroke="#314960" stroke-width="2"/>
+  <text class="eyebrow" x="64" y="186">INTERACTIVE COMPUTING</text>
+  <text class="eyebrow" x="692" y="186">AI WORKLOAD SCHEDULING</text>
+  <rect x="62" y="211" width="564" height="214" rx="18" fill="#172a41" stroke="#476f91" stroke-width="2"/>
+  <rect x="690" y="211" width="568" height="214" rx="18" fill="#172b3c" stroke="#3e9289" stroke-width="2"/>
+  <rect x="88" y="233" width="54" height="54" rx="14" fill="#32567b"/>
+  <path d="M106 252H124M106 261H124M106 270H118" stroke="#c9eeff" stroke-width="3" stroke-linecap="round"/>
+  <rect x="716" y="233" width="54" height="54" rx="14" fill="#2f6664"/>
+  <circle cx="743" cy="260" r="12" fill="none" stroke="#b1fff0" stroke-width="3"/>
+  <path d="M737 260H749M743 254V266" stroke="#b1fff0" stroke-width="2.5"/>
+  <text class="cardhead" x="157" y="264">JupyterHub</text>
+  <text class="body" x="92" y="322">User access and notebook sessions</text>
+  <text class="small" x="92" y="356">User session → Single-user Pod</text>
+  <text class="small" x="92" y="388">Interactive development workloads</text>
+  <text class="cardhead" x="784" y="264">KAI Scheduler</text>
+  <text class="body" x="719" y="322">AI job placement and queue policies</text>
+  <text class="small" x="719" y="356">Selected Pods → Scheduler / Queue</text>
+  <text class="small" x="719" y="388">Resource-aware scheduling decisions</text>
+  <path d="M344 425V477" stroke="#75c8df" stroke-width="4" stroke-linecap="round" marker-end="url(#arr)"/>
+  <path d="M974 425V477" stroke="#6bd7bd" stroke-width="4" stroke-linecap="round" marker-end="url(#arr)"/>
+  <rect x="63" y="493" width="1195" height="178" rx="18" fill="url(#well)" stroke="#376d73" stroke-width="2"/>
+  <text class="eyebrow" x="91" y="526">COMMON K3s PLATFORM</text>
+  <text class="key" x="92" y="567">NVIDIA GPU Operator / Device Plugin</text>
+  <text class="small" x="92" y="596">Advertises allocatable GPU resources</text>
+  <path d="M614 538V641" stroke="#4d798b" stroke-width="2" stroke-dasharray="5 7"/>
+  <text class="key" x="653" y="567">Shared accelerator capacity</text>
+  <text class="small" x="653" y="596">GPU nodes and container workloads</text>
+  <text class="small" x="653" y="625">Time-slicing adds slots, not memory</text>
+  <path d="M63 697H1257" stroke="#314960" stroke-width="2"/>
+  <text class="foot" x="63" y="730">Conceptual responsibilities — no internal topology, identities or actual queue policies shown.</text>
+  <text class="foot" x="63" y="756">JupyterHub sessions use KAI only when their Pod scheduler is configured accordingly.</text>
+</svg>
