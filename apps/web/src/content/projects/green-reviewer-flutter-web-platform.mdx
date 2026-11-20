@@ -1,0 +1,73 @@
+---
+title: "Green Reviewer: Flutter Client and Web Backend"
+description: "Built a web/mobile greenwashing-review service with a Flutter/Dart client, Node.js backend, database services and Docker-based deployment workflow."
+date: "2023-12-22"
+updated: "2026-11-20"
+draft: false
+reviewed: true
+reviewStatus: "reviewed"
+sensitivity: public
+category: "Software Engineering"
+area: "Full-Stack Applications"
+tags: ["Flutter", "Dart", "Node.js", "Express", "SQL", "Docker", "Web Applications"]
+type: "implementation-note"
+role: "Web/mobile application and backend development"
+period: "Sep–Dec 2023"
+status: "archived"
+source: "Public GitHub repository"
+sourceUrl: "https://github.com/Petooooo/green-reviewer"
+techStack: ["Dart", "Flutter", "JavaScript", "Node.js", "Express", "SQL", "Docker"]
+---
+
+In September–December 2023, I worked on **Green Reviewer**, a web and mobile application that let users examine products through reviews concerned with misleading environmental claims. The original project was motivated by greenwashing: product marketing could communicate an environmental benefit without giving the consumer an equally clear basis for evaluating it.
+
+I developed the **client, web application and server-side components**, and the original repository still contains the application and server structure. This project is different from my later kernel and infrastructure work, but it remains worth keeping because it records an end-to-end application with a real client/server boundary.
+
+*This retrospective was written in November 2026 from the 2023 project and its publicly available repository. The project date is historical; it is not a claim that this article was published in 2023.*
+
+## A service spanning mobile, web and backend
+
+The client was built with **Flutter and Dart**, while the backend used **Node.js and Express**. The repository separates the client from server-side components and documents a database-facing service as well as a conversion and facade-server arrangement.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/green-reviewer-client-backend.svg" target="_blank" rel="noopener noreferrer" aria-label="Open green reviewer client and backend boundaries figure">
+    <img src="/figures/journals/green-reviewer-client-backend.svg" alt="Flutter client and Node Express API services connected to SQL persistence" loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Conceptual client and backend services drawn from the public Green Reviewer repository.</figcaption>
+</figure>
+
+The reason for separating these responsibilities was practical: the client handled navigation and displaying product/review information, while the server handled requests, data processing and database access. The same underlying service could support web and mobile clients instead of embedding the database connection in each client.
+
+## Product information, reviews and user experience
+
+The application focused on exposing environmental claims and review information in a way that users could browse and compare. The project description also included links to products or purchases, connecting review data with the user's next action.
+
+That required a coherent contract between presentation and backend data: a page should not need to know how database records are stored, and a backend response should provide enough structure for both web and mobile screens.
+
+## Running the backend as services
+
+The public repository documents a **Docker Compose** path for the server components and a conventional local Flutter workflow for the client. It also contains configuration templates for database, conversion-server and facade-server connections.
+
+Those files show that the system was structured as multiple cooperating processes, rather than only a visual prototype. I kept configuration placeholders in the public repository and do not reproduce private deployment credentials or historical production endpoints here.
+
+The repository also references AWS as part of the original stack. I describe it as a technology used in the project, not as evidence of a specific uptime guarantee or a currently operating public service.
+
+## What I built and retained
+
+| Layer | Implementation |
+| --- | --- |
+| Client | Flutter/Dart interface for web and mobile |
+| Backend | Node.js / Express services and API handling |
+| Data | SQL-backed storage through backend components |
+| Packaging | Docker Compose backend installation path |
+| Repository | Public client/server source and project documentation |
+
+The useful part of this project is the **complete application boundary**—a user interface, application server, persistence and a deployable server configuration. I did not treat the original public endpoint as a live availability claim in 2026.
+
+The source remains available at [Green Reviewer on GitHub](https://github.com/Petooooo/green-reviewer). It also provides a concrete starting point for the infrastructure work I later did at a different scale.
+
+## Related projects
+
+- [PyTokenizer: Lex/Yacc Front End](/projects/python-tokenizer-lex-yacc/)
+- [FreeRTOS Multi-Board Mini-Desktop](/projects/freertos-multiboard-mini-desktop/)
+- [On-Premises K3s Platform Operations](/projects/independent-on-premises-k3s-platform-engineering/)

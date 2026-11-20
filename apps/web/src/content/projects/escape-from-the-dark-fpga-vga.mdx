@@ -1,0 +1,55 @@
+---
+title: "Escape From the Dark: Verilog VGA Game on FPGA"
+description: "Implemented an FPGA-based VGA game using Verilog and a DE2 board, connecting synchronous game logic with a pixel-timed video output."
+date: "2023-06-23"
+updated: "2026-11-20"
+draft: false
+reviewed: true
+reviewStatus: "reviewed"
+sensitivity: public
+category: "Computer Engineering"
+area: "Digital Logic and FPGA"
+tags: ["Verilog", "FPGA", "VGA", "Digital Logic", "DE2"]
+type: "implementation-note"
+role: "Verilog game logic and FPGA VGA-output implementation"
+period: "May–Jun 2023"
+status: "archived"
+techStack: ["Verilog", "FPGA", "DE2", "VGA"]
+---
+
+In May–June 2023, I built **Escape From the Dark**, a VGA-output game implemented in **Verilog on a DE2 FPGA board**. It was an early project in which the visible result depended on hardware timing as much as on application logic.
+
+Unlike software that can draw a screen whenever its event loop is ready, a basic FPGA VGA design has to produce video information on a predictable pixel and line schedule.
+
+*This retrospective was prepared in November 2026 from the earlier project/CV record. The date refers to the original project, not to publication of the article.*
+
+## Video timing is part of the design
+
+A VGA controller advances through pixel positions and line intervals with synchronization and blanking periods. Game graphics must be selected according to that scan position and the current game state.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/fpga-vga-game-pipeline.svg" target="_blank" rel="noopener noreferrer" aria-label="Open fpga vga timing and game-state path figure">
+    <img src="/figures/journals/fpga-vga-game-pipeline.svg" alt="Verilog game state, pixel scan position, color selection and VGA signal output" loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Game logic and scan timing cooperate to produce VGA video output.</figcaption>
+</figure>
+
+The main design challenge was separating **the timing that drives the display** from **the state that describes the game**. Updating game state and generating the video signal are related operations, but they should not be confused.
+
+## Game state in synchronous logic
+
+I implemented the game logic as an RTL design, using clocked state transitions to control what appeared on the VGA output. The board supplied the hardware execution environment; the logic described how state and rendered output changed over time.
+
+The design therefore connected three concerns: the current input/game state, the state transition at a clock boundary and the pixel output derived from that state.
+
+## Result
+
+The finished 2023 project was a **Verilog FPGA game displayed through VGA on DE2 hardware**. I have retained it as a compact digital-design example because it shows a working end-to-end path from RTL state to a user-visible output.
+
+The remaining historical material does not give a complete input-interface specification or a reproducible FPGA timing report, so I have not invented game rules, control wiring or device utilization figures.
+
+## Related projects
+
+- [FreeRTOS Multi-Board Mini-Desktop](/projects/freertos-multiboard-mini-desktop/)
+- [Five-Stage RISC CPU and Pipeline Hazards](/projects/risc-cpu-five-stage-pipeline/)
+- [Systolic Array on FPGA](/projects/fpga-systolic-array-matrix-multiplication/)

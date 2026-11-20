@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1260 490" width="1260" height="490" role="img" aria-labelledby="title desc">
+<title id="title">Green Reviewer application boundaries</title>
+<desc id="desc">Web/mobile presentation, API services and data</desc>
+<defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#0d1424"/><stop offset="1" stop-color="#111f33"/></linearGradient><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M0 0L10 5L0 10Z" fill="#7fdbc7"/></marker></defs>
+<rect width="1260" height="490" rx="20" fill="url(#bg)"/><rect x="1" y="1" width="1258" height="488" rx="19" fill="none" stroke="#31465c" stroke-width="2"/>
+<text x="64" y="77" font-size="34" font-family="Inter, Noto Sans KR, Segoe UI, sans-serif" font-weight="750" fill="#f4f7fc">Green Reviewer application boundaries</text>
+<text x="64" y="113" font-family="Inter, Noto Sans KR, Segoe UI, sans-serif" font-size="21" fill="#9eb6cb">Web/mobile presentation, API services and data</text><path d="M64 148H1196" stroke="#31465c" stroke-width="2"/>
+<g font-family="Inter, Noto Sans KR, Segoe UI, sans-serif"><rect x="64" y="204" width="270.5" height="111" rx="14" fill="#1b2b43" stroke="#527e9e" stroke-width="1.7"/>
+<text x="199.25" y="264" font-size="21" font-weight="700" text-anchor="middle" fill="#e7f2ff">Flutter / Dart</text>
+<path d="M336.5 259h10" stroke="#7fdbc7" stroke-width="2.5" marker-end="url(#arrow)"/>
+<rect x="348.5" y="204" width="270.5" height="111" rx="14" fill="#1b3545" stroke="#509b98" stroke-width="1.7"/>
+<text x="483.75" y="264" font-size="21" font-weight="700" text-anchor="middle" fill="#e7f2ff">Node.js API</text>
+<path d="M621 259h10" stroke="#7fdbc7" stroke-width="2.5" marker-end="url(#arrow)"/>
+<rect x="633" y="204" width="270.5" height="111" rx="14" fill="#1b2b43" stroke="#527e9e" stroke-width="1.7"/>
+<text x="768.25" y="264" font-size="21" font-weight="700" text-anchor="middle" fill="#e7f2ff">Facade services</text>
+<path d="M905.5 259h10" stroke="#7fdbc7" stroke-width="2.5" marker-end="url(#arrow)"/>
+<rect x="917.5" y="204" width="270.5" height="111" rx="14" fill="#1b3545" stroke="#509b98" stroke-width="1.7"/>
+<text x="1052.75" y="264" font-size="21" font-weight="700" text-anchor="middle" fill="#e7f2ff">SQL storage</text>
+<rect x="64" y="366" width="364" height="56" rx="10" fill="#121f31" stroke="#355067"/>
+<text x="246" y="401" text-anchor="middle" font-size="16" fill="#c7d9ec">Web and mobile clients</text>
+<rect x="452" y="366" width="364" height="56" rx="10" fill="#121f31" stroke="#355067"/>
+<text x="634" y="401" text-anchor="middle" font-size="16" fill="#c7d9ec">Server-side processing</text>
+<rect x="840" y="366" width="364" height="56" rx="10" fill="#121f31" stroke="#355067"/>
+<text x="1022" y="401" text-anchor="middle" font-size="16" fill="#c7d9ec">Docker Compose runtime</text></g>
+<text x="64" y="466" font-family="Inter, Noto Sans KR, Segoe UI, sans-serif" font-size="16" fill="#8ea8bd">Conceptual modules from public repository, not a live deployment diagram</text></svg>

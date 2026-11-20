@@ -1,0 +1,79 @@
+---
+title: "Five-Stage RISC CPU: Pipeline Hazards and Forwarding"
+description: "Designed and verified a five-stage Verilog RISC CPU with forwarding, stalls and control-hazard handling on an FPGA-oriented datapath."
+date: "2024-06-28"
+updated: "2026-11-20"
+draft: false
+reviewed: true
+reviewStatus: "reviewed"
+sensitivity: public
+category: "Computer Engineering"
+area: "Processor Architecture"
+tags: ["Verilog", "RISC", "CPU Pipeline", "Hazard Detection", "FPGA", "Computer Architecture"]
+type: "implementation-note"
+role: "Datapath, control logic, hazard handling and testbench implementation in a two-person project"
+period: "May–Jun 2024"
+status: "archived"
+techStack: ["Verilog", "FPGA", "RTL Simulation", "Testbench"]
+---
+
+I built a **five-stage pipelined RISC processor in Verilog** as a two-person undergraduate project in May–June 2024. I implemented the processor system, including the datapath, control logic and pipeline hazard handling, and checked execution with my own instruction sequences and testbenches.
+
+The interesting part was not merely splitting instruction execution into five stages. It was keeping the architectural result correct when several instructions occupied the datapath at once.
+
+*This retrospective was written in November 2026 from the project details preserved in my CV and earlier engineering discussions. The date above marks the project period, not the original publication of this page.*
+
+## The five pipeline stages
+
+The processor followed **IF → ID → EX → MEM → WB**. Fetch obtained the next instruction; decode read registers and interpreted control signals; execution performed arithmetic or calculated an address; memory handled load/store activity; writeback committed the result to the register file.
+
+The stages were connected by pipeline registers. Control and data had to travel together: a destination register selected during decode still mattered when the producing instruction reached writeback.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/risc-five-stage-hazards.svg" target="_blank" rel="noopener noreferrer" aria-label="Open five-stage processor and hazard controls figure">
+    <img src="/figures/journals/risc-five-stage-hazards.svg" alt="Five-stage IF, ID, EX, MEM and WB datapath with forwarding, load-use stalls and branch control" loading="lazy" decoding="async" />
+  </a>
+  <figcaption>The five-stage RISC datapath and the locations where forwarding, stalls and branch control affect execution.</figcaption>
+</figure>
+
+## Forwarding values that were not yet written back
+
+A dependent instruction can reach EX before its predecessor has written a result into the register file. Waiting for every value to arrive in WB would make the pipeline unnecessarily idle.
+
+I implemented **forwarding logic** so execution could select a newer result from a later pipeline stage rather than using an older register-file value. That required comparing the source registers of the current instruction with destination registers of in-flight instructions, while respecting which instructions actually produce a value.
+
+Forwarding is not just a multiplexer added at the end: the relevant control and data must be present at the correct cycle. A forwarding select that arrives too late is as damaging as forwarding the wrong register.
+
+## Stalling load-use dependencies
+
+An immediate consumer of a load is different. The loaded value may not exist early enough for the next instruction's EX stage, even though arithmetic results can be forwarded.
+
+I added **hazard detection and stalls** for the load-use case. The pipeline had to preserve the waiting instruction, keep the required program-counter/decode state, and prevent the dependent instruction from using stale data. After the value became available, execution could continue.
+
+The stall control also had to avoid accidentally replaying an instruction that had already committed a side effect.
+
+## Control hazards and PC updates
+
+Branches and jumps introduced another issue: instructions fetched along a speculative sequential path might not be the instructions that should execute. I handled **branch/jump control hazards** through the pipeline control and PC-selection logic, accounting for instructions that needed to be held or invalidated when control flow changed.
+
+I used deliberately small instruction sequences to expose these cases. Testing only a long program's final register state can conceal a bad pipeline decision if later instructions happen to overwrite the evidence.
+
+## Validation and outcome
+
+| Case | Implementation or verification focus |
+| --- | --- |
+| Independent arithmetic | Instruction decode, arithmetic path and writeback |
+| Back-to-back dependencies | Forwarded operands and destination-register matching |
+| Load followed by dependent instruction | Hazard detection and correct stall behavior |
+| Branch and jump sequences | PC change and wrong-path instruction handling |
+| Mixed sequences | Timing of pipeline registers and visible architectural state |
+
+The completed project was a **working RTL processor design with custom testbench verification of data and control hazards**. I did not preserve cycle-by-cycle benchmark data or a reproducible synthesis report in the material used to write this article, so I have not invented frequency, IPC or LUT figures.
+
+Working through these cases made the interface between **instruction-set behavior and microarchitectural timing** tangible. This project later informed the way I thought about scheduling, buffer lifetimes and hardware datapaths in other systems work.
+
+## Related projects
+
+- [Systolic Array Matrix Multiplication on FPGA](/projects/fpga-systolic-array-matrix-multiplication/)
+- [Bit-Shift CNN Accelerator on Zynq FPGA](/projects/bit-shift-cnn-accelerator-zynq/)
+- [FreeRTOS Multi-Board Mini-Desktop](/projects/freertos-multiboard-mini-desktop/)

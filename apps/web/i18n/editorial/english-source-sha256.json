@@ -1,5 +1,5 @@
 {
-  "bit-shift-cnn-accelerator-zynq": "6b25cba32ae8dc129df6384a1feb80b674f0834f90c465df11af2eacedba0e48",
+  "bit-shift-cnn-accelerator-zynq": "254ef8393d59459dc23be3e1c71953f40e27db45c2888ba6765c4aa448fe3a41",
   "independent-on-premises-k3s-platform-engineering": "8c023405af757fa314e14bf505bb004ac5ff1125b463ceb324b9f117961be354",
   "rokaf-async-workers-and-idempotency": "7558d5dd905afa6d50b7dac66858c2f3199234be77d36331ed234ec224c4403e",
   "rokaf-chat-attachments-object-storage": "1e882ca2caeeaecb25b86cfc051b4c59135ed6ff4f3c624fb86d096a569d67ce",
@@ -21,10 +21,16 @@
   "rokaf-self-hosted-services-integration": "12a5e2972f3b8cb441de700122216f02785d7136c98ab4eba0e4f93d8be61633",
   "rokaf-service-lb-hostport-conflict": "6b2d5bd5a4daae723e960462086d3927ed7787ed87fbae71724d68c74caa3600",
   "rokaf-stateful-storage-and-recovery": "2f744a7c382887fc03f48774a4276cf5a6e11b9be6e686e6e4e05665854f7eec",
-  "tflite-micro-lifecycle-memory-planning": "3da69d122069dde15e01acadb7431cd55f7a496b1a96be7b257ceecda619afc4",
+  "tflite-micro-lifecycle-memory-planning": "ca0dae779cdb4036b388c6179df1765df8b345db2557ff76528ec98e692629c1",
   "rokaf-memory-pressure-and-service-recovery": "f0652feb8caf2c12765e778ba469933a29a38192dfc87d5f0b96d9f1bd4d005a",
   "rokaf-storage-placement-and-failure-domains": "f59e15f3204afc9d5649190186d2742ad7e3a2d99761dcd5bfa20a0e58c02a47",
   "rokaf-k3s-cni-service-datapath": "e132b7eb612f18a9367e680509a1e16f0b1d123d7709264bf40fd909a1a85a7a",
   "document-translation-pipeline": "19ceed6a4eb7460a0036bdcf35e66d6bb9e47ff6e72e5eac9aef074217624f29",
-  "rokaf-central-gpu-platform-kai-jupyterhub": "4dd9ab8d75443ee3e5eb27858a29fd3dc315988f60514018bfda9d42992e3f6e"
+  "rokaf-central-gpu-platform-kai-jupyterhub": "4dd9ab8d75443ee3e5eb27858a29fd3dc315988f60514018bfda9d42992e3f6e",
+  "risc-cpu-five-stage-pipeline": "10c1c39f0126bb66c70600cc30ecefa026d8e3804dfb528157934fd476b5d0a1",
+  "freertos-multiboard-mini-desktop": "fc12493c0467e5524d0be4dea1120f43927ab110917bc5056a6aa574236005c5",
+  "fpga-systolic-array-matrix-multiplication": "0e7f2016b4b001efd85a0c3cc9433c2338a7c1685ca867d5b27c3626261ca0f8",
+  "python-tokenizer-lex-yacc": "abea04a54cd3012e4aa40b90ae92e33463606d0d520fff0c9af1a915e4a3e836",
+  "green-reviewer-flutter-web-platform": "3f5a773c8b1aa7aa0b04f6a6ae1c1a9deb02d180e5c9d672f748cef9343749e0",
+  "escape-from-the-dark-fpga-vga": "7dd1a184d27586c8629362620b0f11e72ea58a5b24a6c54284319cd986431735"
 }

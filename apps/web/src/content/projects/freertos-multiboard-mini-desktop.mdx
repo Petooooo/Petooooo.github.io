@@ -1,0 +1,75 @@
+---
+title: "FreeRTOS Mini-Desktop: Tasks and Multi-Board Coordination"
+description: "Built a three-board STM32 FreeRTOS desktop-style system with ten concurrent tasks, UART/GPIO communication, priorities, mutexes and sleep/resume behavior."
+date: "2023-11-30"
+updated: "2026-11-20"
+draft: false
+reviewed: true
+reviewStatus: "reviewed"
+sensitivity: public
+category: "Embedded Systems"
+area: "Real-Time Operating Systems"
+tags: ["FreeRTOS", "STM32", "C", "UART", "GPIO", "Mutex", "Scheduling"]
+type: "implementation-note"
+role: "Overall system architecture, task coordination and multi-board application design"
+period: "Oct–Nov 2023"
+status: "archived"
+techStack: ["C", "FreeRTOS", "STM32", "UART", "GPIO"]
+---
+
+In October–November 2023, I designed the overall architecture of a **Mini-Desktop system using FreeRTOS and three STM32 boards**. It ran **ten concurrent tasks** and brought cursor/window interaction, multiple applications and sleep/resume behavior into a coordinated embedded environment.
+
+The project was about giving several pieces of application behavior a common execution model instead of treating every button, display update and communication event as an isolated loop.
+
+*This retrospective was prepared in November 2026 from my earlier CV and project discussions. The displayed project date marks completion, not a claim that this page existed in 2023.*
+
+## Why the system needed tasks
+
+In a single polling loop, an application can easily block unrelated work while waiting for input or communication. The Mini-Desktop had to handle multiple activities, maintain interactive state and exchange information between boards.
+
+I organized the application into FreeRTOS tasks, with **priorities** controlling which work should respond promptly and **mutexes** protecting shared state. The point was not to launch ten identical loops; it was to define responsibilities that could proceed concurrently without corrupting shared application or display data.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/freertos-multiboard-desktop.svg" target="_blank" rel="noopener noreferrer" aria-label="Open freertos tasks and multi-board communication figure">
+    <img src="/figures/journals/freertos-multiboard-desktop.svg" alt="Three STM32 boards and their FreeRTOS tasks connected over UART, with priorities, mutexes and shared application state" loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Conceptual division of multi-board communication, FreeRTOS tasks and desktop-style interaction.</figcaption>
+</figure>
+
+## Coordinating three STM32 boards
+
+The system combined local inputs and outputs over **GPIO** with board-to-board communication over **UART**. Those channels had different responsibilities. GPIO communicated directly with hardware state; UART carried information across a board boundary where timing and message arrival were not identical to a local function call.
+
+The design therefore had to decide where state was owned and which events required communication. A shared desktop-like interface needs a consistent view of its active window, cursor and application state even when data originates on different boards.
+
+## Scheduling and protecting shared state
+
+I worked with **priority-based scheduling** and mutual exclusion. A fast input task must not corrupt state used by another task while a UI or application update is in progress. A mutex can protect that shared state, but holding it for too long can also delay a higher-priority task.
+
+Separating work into tasks helped, but did not remove the need to reason about ordering. The design had to account for which tasks produced events, which consumed them and which state could be modified concurrently.
+
+This was my first practical exposure to the same kind of question that appears in larger systems: **Who owns mutable state, and what happens when another execution context arrives first?**
+
+## Desktop behavior on constrained hardware
+
+The implemented interface included **cursor/window interaction**, concurrent application behavior, and **sleep/resume** handling. Those requirements are modest on a personal computer but significant on a microcontroller, where task scheduling, input handling and device communication all share a constrained runtime.
+
+I tested the user-visible behavior across task transitions and board communication paths rather than treating the successful startup of FreeRTOS as sufficient evidence that the desktop worked.
+
+## What I implemented
+
+| Subsystem | Work performed |
+| --- | --- |
+| Execution model | Ten concurrent FreeRTOS tasks across the three-board system |
+| Communication | GPIO input/output and UART connections between boards |
+| Synchronization | Task priorities, mutexes and shared-state coordination |
+| Interaction | Cursor/window controls and concurrent application behavior |
+| Lifecycle | Sleep/resume behavior and state transitions |
+
+The result was a **functioning multi-board RTOS application** with task-level scheduling and synchronization, not a demonstration that FreeRTOS could simply boot. The surviving account does not contain timing measurements or a formal worst-case response-time analysis, so those are not claimed here.
+
+## Related projects
+
+- [Five-Stage RISC CPU and Pipeline Hazards](/projects/risc-cpu-five-stage-pipeline/)
+- [PyTokenizer: Lex/Yacc Front End](/projects/python-tokenizer-lex-yacc/)
+- [TensorFlow Lite Micro Memory Planning](/projects/tflite-micro-lifecycle-memory-planning/)

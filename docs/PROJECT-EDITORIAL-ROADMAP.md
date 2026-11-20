@@ -13,6 +13,25 @@ This document separates **published engineering records** from **candidate artic
 | Projects | Undergraduate project implementations and ROKAF engineering experience only |
 | Notes / systems-notes | Linux system notes, a topic index, and future Korean technical articles (English navigation and metadata) |
 
+## Historical undergraduate projects — published and arranged by project period
+
+These articles are **retrospectives prepared in 2026** from earlier project/CV records. The project metadata distinguishes the **period of the actual work** from the modern editorial date. The historical `date` field is used only as a chronological sort key; readers see the original **project period** and the **retrospective edited** date. No claim is made that the articles themselves were published in 2023–2024.
+
+| Actual project period | Article | Placement |
+| --- | --- | --- |
+| May–Jun 2023 | `escape-from-the-dark-fpga-vga` | Undergraduate archive, FPGA VGA/RTL |
+| Sep–Dec 2023 | `green-reviewer-flutter-web-platform` | Undergraduate archive, web/mobile/client-server; public repository checked |
+| Oct–Nov 2023 | `python-tokenizer-lex-yacc` | Undergraduate archive, compiler front end |
+| Oct–Nov 2023 | `freertos-multiboard-mini-desktop` | CV core project and archive, three STM32 boards / ten tasks |
+| Apr–May 2024 | `fpga-systolic-array-matrix-multiplication` | Undergraduate archive; distinct forerunner to CNN |
+| May–Jun 2024 | `risc-cpu-five-stage-pipeline` | CV core project and archive, forwarding/stall/branch hazards |
+| Sep–Dec 2024 | `tflite-micro-lifecycle-memory-planning` | CV core and featured highlight, original report |
+| Sep–Dec 2024 | `bit-shift-cnn-accelerator-zynq` | CV core and featured highlight, team poster |
+
+Earlier CV brainstorming also mentioned **Crime Prevention IoT** (Nov–Dec 2023), **PTSD study-timer** (Apr–Jun 2023), **digital clock** (Mar–Apr 2023) and **Linux-as-main-OS semester experience** (Mar–Jun 2023). These are **not new standalone public Projects**. Crime Prevention IoT had been expressly excluded from the final CV list in earlier reviews; the others are not as independently strong or technically supported as the eight selected write-ups. Do not create invented source/test/metric claims merely to expand the archive.
+
+The earlier **Systolic Array** and **PyTokenizer** CV entries were previously deprioritized from the short CV. They are now preserved in the broader Projects archive, while the short CV still highlights the four principal systems/hardware projects. All six new articles include manually edited Korean versions and conceptual diagrams.
+
 ## ROKAF engineering records — published
 
 The independent K3s platform article is the **overview/index**. Its topic pages are expanded first-person engineering journals, not technology name lists.

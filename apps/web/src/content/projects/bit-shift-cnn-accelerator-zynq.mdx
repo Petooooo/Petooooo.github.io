@@ -1,7 +1,8 @@
 ---
 title: "Bit-Shift-Based CNN Accelerator on Zynq FPGA"
 description: "A team-built CNN inference system combining power-of-two weight quantization, shift-based processing elements, and a PS/PL architecture."
-date: "2026-11-15"
+date: "2024-12-23"
+updated: "2026-11-20"
 draft: false
 reviewed: true
 sensitivity: public
@@ -15,7 +16,7 @@ status: "archived"
 techStack: ["Verilog", "C", "Python", "JavaScript", "Zynq FPGA", "AXI4-Lite"]
 ---
 
-> **Project context:** 2024 electronic-engineering graduation team project at Kyung Hee University. This write-up draws from our final poster, *Bit-Shift-Based CNN Accelerator: A Compact and Energy-Efficient Solution*, and my submitted project/CV summary. The poster documents our team architecture and evaluations. My detailed OSL-oriented CV records that I developed **all PS software**, led **overall PL architecture and timing**, had primary responsibility for the **systolic-array accelerator and WS/IS dataflow**, **co-designed the BRAM data path**, independently trained the quantized CNN, and implemented both multiplier- and shift-based matrix multiplication accelerators. The mobile app and communication server were also recorded in my project portfolio. This was still a team project, with the BRAM work explicitly shared.
+> **Project context:** 2024 electronic-engineering graduation team project at Kyung Hee University. This write-up was prepared in November 2026; the displayed milestone date refers to the original project period. This write-up draws from our final poster, *Bit-Shift-Based CNN Accelerator: A Compact and Energy-Efficient Solution*, and my submitted project/CV summary. The poster documents our team architecture and evaluations. My detailed OSL-oriented CV records that I developed **all PS software**, led **overall PL architecture and timing**, had primary responsibility for the **systolic-array accelerator and WS/IS dataflow**, **co-designed the BRAM data path**, independently trained the quantized CNN, and implemented both multiplier- and shift-based matrix multiplication accelerators. The mobile app and communication server were also recorded in my project portfolio. This was still a team project, with the BRAM work explicitly shared.
 
 <div className="grid gap-4 border-y border-white/10 py-5 sm:grid-cols-3">
   <div><p className="text-2xl font-semibold text-white">−36.5%</p><p className="mt-1 text-xs text-slate-400">FPGA LUT utilization</p></div>
@@ -64,7 +65,7 @@ The project used a **Zynq processing system (PS) + programmable logic (PL)** des
 </figure>
 
 
-The system diagram assignsThe system diagram assigns several supporting CNN operations to software on the **PS**, including **IM2COL**, **ReLU**, and **max pooling**. A memory/interconnect path links that software work to the PL accelerator. The poster labels the PS/PL interfaces **AXI4-Lite**.
+The system diagram assigns several supporting CNN operations to software on the **PS**, including **IM2COL**, **ReLU**, and **max pooling**. A memory/interconnect path links that software work to the PL accelerator. The poster labels the PS/PL interfaces **AXI4-Lite**.
 
 On the **PL**, the documented modules are:
 

@@ -38,6 +38,17 @@ const investigationOrder = [
   "rokaf-control-plane-incident-log",
   "rokaf-memory-pressure-and-service-recovery"
 ];
+const undergraduateArchiveOrder = [
+  "escape-from-the-dark-fpga-vga",
+  "python-tokenizer-lex-yacc",
+  "freertos-multiboard-mini-desktop",
+  "green-reviewer-flutter-web-platform",
+  "fpga-systolic-array-matrix-multiplication",
+  "risc-cpu-five-stage-pipeline"
+];
+const undergraduateArchive = projects
+  .filter((p) => undergraduateArchiveOrder.includes(p.slug))
+  .sort((a, b) => undergraduateArchiveOrder.indexOf(a.slug) - undergraduateArchiveOrder.indexOf(b.slug));
 const journal = projects
   .filter((p) => rokafOrder.includes(p.slug))
   .sort((a, b) => rokafOrder.indexOf(a.slug) - rokafOrder.indexOf(b.slug));
@@ -93,7 +104,14 @@ const highlights = [
         </article>
       ))}
     </div>
-    <p class="mt-6 text-sm leading-7 text-slate-400">The two undergraduate projects now have detailed write-ups based on my original 2024 report and team poster. Reported results, individual responsibilities, and unverified aspects are distinguished within each article.</p>
+    <p class="mt-6 text-sm leading-7 text-slate-400">The two highlighted undergraduate projects are based on their original 2024 report and team poster. Earlier implementations appear below in project-period order; all historical write-ups are 2026 retrospectives, not posts published at the time.</p>
+  </section>
+
+  <section class="border-t border-white/10 py-12 md:py-16">
+    <SectionHeader eyebrow="Undergraduate · 2023–2024" title="Earlier systems & software projects" description="Processor design, RTOS coordination, FPGA dataflow, compilers and applications — arranged by when the projects were done." />
+    <div class="grid gap-4 md:grid-cols-2">
+      {undergraduateArchive.map((project) => <ProjectCard project={project} />)}
+    </div>
   </section>
 
   <section class="border-t border-white/10 py-12 md:py-16">

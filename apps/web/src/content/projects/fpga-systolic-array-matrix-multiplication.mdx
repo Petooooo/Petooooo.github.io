@@ -1,0 +1,60 @@
+---
+title: "FPGA Systolic Array: Matrix Multiplication Dataflow"
+description: "Implemented a systolic-array matrix multiplication accelerator and examined how local processing elements and data movement support convolution-oriented computation."
+date: "2024-05-28"
+updated: "2026-11-20"
+draft: false
+reviewed: true
+reviewStatus: "reviewed"
+sensitivity: public
+category: "Computer Engineering"
+area: "Hardware Acceleration"
+tags: ["FPGA", "Verilog", "Systolic Array", "Matrix Multiplication", "Dataflow"]
+type: "implementation-note"
+role: "Systolic-array matrix multiplication accelerator design and implementation"
+period: "Apr–May 2024"
+status: "archived"
+techStack: ["Verilog", "FPGA", "Matrix Multiplication"]
+---
+
+Before the later bit-shift CNN accelerator, I worked on a **systolic-array matrix multiplication project on FPGA** in April–May 2024. The original objective was to implement an array of processing elements in which operands advance through neighboring stages instead of repeatedly returning to a central compute unit.
+
+This was a separate, earlier exercise in **dataflow and hardware scheduling**. It provided experience that I later used in the Zynq CNN project, where the array became part of a larger model-to-hardware inference system.
+
+*This retrospective was written in November 2026 from my earlier portfolio/CV record. The project date corresponds to the 2024 work, not to publication of this article.*
+
+## Mapping a matrix operation onto hardware
+
+Matrix multiplication repeatedly accumulates products from corresponding row and column elements. A systolic array maps that repetition into local processing elements (PEs). Operands enter the array along defined edges, travel between neighboring PEs, and contribute to partial sums as the pipeline advances.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/fpga-systolic-matrix-array.svg" target="_blank" rel="noopener noreferrer" aria-label="Open systolic array matrix-multiplication data movement figure">
+    <img src="/figures/journals/fpga-systolic-matrix-array.svg" alt="Local processing element flow for systolic matrix multiplication and partial sum accumulation" loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Conceptual systolic-array data movement rather than the measured hardware resource layout.</figcaption>
+</figure>
+
+The central design problem was not the arithmetic expression alone. **Data must arrive at a PE in the correct cycle** for the intended multiplication and accumulation. A valid formula with misaligned operands produces the wrong matrix.
+
+## Processing elements and data movement
+
+I implemented a systolic structure for matrix multiplication and worked with the sequencing between **PE computation** and **operand movement**. The local connections reduce the need for each processing element to fetch every operand independently, but the boundary inputs still need coordinated timing.
+
+A systolic design also has startup and drain phases. Not every processing element produces a valid result on the first cycle. The controller and testbench must account for when a partial result becomes meaningful.
+
+## Why this mattered for convolution
+
+Many convolution implementations can rearrange or tile operations into matrix-like products. A systolic array is therefore a reusable compute pattern, although the complete CNN pipeline adds image-to-matrix conversion, quantization, buffering, nonlinear operations and host/accelerator coordination.
+
+The later [Bit-Shift CNN Accelerator on Zynq FPGA](/projects/bit-shift-cnn-accelerator-zynq/) introduced that larger system: PS/PL integration, IM2COL, BRAM paths, quantized weights and alternative PE arithmetic. This earlier project is retained separately because it focuses on the **array's spatial data movement**, not the final CNN results.
+
+## Implementation checkpoint
+
+The 2024 portfolio record identifies a completed **FPGA systolic-array matrix-multiplication accelerator**. It does not supply an independently preserved clock-frequency, throughput or FPGA resource table for this earlier project, so the later CNN project's measured results are not attributed to it.
+
+The useful outcome was the hardware design experience: translating a parallel mathematical operation into **cycle-aligned processing, local operand movement and verification of the resulting dataflow**.
+
+## Related projects
+
+- [Five-Stage RISC CPU and Pipeline Hazards](/projects/risc-cpu-five-stage-pipeline/)
+- [Bit-Shift CNN Accelerator on Zynq FPGA](/projects/bit-shift-cnn-accelerator-zynq/)

@@ -1,0 +1,60 @@
+---
+title: "PyTokenizer: Lexical and Syntax Analysis with Lex/Yacc"
+description: "Implemented a Python-oriented tokenizer and syntax-analysis front end using C, Lex and Yacc, separating token recognition from grammar processing."
+date: "2023-11-24"
+updated: "2026-11-20"
+draft: false
+reviewed: true
+reviewStatus: "reviewed"
+sensitivity: public
+category: "Computer Science"
+area: "Compiler Front Ends"
+tags: ["C", "Lex", "Yacc", "Lexical Analysis", "Parsing", "Compiler"]
+type: "implementation-note"
+role: "Tokenizer and syntax analyzer implementation"
+period: "Oct–Nov 2023"
+status: "archived"
+techStack: ["C", "Lex", "Yacc"]
+---
+
+I developed **PyTokenizer**, a small Python-oriented tokenizer and syntax analyzer written in **C using Lex and Yacc**, in October–November 2023. The project was an opportunity to work directly with the first stages of a language-processing tool: recognizing meaningful source units and interpreting how they fit into syntax.
+
+Unlike a text search or regular-expression replacement script, the program needed to distinguish **the lexical meaning of a character sequence** from **the structural meaning of the tokens it produced**.
+
+*This retrospective was prepared in November 2026 from the earlier portfolio/CV entry. The historical project date is not the date this page was published.*
+
+## Lexical analysis before syntax
+
+Source text arrives as characters, but a parser expects a stream of token classes. In a Python-like language, identifiers, numbers, keywords, operators and punctuation each have different roles.
+
+I used **Lex** for the token-recognition layer. A lexer chooses patterns and emits token types, carrying associated values where necessary. The order and specificity of rules matter when two token patterns could match the same input.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/pytokenizer-lex-yacc.svg" target="_blank" rel="noopener noreferrer" aria-label="Open lex and yacc source-analysis pipeline figure">
+    <img src="/figures/journals/pytokenizer-lex-yacc.svg" alt="Python source processed by Lex tokenization and then Yacc grammar analysis" loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Tokenization and syntax processing are separate stages in the parser front end.</figcaption>
+</figure>
+
+## Grammar processing with Yacc
+
+The next stage used **Yacc** to describe syntax relationships between the token types. Where the lexer answers *what is this sequence?*, the parser answers *does this token sequence fit the supported grammar?*
+
+Keeping these stages separate made the program easier to reason about: changes in identifier recognition belonged in the lexical layer, while statement or expression structure belonged in the grammar layer.
+
+## Working through ambiguous and invalid input
+
+A tokenizer and parser must handle more than the examples that were used while designing them. Reserved words versus identifiers, operator boundaries and unexpected input expose whether the lexical and grammatical layers agree.
+
+I worked through these cases as part of implementing the front end. The surviving CV material records a **Python tokenizer and syntax analyzer**, not a complete implementation of the entire modern Python language specification; I therefore keep the scope to the subset handled by the project.
+
+## Result and connection to systems work
+
+The completed work was a **C/Lex/Yacc front end for Python-oriented source input**, with distinct token and syntax processing. It gave me experience building a program around formal input structure and parser state.
+
+That attention to representation later mattered in other projects: embedded protocols, document processing and the boundaries between structured data and its execution behavior.
+
+## Related projects
+
+- [FreeRTOS Multi-Board Mini-Desktop](/projects/freertos-multiboard-mini-desktop/)
+- [Five-Stage RISC CPU and Pipeline Hazards](/projects/risc-cpu-five-stage-pipeline/)

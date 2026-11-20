@@ -1,7 +1,8 @@
 ---
 title: "Lifecycle-Aware Memory Planning for TensorFlow Lite Micro"
 description: "A conflict-aware tensor allocator that reuses safe portions of input buffers and reduces planned peak memory on Person Detect and Tiny U-Net."
-date: "2026-11-15"
+date: "2024-12-20"
+updated: "2026-11-20"
 draft: false
 reviewed: true
 sensitivity: public
@@ -15,7 +16,7 @@ status: "archived"
 techStack: ["C++", "TensorFlow Lite Micro", "Greedy Memory Planner", "Tensor Lifetime Analysis"]
 ---
 
-> **Project context:** Undergraduate work at Kyung Hee University, completed in 2024. This write-up reconstructs the design and evaluations from my original eight-page project report, *Memory Management through Lifecycle Analysis in TFLite Micro for Resource-Constrained Devices*. It describes what the report establishes, as well as what remained to be verified.
+> **Project context:** Undergraduate work at Kyung Hee University, completed in 2024. This article was reconstructed in November 2026; its displayed milestone date refers to the original project, not to the publication date. This write-up reconstructs the design and evaluations from my original eight-page project report, *Memory Management through Lifecycle Analysis in TFLite Micro for Resource-Constrained Devices*. It describes what the report establishes, as well as what remained to be verified.
 
 <div className="grid gap-4 border-y border-white/10 py-5 sm:grid-cols-3">
   <div><p className="text-2xl font-semibold text-white">28.33%</p><p className="mt-1 text-xs text-slate-400">Person Detect · peak memory saved</p></div>
