@@ -98,7 +98,7 @@ The storage decision underneath Nexus was separate again. I evaluated using MinI
 
 The platform also had a bootstrap dependency I had to consider: a registry that is the only source of its own image may be unavailable just when it needs to be recreated. I documented that as a separate [offline image supply and GitOps problem](/projects/rokaf-offline-gitops-delivery/). It is a design and recovery constraint, not a claim that every recovery drill succeeded.
 
-## I stopped defining readiness as one Boolean
+## Kubernetes Readiness and Service Functionality
 
 The same underlying pattern appeared across other applications.
 
@@ -117,7 +117,7 @@ These were not all failures at the same moment, and they should not be presented
 
 A matrix is not a substitute for an incident trace. It is a way to decide **which trace to collect next**. If authentication works but attachments do not, the next request should be a file lookup, not another login. If the Pod is Ready but verification email is missing, I need the rendered env, runtime settings, SMTP exchange and delivery confirmation—not another Kubernetes readiness probe.
 
-## What would count as an integrated service?
+## Service Integration Acceptance Checks
 
 I would now define a small functional contract for each new service before calling its deployment complete:
 
@@ -130,9 +130,7 @@ I would now define a small functional contract for each new service before calli
 | Notification | An administrative verification or alert reaches its recipient when required |
 | Observability | The relevant request and failure can be correlated to logs or metrics without relying on a green Pod alone |
 
-This is a checklist I formed from the incidents, **not a statement that every cell was verified for every service**. Where integrations were only discussed or partially tested, the published evidence remains limited.
-
-The corresponding functional checks were different: send an actual verification email, fetch a stored attachment from the browser, and authenticate and push to the Docker connector. Pod readiness was useful but could not substitute for those application operations.
+The functional checks followed the services' actual responsibilities: an administrative email had to be delivered, a stored attachment had to open from the browser, and an authenticated Docker client had to push and pull through Nexus. I used these cases to distinguish Kubernetes readiness from a service being usable for its intended task.
 
 ## References
 

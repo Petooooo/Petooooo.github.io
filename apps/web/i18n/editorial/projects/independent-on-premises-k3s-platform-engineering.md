@@ -14,29 +14,29 @@ K3s는 이런 서비스의 공통 실행 환경을 제공했지만 모든 책임
 
 {{figure /figures/k3s-capabilities.svg | K3s 운영 환경에서 중요했던 책임 영역을 나눈 개념도다. 실제 네트워크나 장비의 물리적 배치를 표현하지 않는다.}}
 
-## 문제를 중심으로 남긴 기록
+## 주제별 플랫폼 운영 기록
 
 하나의 프로젝트에 모든 내용을 쌓아두면 개별 설계 판단이 흐려졌다. 그래서 가장 많이 고민했던 문제를 별도로 기록했다.
 
 | 주제 | 기록 |
 | --- | --- |
-| 이미지 공급 | [Registry가 멈추자 필요한 이미지도 가져오지 못했다](/projects/rokaf-private-artifacts-and-ci/) — Kaniko 실행 환경, Registry CA, S3 Blob Store와 복구 이미지의 순환 의존성 |
+| 이미지 공급 | [내부 Registry와 Kaniko 실행 환경](/projects/rokaf-private-artifacts-and-ci/) — Kaniko 실행 환경, Registry CA, S3 Blob Store와 복구 이미지의 순환 의존성 |
 | 배포 조정 | [GitOps의 두 제어 루프](/projects/rokaf-offline-gitops-delivery/) — 빌드 성공과 Kubernetes 상태 동기화의 차이 |
-| Longhorn 복구 | [Replica를 하나로 줄였더니 Healthy가 됐다](/projects/rokaf-stateful-storage-and-recovery/) — Unknown·Stopped Replica, Attach 장애와 데이터 검증의 차이 |
+| Longhorn 복구 | [Longhorn Replica 장애와 볼륨 복구](/projects/rokaf-stateful-storage-and-recovery/) — Unknown·Stopped Replica, Attach 장애와 데이터 검증의 차이 |
 | 스토리지 배치 | [Kubernetes 스토리지 배치와 장애 영역 설계](/projects/rokaf-storage-placement-and-failure-domains/) — 노드별 Local-path 경로, Longhorn 복구, DB 자체 복제, MinIO 객체 분산의 책임 구분 |
 | 객체 저장소 | [MinIO 이전과 객체 차이 검증](/projects/rokaf-object-storage-migration/) — 전송, IAM, Lifecycle, 누락 객체 |
-| 채팅 첨부파일 | [GridFS에서 MinIO로 옮기며 사라진 과거 파일](/projects/rokaf-chat-attachments-object-storage/) — 파일 식별자와 S3 Key·업로드 메타데이터를 맞추는 문제 |
+| 채팅 첨부파일 | [Rocket.Chat 첨부파일 GridFS·MinIO 이전](/projects/rokaf-chat-attachments-object-storage/) — 파일 식별자와 S3 Key·업로드 메타데이터를 맞추는 문제 |
 | 데이터베이스 | [DB 고가용성과 마이그레이션](/projects/rokaf-database-ha-and-langfuse-migrations/) — MongoDB, PostgreSQL, ClickHouse와 Keeper |
 | ClickHouse | [ReplicatedMergeTree로 데이터 옮기기](/projects/rokaf-clickhouse-replication-migration/) — 테이블 메타데이터, Replica 상태, 데이터 검증 |
 | 인증과 인가 | [ServiceAccount부터 객체 권한까지](/projects/rokaf-identity-rbac-and-policy/) — Kubernetes RBAC와 애플리케이션 권한 |
 | 네트워크 | [Traefik·MetalLB·사설 TLS](/projects/rokaf-networking-and-tls/) — DNS, 요청 경로, 인증서 신뢰 |
-| Plane CE 초기 설정 | [로그인은 왜 계속 처음으로 돌아갔을까](/projects/rokaf-plane-ce-bootstrap-routing/) — 관리자 화면과 인증 API의 라우팅, 추가 프록시와 파일 저장소 경계 |
-| Outline 인증과 편집 | [위키는 열리는데 편집과 로그인이 멈췄다](/projects/rokaf-internal-app-auth-and-tls/) — GitLab 연결 Timeout, WebSocket Upgrade, 브라우저 인증서와 이미지 요청 문제 |
-| 서비스 연동 | [컨테이너는 실행됐지만 서비스는 아직 준비되지 않았다](/projects/rokaf-self-hosted-services-integration/) — SMTP, Helm 환경변수, 파일 저장소와 Registry 클라이언트의 의존성 |
+| Plane CE 초기 설정 | [Plane CE 초기 설정과 API 라우팅](/projects/rokaf-plane-ce-bootstrap-routing/) — 관리자 화면과 인증 API의 라우팅, 추가 프록시와 파일 저장소 경계 |
+| Outline 인증과 편집 | [Outline WebSocket·OAuth·TLS 장애](/projects/rokaf-internal-app-auth-and-tls/) — GitLab 연결 Timeout, WebSocket Upgrade, 브라우저 인증서와 이미지 요청 문제 |
+| 서비스 연동 | [자체 호스팅 서비스 연동](/projects/rokaf-self-hosted-services-integration/) — SMTP, Helm 환경변수, 파일 저장소와 Registry 클라이언트의 의존성 |
 | 외부 접속 | [ServiceLB와 호스트 포트 충돌](/projects/rokaf-service-lb-hostport-conflict/) — VIP 주소와 포트 자원의 소유권 |
 | GPU | [스케줄링과 실제 가용 용량](/projects/rokaf-gpu-scheduling-and-capacity/) — Time-slicing, MIG, VRAM, 복구 시 배치 |
 | 관측성 | [사라진 메트릭의 원인 추적](/projects/rokaf-observability-and-failure-evidence/) — Prometheus WAL과 DCGM Exporter 배치 |
-| RabbitMQ Worker | [Worker는 계속 처리하는데 메시지가 다시 돌아왔다](/projects/rokaf-async-workers-and-idempotency/) — Shovel 메시지 이전, Heartbeat 장애와 Claim·Lease 기반 작업 복구 |
+| RabbitMQ Worker | [RabbitMQ 메시지 재전달과 Worker 중복 처리](/projects/rokaf-async-workers-and-idempotency/) — Shovel 메시지 이전, Heartbeat 장애와 Claim·Lease 기반 작업 복구 |
 | 문서 번역 파이프라인 | [작업 상태·Lease·재시도](/projects/document-translation-pipeline/) — PDF·DOCX·HWPX Worker와 영속 Job 상태를 설계·구현하고 내부망에 배포·운영 |
 
 원인이 끝까지 확정되지 않았던 조사도 따로 남겼다. [Langfuse v4 마이그레이션](/projects/rokaf-langfuse-v4-migration-field-notes/)에서는 Timeout이 떠도 내부 진행 상태가 완료일 수 있다는 것을 확인했고, [DNS와 VIP 문제](/projects/rokaf-dns-vip-open-investigations/)에서는 하나의 증상에 여러 경로가 관여할 수 있다는 한계를 남겼다. [Pod IP·ClusterIP 전달 경로 조사](/projects/rokaf-k3s-cni-service-datapath/)에서는 Flannel 인터페이스와 NAT 규칙의 존재만으로 요청 성공을 증명할 수 없었던 과정을 정리했다. [GPU 리소스 발견](/projects/rokaf-gpu-discovery-open-investigation/)과 [Control Plane 장애](/projects/rokaf-control-plane-incident-log/)도 마찬가지로 관측과 가설을 구분해 정리했다. [Linux 메모리 압박과 earlyoom 서비스 오류](/projects/rokaf-memory-pressure-and-service-recovery/)에서는 메모리 포화와 systemd 오류, 이후 프로세스 종료 기록을 서로 다른 사건으로 구분했다.
@@ -61,7 +61,7 @@ Longhorn 볼륨의 Replica든 데이터베이스 자체의 복제든 장애에 �
 
 GPU에서도 비슷한 문제가 있었다. Time-slicing으로 스케줄러에 보이는 슬롯을 늘렸다고 모델이 사용할 VRAM까지 늘어나는 것은 아니다. 장치 사용률이 낮아 보여도 실제로 배치 가능한 모델 수는 작을 수 있다. **자원이 표시되는 것과 자원이 실제로 사용 가능한 것은 다른 문제**였다.
 
-## 운영 변경을 평가할 때 확인하고 싶었던 것
+## 운영 변경 검증 기준
 
 어떤 설정을 바꾼 뒤 Pod가 Running이 되면 우선 안심하게 된다. 하지만 그것만으로 기존 문제가 해결됐다고 기록하기에는 부족했다.
 
@@ -76,7 +76,7 @@ GPU에서도 비슷한 문제가 있었다. Time-slicing으로 스케줄러에 �
 
 이 질문들을 모든 변경에 대한 자동 검증으로 완성했다고 주장할 수는 없다. 다만 문제를 다시 만났을 때 판단을 반복하지 않기 위해 남긴 기준이다.
 
-## Kubernetes 아래쪽을 더 알고 싶어진 이유
+## Kubernetes 운영에서 마주한 시스템 경계
 
 처음에는 Kubernetes API에서 보이는 상태로 충분할 때가 많았다. 하지만 PVC가 붙지 않거나, 볼륨이 Read-only가 되거나, 노드가 메모리 압박을 받는 순간에는 Pod 상태보다 아래 계층을 이해해야 설명할 수 있는 일이 늘어났다.
 

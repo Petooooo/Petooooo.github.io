@@ -127,15 +127,11 @@ StorageClass choices matter too. A small single-instance application may benefit
 
 The decision is **which layer is responsible for a recoverable copy**, not which technology looks more redundant on an architecture diagram.
 
-## When could I actually say it recovered?
+## Replica Recovery and Application Validation
 
 I would want five distinct facts: the host is reachable, the volume is attached and mounted safely, the intended number of **usable** replicas has returned, the application has recovered its own on-disk state, and a representative client can read and write the expected data. A backup restore test and a checksum/integrity audit add further confidence.
 
-For these incidents I have evidence of a node returning to Ready and a volume becoming Healthy after the target was lowered. I also have evidence of Unknown and Stopped replicas and of an instance-manager process stuck in a lifecycle transition. **I do not have a complete verified record of a two-copy rebuild and full application data-integrity validation.**
-
-Finally, replicas are not backups. Two replicas can both reproduce an accidental delete. A snapshot preserves a version subject to its retention and storage dependencies; an independently protected backup addresses a different loss scenario.
-
-After lowering the desired replica count to one, Longhorn reported a Healthy volume, while the original second replica had not been shown to recover. I treated that as restored availability under a reduced redundancy target, not proof of two healthy replicas or full data-integrity validation.
+After lowering Longhorn's desired replica count from two to one, the volume returned to **Healthy under the new target**. In a separate host incident, the node returned to Ready. Neither event rebuilt the stopped second replica or verified the application's complete data set. Restoring the original redundancy level and testing application reads were separate steps. This also reinforced why a live replica and an independently protected backup solve different failure scenarios.
 
 ## Related records
 

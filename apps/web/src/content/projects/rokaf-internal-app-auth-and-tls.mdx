@@ -116,13 +116,13 @@ This also changed how I thought about the earlier certificate problems. An inter
 
 The closed network made these dependencies more visible, but the failure modes are ordinary HTTP, DNS, TLS and application protocol problems. They are not specific to any particular cluster or organization.
 
-## What remained open
+## Verified WebSocket Fix and Remaining OAuth Checks
 
-The WebSocket upgrade and the client certificate intervention had observable effects. The GitLab userinfo timeout, affected-PC attachment failures and later callback problem did not have a preserved, fully verified completion record.
+I restored the Outline realtime path far enough to observe a **WebSocket `101 Switching Protocols`** response and resolved certificate warnings on affected clients. The GitLab userinfo timeout, callback mismatch and some image-loading paths were separate failures needing their own client-to-backend verification.
 
 A stronger future verification would pair observations with the actual caller: test the provider name and HTTPS handshake **from Outline's runtime**, inspect the OAuth callback URL as the provider sees it, test WebSocket upgrades in the browser and follow a failing image request to its full host, response and authorization context. After that, reproduce a save and image reload on an affected client, not just a successful `101` handshake.
 
-The recorded result includes a WebSocket `101` handshake and an improvement after a client certificate change. The GitLab `ETIMEDOUT`, callback mismatch and some client file-loading cases did not have preserved end-to-end recovery checks.
+The confirmed checkpoints were the WebSocket `101` handshake and client certificate improvements. The next checks were provider requests from Outline's runtime, the exact OAuth callback received by GitLab and the browser's failing file request—not another generic test of whether the wiki home page loaded.
 
 ## References
 

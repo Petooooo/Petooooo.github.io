@@ -78,7 +78,7 @@ Those observations were about **monitoring coverage**. They were not proof that 
 
 I preferred to reason about exporter placement using verified GPU-role information rather than an individual node name. I do not have a preserved, comprehensive after-change fleet audit. The separate [observability investigation](/projects/rokaf-observability-and-failure-evidence/) retains those two scheduling episodes and their evidence boundaries.
 
-## Time-slicing was not a cure for a missing device
+## GPU Resource Discovery vs Time-slicing
 
 I also configured GPU time-slicing for shared workloads and compared it with whole-GPU allocation and MIG on supported hardware. That was a **capacity-policy decision**, not a replacement for NFD, GFD or device-plugin registration.
 
@@ -86,12 +86,10 @@ Advertising several logical GPU access slots does not cause an absent GPU resour
 
 The [GPU scheduling and capacity record](/projects/rokaf-gpu-scheduling-and-capacity/) covers that later distinction: a schedulable slot and enough real VRAM for a model are different promises.
 
-## The evidence I still needed
+## Next GPU Discovery Checks
 
 If I returned to this problem, I would capture the Operator configuration, independently installed NFD components and actual node labels at the same time. Next I would inspect the device-plugin Pods and the kubelet's capacity and allocatable values, then submit a minimal GPU request and record the scheduler decision and successful device initialization. These are controlled follow-up checks, not a reproduction I can claim to have completed.
 
-The strongest surviving fact is narrow: **the Operator did not find expected NFD labels in the observed configuration**. It was worth investigating, but it did not establish one root cause for every GPU node, validate all GPU sharing settings or produce a benchmarked performance improvement.
-
-The missing NFD label was observed, but I did not retain synchronized node-label, `allocatable` and workload initialization measurements for all affected nodes. Those measurements are the next step before declaring the device-registration path recovered.
+The GPU Operator reported **`no nfd label found`** while the configuration included `nfd.enabled=false`. I also worked with time-slicing and DCGM exporter placement, but the label incident needed a matching snapshot of Node labels, device-plugin state, `status.allocatable` and a real GPU Pod startup to close the diagnosis. That focused comparison remains the next step for this particular failure.
 
 **References and related records:** [NVIDIA GPU Operator installation and NFD settings](https://docs.nvidia.com/datacenter/cloud-native/gpu-operator/latest/getting-started.html) · [NVIDIA GPU Operator troubleshooting](https://docs.nvidia.com/datacenter/cloud-native/gpu-operator/latest/troubleshooting.html) · [GPU resource sharing](/projects/rokaf-gpu-scheduling-and-capacity/) · [DCGM exporter placement](/projects/rokaf-observability-and-failure-evidence/).

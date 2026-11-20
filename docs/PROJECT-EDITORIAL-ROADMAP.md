@@ -89,6 +89,16 @@ Experiments should be implemented in `systems-notes/labs/`, and results should b
 
 ## Design and publishing conventions
 
+### Editorial consistency after the November 2026 review
+
+- **State completed work positively.** A successful implementation, internal deployment, service restoration or migration checkpoint belongs near the beginning and in the closing paragraph. Do not downgrade operational experience into a prototype merely because public deployment logs are unavailable; user-confirmed experience is a valid source of scope.
+- **Limit uncertainty to its actual object.** A missing packet capture means the root cause remains open, not that the deployment never happened. A missing byte-for-byte reconciliation means data integrity has an unclosed check, not that the entire migration was hypothetical.
+- **Avoid defensive repetition.** Do not write several variations of “I cannot claim,” “not a complete success,” “검증했다고 말할 수 없다,” or “만들어 쓸 생각도 없다” in the same article. State the observed result and one concise outstanding check.
+- **Edit Korean as original prose.** Use technical subject-led section headings (e.g., “RabbitMQ Ack와 작업 상태”, “Prometheus WAL 저장 공간 장애”) rather than translations of English rhetorical devices. Keep the concrete first-person context in the body without formulaic epiphanies.
+- **Keep preview text synchronized.** Project overview link labels and Korean descriptions must reflect the current article title and implementation status, not earlier narrative-hook labels or outdated “prototype only” language.
+- **Treat study notes differently from incident journals.** A teaching question or A-versus-B contrast is useful when it explains a concept; do not mechanically remove these from educational notes in the name of style consistency.
+- **Preserve the evidence boundary.** Do not fabricate benchmarks, full data-integrity validation, a root cause or an implemented rollout. Maintain internal-host, credential, and deployment-topology exclusions.
+
 - Every focused article includes an original, dark-mode SVG based on the relevant mechanism; illustrations are conceptual, not production diagrams.
 - Favor problem → observations → questions → experiments/decisions → verified outcome → open questions.
 - KDT learning notes live in the separate study repository; preserve first-person learning context and distinguish illustrative examples from executed labs. Never invent benchmark figures, personal kernel patches or completed course capstones.

@@ -77,7 +77,7 @@ Before investigating advertisement changes, I would establish what the client ac
 
 There was one **different incident with stronger evidence**. Adding a LoadBalancer Service caused K3s's built-in ServiceLB to create `svclb-*` resources that requested a host port already used by another exposure path. Altering or deleting that Service removed the contention and restored the older path. MetalLB address advertisement and K3s ServiceLB host-port ownership were separate mechanisms. The [ServiceLB host-port case](/projects/rokaf-service-lb-hostport-conflict/) documents that reversible sequence. It does not establish a cause for the other suspected VIP or ClusterIP failures.
 
-## What a restart would and would not tell me
+## Network Evidence Before Restart
 
 Restarting a DNS or network component might be necessary to restore service, but it also changes transient state: caches, connection tables, timing and controller reconciliation may all shift. A request succeeding afterward demonstrates the endpoint was accessible at the time of the retest. It does not, by itself, identify which earlier component failed.
 
@@ -85,7 +85,7 @@ The missing evidence in this case was a repeated request with a consistent calle
 
 Adding CoreDNS replicas can improve tolerance to an individual Pod failure when those replicas actually cover independent failure domains. It cannot automatically correct an unreachable upstream resolver, a broken Service forwarding path or a host-level packet drop. I have not recorded a before/after test establishing that a replica change permanently corrected this incident.
 
-## Current status
+## Observed DNS and VIP Results
 
 The surviving observations establish that **some Pods experienced DNS or Service-IP access problems**, and that **Flannel interfaces/routes and Service NAT entries existed** when networking was inspected. They also establish that I investigated separate concerns around VIP reachability. They do **not** establish a shared root cause, a measured MetalLB speaker-failover event, conntrack exhaustion or a reproducible low-level fix.
 

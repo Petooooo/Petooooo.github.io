@@ -175,7 +175,7 @@ Lifecycle also interacts with versioning: expiring the current version is not th
 
 The record supports lifecycle/TTL design and investigation. It does not establish that a complete, safe retention policy was universally applied to every migrated bucket.
 
-## What I would require at cutover
+## MinIO Cutover Verification
 
 The cutover decision should be based on explicit evidence, not on whether the new MinIO console opens.
 
@@ -189,9 +189,9 @@ The cutover decision should be based on explicit evidence, not on whether the ne
 
 **Recovery path.** The source remains available for a defined fallback window until destination verification is sufficient; a rollback is a data and metadata problem, not just a DNS switch.
 
-I cannot claim that every one of these gates was passed in the original migration. The available record establishes the migration work, the diff and discrepancy investigations, but not a complete zero-difference acceptance certificate.
+These cutover checks provided a concrete follow-up to the transfer work: source and destination still needed object-level reconciliation and client reads before a final integrity sign-off.
 
-## What was observed, and what was still open
+## Migration Work and Remaining Integrity Checks
 
 | Work or finding | Evidence boundary |
 | --- | --- |
@@ -205,7 +205,7 @@ I cannot claim that every one of these gates was passed in the original migratio
 | Evaluated lifecycle and TTL behavior | **Designed/investigated**; final universal policy not verified |
 | Complete version-aware byte-level reconciliation with zero differences | **Not established by the retained evidence** |
 
-The bulk transfer and target deployment were completed, but source and target object counts and sizes did not fully match at the observed checkpoints. I still needed object-key-level reconciliation, failed-upload rechecks and client-side read tests before calling the move a complete integrity-verified migration.
+I completed the bulk transfer and deployed the distributed MinIO target, then investigated **differences in object counts and sizes, incomplete uploads and IAM migration**. The remaining cutover checks were object-key reconciliation, retries for failed transfers and reads from real clients. A completed copy operation and a fully integrity-verified migration were deliberately treated as separate milestones.
 
 ## References and related work
 

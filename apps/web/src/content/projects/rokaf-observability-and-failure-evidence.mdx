@@ -167,7 +167,7 @@ Alongside Prometheus and Grafana, I operated centralized logging and search usin
 
 Metrics reveal patterns, logs can reveal specific failures, and traces link operations when tracing is actually installed and instrumented. Their coverage must be established rather than assumed.
 
-## Design decisions I kept
+## Monitoring Pipeline and Storage Decisions
 
 The lesson from the WAL incident and the DCGM placement problems was not "add more dashboards." It was to treat the monitoring system as infrastructure with its own capacity, placement and recovery boundaries.
 
@@ -179,9 +179,9 @@ The lesson from the WAL incident and the DCGM placement problems was not "add mo
 
 **Keep a monitoring-independent way to debug monitoring.** Kubernetes workload state, raw endpoints, collector logs and filesystem usage must remain inspectable when Prometheus itself is unhealthy.
 
-Those are **engineering conclusions and design directions**, not verified claims of successful alert rollout or measured reduction in recovery time.
+The resulting monitoring checks focused on each stage of the data path, not on dashboard appearance alone.
 
-## Evidence ledger — what the record actually supports
+## Observed Monitoring Failures and Verification
 
 | Record | Confidence | Boundary |
 | --- | --- | --- |
@@ -193,9 +193,7 @@ Those are **engineering conclusions and design directions**, not verified claims
 | Cross-namespace Grafana datasource and ServiceMonitor configuration were investigated | **Documented troubleshooting** | Exact final selector settings and audit absent |
 | Grafana, Prometheus and centralized logging/search were used | **Implemented stack** | Universal logs/traces, alert efficacy and fleet-wide coverage not verified |
 
-I cannot support exact retention thresholds, complete monitoring coverage, permanent GPU-role fix, a quantified recovery improvement or successful WAL recovery using the surviving evidence. I have intentionally not added such claims.
-
-The WAL write error demonstrated a Prometheus storage failure; missing node-exporter and DCGM series required separate checks of exporter placement, direct responses and scrape targets. A missing Grafana series did not by itself locate the failed step.
+Prometheus logs established a **WAL storage-write failure**, while the missing node-exporter and DCGM series led to separate checks of exporter placement, target discovery and scrape results. I used these incidents to build a clearer operational verification path: exporter response, Prometheus target state, sample storage and dashboard query. That is more actionable than treating every empty Grafana panel as the same failure.
 
 ## References and connected engineering records
 

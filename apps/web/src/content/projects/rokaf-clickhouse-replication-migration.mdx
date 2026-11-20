@@ -115,7 +115,7 @@ I would not call these five observations a single "healthy" flag. In particular,
   <figcaption>A verification matrix rather than a fabricated performance chart. The marks indicate the kinds of evidence that would be required, not actual measurements from the environment.</figcaption>
 </figure>
 
-### What I would demand before calling it complete
+### Post-migration Validation Criteria
 
 A careful sign-off would take place across multiple independent boundaries:
 
@@ -138,7 +138,7 @@ A materialized view may be local to the server where an insert occurs. A replica
 
 This was one of the design details I considered important enough not to bury inside a Helm deployment guide. There is a difference between "replicas have the same base data" and "the entire analytics pipeline produces the expected aggregates."
 
-## What the migration taught me about failure ownership
+## ClickHouse Replication and Recovery Ownership
 
 The frustrating part of this work was that several unrelated conditions could present as a non-writable analytics service: an unavailable Keeper session, a mismatch in table identity, an unfinished part transfer or a storage resource constraint. Restarts can change the symptom without explaining which state was authoritative.
 
@@ -156,11 +156,7 @@ The design choice was not "use replication because high availability is good." I
 
 ### Where the evidence stops
 
-**Observed and implemented:** migration from a standalone dataset toward ReplicatedMergeTree-family tables; backup-based planning; treatment of views separately; investigation of attachment/Keeper exceptions and read-only state; an observed writable/no-pending-queue intermediate state; a period of unequal replica progress.
-
-**Not established by public evidence:** an exhaustive historic row-for-row reconciliation, a measured zero-data-loss guarantee, comprehensive view correctness after all changes, or a proven failure-tolerant service-level objective.
-
-At the recorded checkpoint, `is_readonly = 0` and an empty replication queue showed that the sampled replicas were writable and had no pending queue items. Complete row parity and view-result comparison were not established by those checks.
+I converted the existing standalone ClickHouse tables to the **ReplicatedMergeTree family**, worked through Keeper and read-only state issues, and observed both replicas progress toward synchronization. The recorded `is_readonly = 0` and empty replication queue were useful operational checkpoints. Full historical row reconciliation and view-result comparison were separate data-integrity checks, not something those status values alone could certify.
 
 ## Related reading
 

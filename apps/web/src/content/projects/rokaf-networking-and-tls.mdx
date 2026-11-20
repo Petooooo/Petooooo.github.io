@@ -93,8 +93,6 @@ When investigating another connection failure, I now begin by asking **who made 
 
 The next questions follow the specific request: Did its name resolve? Was the destination reachable? What certificate did the TLS handshake actually present? Which entry point and router handled the request? Were the intended Service endpoints ready? Did the application complete a representative operation?
 
-I did not run every one of those checks during every incident. They are the boundaries I learned to preserve in the record. The default-certificate episode was about certificate selection. The LoadBalancer episode was about host-port ownership. The WebSocket episode was about an HTTP protocol upgrade. The CNI and VIP questions remained partly open.
-
-The incidents had separate checkpoints: the certificate returned by Traefik, a `svclb-*` Pod claiming an existing host port, and an Outline WebSocket request changing from HTTP `400` to `101`. I did not establish a common cause for the remaining DNS, VIP and CNI symptoms.
+The confirmed checkpoints were concrete: **Traefik's presented certificate**, a `svclb-*` Pod claiming an existing host port, and an Outline WebSocket handshake changing from `400` to `101`. Each incident had a different correction or investigation path. The intermittent DNS, VIP and CNI symptoms remained separate open questions.
 
 **Related records:** [ServiceLB and MetalLB host-port contention](/projects/rokaf-service-lb-hostport-conflict/) · [Outline WebSocket and identity-provider paths](/projects/rokaf-internal-app-auth-and-tls/) · [DNS/VIP open investigation](/projects/rokaf-dns-vip-open-investigations/) · [Nexus/Kaniko certificate boundaries](/projects/rokaf-private-artifacts-and-ci/).

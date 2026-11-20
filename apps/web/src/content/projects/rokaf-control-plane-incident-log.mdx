@@ -71,7 +71,7 @@ This table is a **verification plan**, not a set of tests that I claim to have e
 
 For a stateful control plane, this distinction affects recovery choices. Repeatedly restarting components, deleting data files or forcing recovery without preserved state can erase the evidence needed to determine whether the resulting cluster is consistent. I deliberately omit internal topology and the specific etcd recovery procedure; this document is an engineering account, not a runbook for a private cluster.
 
-## What I would have needed to identify the initiating failure
+## Control Plane Root Cause Evidence
 
 The most useful missing evidence was a single time axis. I would preserve the first unsuccessful client API request and record the corresponding K3s and etcd state, member quorum, host mount state, disk I/O messages and the exact intervention time. After recovery I would repeat representative API and application operations and keep the results separate.
 
@@ -79,10 +79,8 @@ Chronology alone would still need interpretation. An I/O error logged shortly af
 
 I had also learned from Longhorn that a Node reporting Ready and a stateful Replica reporting Healthy are different assertions. They can recover on different schedules, even if the client-facing failure appears at the same time. I would not allow a repaired API endpoint to stand in for a storage read/write test.
 
-## Current finding
+## Observed Recovery and Unresolved Causes
 
-What I can support from the retained operational notes is that **etcd instability or suspected corruption, read-only disk behavior, and control-plane availability problems were investigated**, and that usable access was recovered in some situations. In a separate incident, a node moved from an Unknown condition back to Ready after a reboot.
-
-What I cannot support is a single proven chain from a particular disk or filesystem fault to etcd corruption and then to every API failure. Establishing that would require a matched host-I/O, filesystem, etcd-member and client-request record before and after the recovery action.
+I investigated **etcd instability, suspected corruption and read-only disk symptoms** during K3s control-plane incidents, and recovered usable access in some cases. In a separate episode, a node returned from Unknown to Ready after reboot. The common initiating fault across these events remains unresolved; establishing that link would require time-aligned host I/O, filesystem, etcd member and API-request evidence.
 
 **Related records:** [Longhorn replica failure and volume recovery](/projects/rokaf-stateful-storage-and-recovery/) · [On-premises K3s platform operations](/projects/independent-on-premises-k3s-platform-engineering/) · [CoreDNS and MetalLB VIP reachability](/projects/rokaf-dns-vip-open-investigations/).

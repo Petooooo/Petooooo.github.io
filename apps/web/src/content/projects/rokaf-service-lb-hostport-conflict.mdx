@@ -104,7 +104,7 @@ Treating these as synonyms would make the next change more confusing.
 
 Changing the Service's exposed port eliminated the immediate host-port overlap in the observed experiment, but that only worked around the collision. It did not settle which external load-balancer implementation should have authoritative responsibility for `LoadBalancer` Services.
 
-## Choosing one owner instead of defending a collection of workarounds
+## External LoadBalancer Ownership
 
 I considered two broad models. One was to keep ServiceLB as the exposure owner and plan host-port availability and placement around it. The other was to make MetalLB the intended owner of `LoadBalancer` external addresses while disabling ServiceLB to stop automatic host-port claims.
 
@@ -127,7 +127,7 @@ A fifth useful check is to vary the Service's port and create/delete another har
 
 These are acceptance criteria—not tests I am claiming were all completed in the original environment.
 
-## What this incident did, and did not, establish
+## Confirmed HostPort Collision and Recovery
 
 The incident is unusually valuable because it offers a reversible experiment:
 
@@ -135,11 +135,7 @@ The incident is unusually valuable because it offers a reversible experiment:
 
 That is enough to support the diagnosis of **ServiceLB-induced host-port contention** in that episode.
 
-It is not enough to prove that every later MetalLB VIP instability, every DNS failure, or every connection-refused response elsewhere had the same cause. In particular, the separate investigation into Pod-to-ClusterIP reachability involved Flannel, Service proxying, iptables and DNS questions that require different packet-path evidence.
-
-I also cannot claim a permanent ServiceLB-disabled configuration across the full cluster from the available record, even though that was the selected long-term design direction.
-
-Creating the new LoadBalancer Service caused K3s ServiceLB to request a host port already used by an existing exposure path. Altering or removing that Service avoided or reversed the observed interference. This evidence does not establish the cause of separate DNS or VIP failures.
+Adding the LoadBalancer Service caused K3s ServiceLB to request a **hostPort already used by an existing exposure path**. Changing or removing that Service restored the previous access path in the observed incident. I kept this confirmed host-port collision separate from later DNS, VIP and Pod-to-ClusterIP investigations, which required different packet-path evidence.
 
 ## Further references
 

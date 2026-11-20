@@ -128,7 +128,7 @@ The same distinction applied to retries and dead-letter handling. The later loca
 
 I kept stage ownership in the central job service instead of asking each format worker to select and publish its own next processing stage. That made it easier to reject duplicate or out-of-order events; it also made reconciliation a necessary part of the system.
 
-## The tests supported the redesign, not a universal success claim
+## Claim, Lease and Retry Tests
 
 The June work had more than a diagram behind it. Retained development notes describe local tests covering durable claims, stale leases, bounded retry and duplicate/stale-event handling. Controlled route-level tests exercised PDF, DOCX and HWPX processing paths, and an isolated Helm rehearsal brought up the necessary service dependencies.
 
@@ -146,19 +146,17 @@ The tests I would keep next to the implementation are concrete:
 
 These are the failure boundaries that matter more to a document user than a single green RabbitMQ health indicator. Some of them had targeted tests in June; I do not present the list as evidence that every operational environment passed all five.
 
-## What Shovel could move, and what it could not
+## Shovel Migration and Durable Job Ownership
 
 Looking back, the Shovel migration and the later worker redesign addressed two different meanings of "moving work."
 
 Shovel moved **messages from one broker to another**. With `on-confirm`, the source acknowledgement follows confirmation from the destination, which is a useful transfer boundary. RabbitMQ's Shovel documentation is explicit about these semantics. But a confirmed publication is still not the same as the document being converted once.
 
-The job-service redesign moved **ownership of a long-running logical operation** away from an AMQP delivery and into durable state. The message was allowed to be transient. The job was not.
-
-During the incident, the same logical job could appear queued while an earlier worker was still processing it. The durable claim was intended to prevent a later delivery from writing a competing result; broker acknowledgement alone could not enforce that rule.
+The redesign moved **ownership of a long-running document job** out of the AMQP delivery and into durable stage state. I implemented Claim and Lease handling in the document translation pipeline and deployed that service to the internal network. A redelivered command could then be checked against the existing job attempt before its result was accepted.
 
 ## Related records
 
-- [Document translation job state and worker recovery](/projects/document-translation-pipeline/) — the staged workflow and its isolated validation
+- [Document translation job state and worker recovery](/projects/document-translation-pipeline/) — the staged workflow, recovery tests and internal deployment
 - [K3s platform engineering](/projects/independent-on-premises-k3s-platform-engineering/) — the platform in which RabbitMQ operated
 - [Database and migration state](/projects/rokaf-database-ha-and-langfuse-migrations/) — why a timeout or retry cannot replace durable progress
 

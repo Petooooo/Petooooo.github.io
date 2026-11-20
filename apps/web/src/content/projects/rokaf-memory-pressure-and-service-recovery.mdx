@@ -80,7 +80,7 @@ A K3s container chart also does not necessarily account for all consumers on a L
 
 Those measurements were avenues for investigation, not a completed attribution. The evidence supports **a host-wide spike, an earlyoom process selection, and a mismatch with the sampled Pod metrics**. It does not identify the actual source of the host's extra memory consumption.
 
-## What I would keep before the next reboot
+## Memory Pressure Evidence Capture
 
 The difficulty in these cases was not finding a single command to reduce memory use. It was having enough evidence from **before** the system became unresponsive or was rebooted.
 
@@ -94,6 +94,6 @@ The difficulty in these cases was not finding a single command to reduce memory 
 
 I would rather preserve compact periodic measurements and the service's effective configuration than generate artificial pressure on a production host just to reproduce an OOM.
 
-**Current finding:** March established severe slowdown and reboot under near-full host memory. The earlyoom 1.9.0 setup produced status `16` and a separate missing-executable stop error, while direct debug execution worked. July's searched logs did not retain a kill event. In August, an earlyoom victim was recorded, but the host-memory spike remained unattributed. I cannot call this a proven memory-leak fix, a verified final earlyoom unit configuration or a completed prevention test.
+In March I encountered **host memory saturation, severe slowdown and a reboot**; during earlyoom 1.9.0 setup I traced a systemd exit status `16` and an executable-path problem while manual execution worked. A later log search in July found no retained kill, and August logs recorded an earlyoom victim during another host-memory spike. The initiating process or cgroup behind that spike remains unidentified, making time-aligned host and cgroup memory capture the next priority.
 
 **Related records and references:** [Prometheus WAL and exporter incidents](/projects/rokaf-observability-and-failure-evidence/) · [K3s control-plane incidents](/projects/rokaf-control-plane-incident-log/) · [earlyoom 1.9.0 manual](https://sources.debian.org/src/earlyoom/1.9.0-1/MANPAGE.md) · [earlyoom 1.9.0 setup notes](https://sources.debian.org/src/earlyoom/1.9.0-1/README.md) · [Linux kernel cgroup v2 memory documentation](https://www.kernel.org/doc/html/latest/admin-guide/cgroup-v2.html).

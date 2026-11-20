@@ -72,14 +72,12 @@ This section describes **an explored identity and relationship-authorization mod
 
 A shared policy service would also become a new dependency. What happens when team membership is revoked but cached authorization results remain? What should the application do if an external decision service is unavailable? The convenience of one policy model is not worth silently granting access when the decision cannot be obtained.
 
-## I needed evidence of a denial, not just a successful action
+## Authorization Allow/Deny Tests
 
 It is easy to test only the happy path. If a Runner can create the build Pod it is meant to create, the job appears healthy. But that result says nothing about whether it can also read an unrelated namespace's Secrets. A permission review needs both sides of that boundary.
 
 I would apply the same method to document policies. An owner should be able to perform owner-only actions; an editor should not automatically inherit those actions. An unrelated user should not read a private object. Removing a team relationship should change subsequent access decisions as intended, without stale privileges remaining indefinitely.
 
-Those are **verification criteria I considered**, not a claim that I executed every positive and negative case against all production applications. In particular, I cannot turn Keycloak/OpenFGA modeling into a fictional successful rollout.
-
-For subsequent reviews, I would record the actual request identity, resource, namespace or object, and the component that made the allow/deny decision. The Keycloak/OpenFGA model remains an evaluated design; a completed cross-application authorization audit is not part of the recorded work.
+My operational work covered **Kubernetes and CI authorization boundaries and GitLab OAuth integration**. Keycloak and OpenFGA were evaluated for object-level authorization rather than deployed as a completed, platform-wide policy service. For that design, I would require both allow and deny checks with the requesting identity, target resource and decision point captured together.
 
 **Related records:** [Nexus/Kaniko and closed-network CI](/projects/rokaf-private-artifacts-and-ci/) · [Outline and GitLab authentication boundaries](/projects/rokaf-internal-app-auth-and-tls/) · [K3s platform operations](/projects/independent-on-premises-k3s-platform-engineering/).

@@ -16,7 +16,7 @@ Flannel 인터페이스의 UP 상태는 해당 인터페이스가 존재한다�
 
 {{figure /figures/journals/dns-vip-investigation.svg | 실제로 관측한 DNS·Service IP 접근 이상과 확인한 네트워크 설정, 아직 입증하지 못한 Service 전달·VIP 광고 원인을 분리한 조사표다. 실제 내부 주소나 배치 구조를 나타내지는 않는다.}}
 
-## CoreDNS의 문제인지, CoreDNS까지 가는 경로인지
+## DNS Service 경로와 CoreDNS Endpoint
 
 이름 해석 실패를 조사할 때는 **같은 출발 Pod에서 어디로 요청을 보냈는가**가 중요하다. DNS Service 이름을 통해 조회한 결과와 CoreDNS의 실제 Endpoint로 직접 요청한 결과를 비교할 수 있다면, 조사의 범위를 줄일 수 있다.
 
@@ -34,7 +34,7 @@ Flannel 인터페이스의 UP 상태는 해당 인터페이스가 존재한다�
 
 특정 Pod에서만 실패했다면 CoreDNS 전체가 동시에 멈췄다고 단정할 이유가 줄어든다. 반면 같은 이름으로 보내는 모든 요청이 동일하게 실패했다면 Resolver 자체나 공유 Service 경로에 더 무게를 둘 수 있다. 어느 경우든 비교한 요청과 시간대가 같아야 한다.
 
-## iptables와 conntrack은 어디까지 의심할 수 있나
+## iptables·conntrack 조사 범위
 
 Service 관련 NAT 규칙이 있었다는 관측 때문에 오히려 더 많은 질문이 생겼다. 패킷이 그 규칙을 실제로 통과했는지, Endpoint가 선택됐는지, 호스트의 FORWARD 필터나 Network Policy에서 차단됐는지, 응답이 원래 Pod까지 돌아왔는지까지 봐야 했다.
 
@@ -54,7 +54,7 @@ Docker와 K3s가 한 호스트에서 각각 네트워크 규칙을 생성할 수
 
 또 하나의 혼동 요소는 K3s에 내장된 **ServiceLB**였다. 과거에는 LoadBalancer Service를 추가하자 `svclb-*`가 기존 서비스의 `hostPort`와 충돌했고, 새 Service를 제거하면 접속이 복구된 사건이 있었다. 이 원인은 실제 추가·삭제와 복구로 좁혔지만, 그것이 별도의 VIP 접속 불안정이나 DNS 질의 실패를 설명하는 것은 아니다. [ServiceLB 호스트 포트 충돌 기록](/projects/rokaf-service-lb-hostport-conflict/)에서 그 사건을 따로 다룬 이유다.
 
-## 재시작 전에 어떤 기록을 남길 수 있었을까
+## 재시작 전 패킷·이벤트 기록
 
 가용성을 회복하기 위해 CoreDNS나 네트워크 컴포넌트를 재시작해야 할 수 있다. 하지만 재시작한 뒤 접속이 된다는 결과는 그 시점의 복구를 보여줄 뿐, 재시작한 컴포넌트가 처음 문제를 일으켰다는 증거는 아니다.
 
@@ -66,9 +66,7 @@ Docker와 K3s가 한 호스트에서 각각 네트워크 규칙을 생성할 수
 
 ## 지금까지 확인한 범위
 
-당시 기록에서 직접 확인할 수 있는 것은 일부 Pod의 DNS·Service IP 접근 이상, Flannel 인터페이스와 Pod 경로의 존재, Service 관련 NAT 규칙, 그리고 별도로 조사한 VIP 접속 안정성 문제다. **규칙이 있었다는 기록만으로 정상 패킷 전달을 증명할 수 없고, VIP 불안정을 조사했다는 사실만으로 MetalLB의 광고 장애를 확정할 수 없다.**
-
-따라서 이 글은 원인이 밝혀진 장애 복구 보고서가 아니다. 실제 DNS 질의와 Endpoint 접근을 같은 Pod에서 비교한 결과, 장애 시각에 일치하는 패킷·광고 기록, 조치 전후의 반복 테스트가 남아야 최종 원인을 좁힐 수 있다.
+당시 일부 Pod에서 DNS·Service IP 접근 장애가 발생했지만 **Flannel 인터페이스와 Pod 경로, Service NAT 규칙은 존재**했다. 이 관측만으로 실패한 DNS 패킷이 어느 지점에서 멈췄는지 결정할 수는 없었다. 장애가 재현되면 같은 Pod에서 ClusterIP와 CoreDNS Endpoint로 실제 DNS 질의를 보내고, VIP 문제는 같은 시점의 광고 상태·응답 패킷을 따로 기록해야 한다. 두 경로 모두 아직 단일 원인이 확정되지 않았다.
 
 ## 관련 기록과 참고 자료
 

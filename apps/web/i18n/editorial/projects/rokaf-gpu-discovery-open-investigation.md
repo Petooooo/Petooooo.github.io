@@ -4,7 +4,7 @@ GPU 서버에 GPU Operator를 설치하던 중 로그에 `no nfd label found`라
 
 한때는 GPU Operator만 올리면 드라이버부터 장치 인식, 스케줄링까지 하나의 기능처럼 이어질 거라 생각했다. 실제로는 여러 구성 요소가 각각 다른 값을 만들고 있었다. 무엇이 누락됐는지 알려면 'GPU가 없다'는 말 대신 그 값이 **어느 단계에서 사라졌는지**를 찾아야 했다.
 
-## NFD를 끈 상태에서 어떤 라벨을 기대하고 있었나
+## NFD 비활성화와 노드 라벨
 
 당시 사용한 `nfd.enabled=false`는 GPU Operator가 자체적으로 Node Feature Discovery(NFD)를 배포하지 않도록 하는 설정이었다. 이미 클러스터에 NFD가 따로 설치돼 있다면 합리적인 선택일 수 있다. 반대로 별도의 NFD도 없거나 GPU 노드에 필요한 하드웨어 정보를 게시하지 않는다면 Operator가 기대하는 라벨을 찾지 못할 수 있다.
 
@@ -36,7 +36,7 @@ GPU를 Kubernetes에서 사용하기까지는 여러 곳을 통과한다. 호스
 
 {{figure /figures/journals/gpu-discovery-investigation.svg | 실제 관측된 것은 NFD 라벨을 찾지 못한 상태다. GPU의 Allocatable 등록 여부와 Pod 배치·실행은 각각 다른 증거로 확인해야 한다. 그림은 실제 노드 구성이 아니라 조사 순서를 나타낸다.}}
 
-## Pod가 Pending이라면 어디를 먼저 볼 것인가
+## GPU Pod Pending 진단
 
 라벨과 확장 리소스가 갖춰졌더라도 Pod가 반드시 GPU 노드에 배치되지는 않는다. Pod가 요청한 GPU 리소스 이름과 수량이 실제로 등록된 것과 일치해야 하고, `nodeSelector`와 `nodeAffinity`, Taint·Toleration, 나머지 CPU·메모리 조건까지 함께 만족해야 한다.
 
@@ -62,13 +62,11 @@ GPU를 Kubernetes에서 사용하기까지는 여러 곳을 통과한다. 호스
 
 따라서 이 글에서 다루는 것은 **GPU를 발견하고 할당하는 경계**다. 실제 Time-slicing과 MIG의 차이, 메모리 경쟁과 가용 용량에 대해서는 [GPU 공유·용량 설계 기록](/projects/rokaf-gpu-scheduling-and-capacity/)에서 따로 다뤘다.
 
-## 남겨둔 질문을 닫기 위해 필요한 증거
+## 노드 라벨과 GPU 할당 추가 검증
 
 다시 같은 오류를 본다면 먼저 설치된 GPU Operator 설정과 별도 NFD 유무, 해당 GPU 노드의 라벨을 같은 시점에 기록할 것이다. 이어 Device Plugin 상태와 Node의 `capacity`·`allocatable`을 비교하고, 최소한의 GPU 요청을 가진 테스트 Pod를 배치해 실제 초기화 결과까지 확인할 것이다.
 
-이 기록에 남은 가장 분명한 관측은 **Operator가 기대한 NFD 라벨을 찾지 못했다는 것**이다. Time-slicing 구성 경험이 있고 DCGM Exporter의 배치 문제도 조사했지만, 그것들이 당시 라벨 문제의 단 하나의 원인을 증명하거나 모든 노드의 GPU 스케줄링을 검증한 자료가 되지는 않는다. 전체 복구 완료나 성능 개선 수치를 만들어 쓸 생각도 없다.
-
-남아 있는 직접적인 증거는 GPU Operator의 NFD 라벨 탐색 실패다. 원인을 종결하려면 같은 시점의 Node Label, Device Plugin 상태, `status.allocatable`, 최소 GPU Pod의 배치·초기화 결과를 비교해야 한다.
+GPU Operator에서 `no nfd label found`를 확인했고, 당시 설정에는 `nfd.enabled=false`가 있었다. GPU 할당과 DCGM Exporter 배치도 함께 다뤘지만, NFD 라벨 오류의 복구 여부를 최종 검증할 로그는 남아 있지 않다. 같은 문제가 재발하면 Node Label, Device Plugin, `status.allocatable`, 실제 GPU Pod 초기화 결과를 한 시점에 모아 비교할 것이다.
 
 ## 관련 자료
 

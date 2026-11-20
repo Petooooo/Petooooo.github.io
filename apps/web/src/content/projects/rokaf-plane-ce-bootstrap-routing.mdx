@@ -121,7 +121,7 @@ Certificate trust and name matching remain independent of path forwarding. A cer
 
 The preserved investigation does not establish a final, working browser file-upload configuration or completed OAuth integration. **The Pages real-time connection issue was independently resolved** after the missing `/live` mapping was added.
 
-## How I would test such a deployment now
+## Plane CE Functional Verification
 
 I would use a small set of user-facing tests arranged by responsibility, not just a list of healthy Pods.
 
@@ -131,13 +131,11 @@ A route table is useful as a design artifact, but observable responses remain de
 
 Two changes have direct functional evidence: **account and Workspace creation worked after correcting API path ownership**, and **Pages stopped reporting a lost connection after routing `/live` to Live**. The additional Nginx entry path and browser-facing storage endpoint remained separately unresolved in my surviving records.
 
-## A usable service is a set of successful conversations
+## Verified Plane CE Routes and Remaining Checks
 
 The Plane incident looked like an incomplete setup, but its most important fix was about which service received which HTTP request. A working UI and Running Pods did not tell me whether setup, authentication, backend APIs and object storage were reachable from their respective callers.
 
-The first-run fix involved mapping setup and authentication requests to their intended backends. Later, a separate `/live` route fixed Plane Pages connectivity. The additional proxy and browser-to-storage paths still required their own tests.
-
-Working account registration and a restored Pages connection gave me two different forms of functional verification. A later proxy still returned 404, and a browser-originated upload could still fail despite backend-to-MinIO communication. A single broad "deployment complete" claim would hide those distinctions.
+I corrected the setup and authentication routing and **verified account and Workspace creation**. Later, adding the `/live` route restored Plane Pages connectivity. A further proxy's 404 and browser-to-storage upload errors involved other request paths; they remained distinct follow-up investigations rather than invalidating the two fixes already confirmed.
 
 ## References
 

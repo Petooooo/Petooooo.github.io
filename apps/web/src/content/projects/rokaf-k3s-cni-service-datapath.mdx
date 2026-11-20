@@ -130,7 +130,7 @@ These are examples of observations to collect in an authorized maintenance conte
 
 I would not blindly flush `iptables` chains, change the host's default forwarding policy, disable Docker's rule management or swap CNIs as a diagnostic shortcut. Those actions can cut off unrelated services and destroy the very state needed for attribution. The retained record does **not** establish a Docker-caused `FORWARD DROP`, an nftables mismatch, conntrack exhaustion or a permanent firewall fix.
 
-## The comparison I would use next
+## Pod IP and ClusterIP Diagnostic Comparisons
 
 <figure className="project-concept-figure">
   <a href="/figures/journals/cni-service-diagnostic-matrix.svg" target="_blank" rel="noopener noreferrer" aria-label="Open diagnostic comparison table for Pod IP, ClusterIP, DNS and host rule state">
@@ -162,7 +162,7 @@ But I did not establish that Flannel's implementation was the cause of this part
 
 This incident is also distinct from [the ServiceLB host-port conflict](/projects/rokaf-service-lb-hostport-conflict/). In that separate case, adding a LoadBalancer Service was followed by `svclb-*` host-port occupation; removing the Service restored the earlier access path. The problem was host-port ownership, not the Pod-to-ClusterIP translation path under investigation here.
 
-## Current evidence and remaining checks
+## Observed Packet-path Evidence and Next Checks
 
 **Observed:** some Pods had DNS/Service-IP access failures; a Flannel interface was UP; Pod-network routes existed; and Service-related NAT entries were visible. Another recorded request to a Pod-range destination timed out. In a separate startup episode, iptables bootstrap failed on the xtables lock and a later attempt logged `bootstrap done`. Those observations are not one synchronized packet timeline or a proven common root cause.
 

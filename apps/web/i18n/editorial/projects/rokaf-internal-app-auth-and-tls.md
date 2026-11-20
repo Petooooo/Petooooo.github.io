@@ -4,7 +4,7 @@ Outline는 처음부터 아예 열리지 않는 서비스가 아니었다. 브�
 
 이 글은 2026년 초 폐쇄망 환경에서 Outline을 운영하며 추적했던 문제를 정리한 것이다. 실제로 고친 부분도 있었지만, 끝까지 원인을 확정하지 못한 부분도 있었다. 그 차이를 남겨두고 싶었다.
 
-## 화면은 열리는데 문서 편집이 안 됐다
+## Outline WebSocket 편집 연결
 
 2월 3일, Nginx를 통해 Outline에 접근했을 때 실시간 연결이 제대로 만들어지지 않았다. 브라우저에서는 WebSocket 요청이 HTTP `400`으로 끝나는 것이 보였다.
 
@@ -38,7 +38,7 @@ Outline은 페이지를 보여주는 데 필요한 일반 HTTP 요청 외에도 
 
 {{figure /figures/journals/outline-client-boundaries.svg | 브라우저 화면, WebSocket, 파일 URL, Outline 서버의 GitLab 요청은 서로 다른 조건에서 성공하거나 실패할 수 있다. 당시에 확인한 상태와 아직 원인이 열려 있는 상태를 구분했다.}}
 
-## 이번에는 GitLab 로그인 자체가 막혔다
+## GitLab OAuth Userinfo Timeout
 
 2월 23일에는 다른 문제가 발생했다. GitLab을 통해 Outline에 로그인하는 과정에서 `Bad Gateway`가 나타났고, 서버 로그에는 `ValidateSSOAccessTask`와 함께 `/oauth/userinfo` 요청의 `connect ETIMEDOUT`이 보였다.
 
@@ -90,7 +90,7 @@ Outline 문서에는 OIDC Provider를 자동으로 탐지하는 방식과 `OIDC_
 
 특히 **위키가 열린다는 사실 하나로 나머지 경로까지 정상이라고 생각했던 것**이 여러 문제를 한 번에 해결하려 들게 만든 원인이었다.
 
-## 다음에 확인한다면 무엇부터 볼까
+## 브라우저·서버 요청별 추가 검증
 
 같은 문제가 다시 나타나면 어떤 설정부터 바꿔야 할지 목록부터 만들지는 않을 것 같다. 먼저 실패한 요청을 한 건 집어 들고 시작할 것이다.
 
@@ -98,9 +98,7 @@ Outline 문서에는 OIDC Provider를 자동으로 탐지하는 방식과 `OIDC_
 
 WebSocket은 `101`을 확인한 뒤에도 문제가 나타났던 PC에서 문서를 수정하고 새로고침해봐야 한다. 이미지는 개발자 도구에 기록된 실제 URL을 확인하고 해당 PC에서 열리는지 봐야 한다. OAuth는 Outline 프로세스가 실행되는 환경에서 GitLab Endpoint로 접속되는지 확인하고, Callback은 인증 제공자에 등록된 주소와 실제 요청의 주소를 비교해야 한다.
 
-당시 기록에서 확실히 남은 결과는 WebSocket 연결 복구와 클라이언트 인증서 경고 해소다. 반대로 GitLab Timeout, 일부 PC의 이미지·저장 문제, 6월의 Callback 오류는 끝까지 해결됐다고 적을 만한 검증이 부족하다.
-
-WebSocket은 `101 Switching Protocols` 응답을 확인했고 일부 클라이언트의 인증서 경고도 해소했다. GitLab `ETIMEDOUT`, Callback 설정, 이미지·저장 문제는 별도의 요청에서 발생했으며 종단 간 복구 검증이 남아 있다.
+Outline의 실시간 편집 경로를 수정해 **WebSocket `101 Switching Protocols` 응답을 확인**했고, 일부 PC의 인증서 신뢰 문제도 해결했다. GitLab `ETIMEDOUT`과 OAuth Callback, 브라우저별 이미지·저장 오류는 별도 요청 경로에서 나타났으므로 각각의 재현·검증이 필요한 상태로 남겼다.
 
 ## 참고 문서
 

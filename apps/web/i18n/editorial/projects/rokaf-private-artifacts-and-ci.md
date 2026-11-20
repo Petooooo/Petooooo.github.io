@@ -8,7 +8,7 @@ GitLab에서 코드를 빌드하면 Kaniko가 컨테이너 이미지를 만들�
 
 2026년 초 폐쇄망 K3s에서 GitLab Runner·Kaniko·Nexus를 운영하며 겪은 문제들이다. 서로 다른 날짜의 사건이므로 한 번에 해결한 이야기로 묶지는 않았다. 실제 내부 서버 주소, 포트와 계정, 노드 이름과 배치 정보는 제외했다.
 
-## Kaniko를 실행하려면 셸부터 필요했다
+## Kaniko Kubernetes Executor 실행 환경
 
 처음에는 Kubernetes Executor를 사용하는 GitLab Runner에서 Kaniko를 실행하면 자연스럽게 Docker 이미지를 만들 수 있을 거라고 생각했다. Docker Daemon을 별도로 띄우지 않아도 되기 때문이다.
 
@@ -24,7 +24,7 @@ Kaniko의 기본 Executor 이미지는 일반적인 Linux 작업용 이미지처
 
 바로 다음에는 Docker 인증 설정을 복사할 때 `cp`가 빈 경로를 받는 오류가 나왔다. Job에 필요한 CI File 변수가 전달되지 않은 것이었다. 실행 파일이 준비됐다는 사실과 Registry의 인증 정보를 올바르게 받는다는 사실은 또 달랐다.
 
-## 이미지에는 실행 파일이 있는데 Job에서는 없었다
+## Kaniko Wrapper 이미지와 실행 경로
 
 2월에는 서버 재시작 이후 `/kaniko/executor: No such file or directory`가 다시 나타났다. 처음과 똑같은 오류로 보였다.
 
@@ -80,7 +80,7 @@ MinIO S3 Blob Store를 연결할 때는 **Path-style Access**를 활성화했다
 
 **S3 객체 저장 성공, Nexus의 영속 상태 보존, Docker Registry 기능, 장애 복구**를 하나의 성공으로 묶을 수는 없었다.
 
-## Registry가 죽으면 Registry를 살릴 이미지도 없었다
+## Registry 장애 시 복구 이미지 의존성
 
 4월에는 더 근본적인 문제가 드러났다. Nexus와 CoreDNS에 동시에 문제가 생긴 상황에서 일부 Pod가 이미지를 Pull하지 못했다.
 

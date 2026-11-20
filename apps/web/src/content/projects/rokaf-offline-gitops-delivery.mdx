@@ -160,7 +160,7 @@ Those options solve different problems:
 
 In a stateful production environment, I would review pruning and destructive change policies separately from ordinary image rollout. A Git commit that deletes a PersistentVolumeClaim cannot be judged by the same standard as changing a stateless image tag.
 
-## What the surviving records actually establish
+## Implemented CI Path and GitOps Scope
 
 The original work contains concrete evidence for some links and mainly architectural evidence for others.
 
@@ -177,7 +177,7 @@ The original work contains concrete evidence for some links and mainly architect
 
 That separation is deliberate. The deployment model was real engineering work, but I do not want the final write-up to present a design diagram as evidence for an unrecorded reliability outcome.
 
-## How I would verify the entire contract today
+## Deployment Verification Sequence
 
 A representative evaluation would use a harmless test service and an approved test artifact:
 
@@ -188,9 +188,9 @@ A representative evaluation would use a harmless test service and an approved te
 5. Cause a controlled, reversible drift and observe the documented policy rather than assuming self-heal is enabled.
 6. Validate the recovery path with the private registry unavailable, without involving live data.
 
-The list is an **acceptance test plan**, not an assertion that all six experiments were carried out during service operation. It would allow me to distinguish CI correctness, GitOps convergence and user-visible availability with recorded evidence rather than inference.
+This checklist ties the CI artifact to the GitOps change and finally to an application response. It also identifies the resilience tests that require a separate controlled exercise.
 
-For each deployment I would retain the built image digest, the desired image reference in Git, the Argo CD synchronization result and an application-level probe. The original records do not contain an exhaustive end-to-end promotion and failover test of the whole platform.
+I implemented and troubleshot the **GitLab Runner–Kaniko–internal Registry delivery path**, including the wrapper-image execution environment and private CA handling, and connected the pipeline to Argo CD's desired-state model. A complete promotion and failover exercise across every service remained separate from those completed integration tasks.
 
 ## References and connected engineering records
 
