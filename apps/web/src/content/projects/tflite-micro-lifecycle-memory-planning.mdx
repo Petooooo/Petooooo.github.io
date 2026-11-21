@@ -215,29 +215,13 @@ One source discrepancy should stay visible: dividing the saved bytes by the base
 
 Why was Person Detect's percentage improvement larger? Its evaluated layout offered more exploitable overlap relative to its total allocation. Tiny U-Net had many larger and longer-lived buffers: it still saved over 32 KB in absolute terms, but there was less room to reduce the peak proportionally. **This was an observation from the tested layouts**, not evidence that one model architecture universally benefits more than another.
 
-## What I learned, and what remained open
-
-The project established a concrete capability: **I modified and integrated a C++ memory planner that could consume operator-specific overlap constraints and produce lower planned peak buffer usage** on a constructed test and two TFLM models.
-
-It also exposed a deeper problem. **Who proves that an overlap constraint is safe?** A graph-level tensor lifetime cannot answer that question; the runtime must consider the actual read/write schedule of the selected kernel, and correctness must survive optimized access patterns and the rest of the graph.
-
-The original report already identified two directions worth pursuing: automatically derive Conflict Data through profiling or compiler analysis, and replace fixed BFS ordering with placement decisions scored by how much they increase the global peak. From our later discussions, I would add a mandatory **baseline-versus-modified inference-equivalence test**. Those improvements are a continuation of the work, not features I claim were completed in 2024.
-
-The achievement here was not simply finding a lower number. It was turning an observation about **data last-use inside an operator** into explicit placement constraints, implementing those constraints in a real TFLM memory planner, and demonstrating their effect on the arena layout.
-
-## References
-
-- Primary evidence: my 2024 Kyung Hee University report, *Memory Management through Lifecycle Analysis in TFLite Micro for Resource-Constrained Devices*, including Figures 1–26 and implementation logs. Raw report screenshots and personal identifiers are not hosted here.
-- R. David et al., [*TensorFlow Lite Micro: Embedded Machine Learning on TinyML Systems*](https://arxiv.org/abs/2010.08678).
-- [TensorFlow Lite Micro repository](https://github.com/tensorflow/tflite-micro).
-
-## Original figure archive: the 2024 output, not a redesign
+## What the original experiment logs showed
 
 The original report contains a much richer record than a table of final percentages: the exact `AddBuffer` inputs, console logs, hand-prepared Conflict Data, and colored memory-allocation maps. The 17 figures below preserve those **original screenshots from Figures 10–26** at their original image dimensions. Each is an SVG **container embedding the source JPEG**, not a newly rerun simulation or a vector trace. Click an image to inspect the preserved screenshot without an interpretive redesign. **Small source images are displayed at their native pixel width, not stretched to fill the article.** Larger screenshots may shrink to fit the screen; open the linked SVG for the original resolution. Wrapping a JPEG in SVG does not restore detail missing from the source.
 
 These are primary visual evidence; after the archive, I keep my separately labeled vector diagrams and numeric reconstructions to explain what is happening in them.
 
-### Constructed-buffer experiment — Figures 10–16
+### An eight-buffer experiment I could inspect byte by byte
 
 <figure className="project-concept-figure project-source-figure">
   <a href="/figures/journals/tflm-source-figure-10.svg" target="_blank" rel="noopener noreferrer" aria-label="Open original report figure 10">
@@ -290,7 +274,7 @@ These are primary visual evidence; after the archive, I keep my separately label
 
 In this eight-buffer test, the original Greedy Planner finished at **4,101 bytes** while the conflict-aware plan reached **3,585 bytes**. The console maps show the arrangement; the precise vectors later in this article use the reported sizes, lifetimes and offsets to make the comparison easier to follow.
 
-### Person Detect — Figures 17–21
+### Trying the same planner on Person Detect
 
 <figure className="project-concept-figure project-source-figure">
   <a href="/figures/journals/tflm-source-figure-17.svg" target="_blank" rel="noopener noreferrer" aria-label="Open original report figure 17">
@@ -329,7 +313,7 @@ In this eight-buffer test, the original Greedy Planner finished at **4,101 bytes
 
 The two colored memory maps are especially revealing: the reduction from **55,296 to 39,636 bytes** came from changing address placement under supplied constraints, not from reducing the number of tensors or compressing their contents.
 
-### Tiny U-Net — Figures 22–26
+### What changed with Tiny U-Net
 
 <figure className="project-concept-figure project-source-figure">
   <a href="/figures/journals/tflm-source-figure-22.svg" target="_blank" rel="noopener noreferrer" aria-label="Open original report figure 22">
@@ -370,7 +354,7 @@ The larger buffer sizes and long lifetimes make this the more crowded case. The 
 
 ---
 
-## Analytical vector reconstructions: comparing the results
+## Comparing the placements, not just the percentages
 
 The original report contains **buffer-configuration logs, ordering traces and side-by-side placement visualizations** (Figures 10–26). The results below collect those stages at the end instead of stopping with a single summary table.
 
@@ -439,13 +423,13 @@ This result mattered because the algorithm was not restricted to the tiny hand-b
   <figcaption>Exact byte totals transcribed from the 2024 report. Bars within each pair use a common scale; percentages in the report are retained as quoted.</figcaption>
 </figure>
 
-## Source-data vector reconstructions: exact offsets and constraints
+## Rebuilding the layout from recorded offsets
 
 The percentage chart is the end of the story, not the evidence that led to it; the original screens are preserved in the archive above. The constructed-buffer experiment is especially useful because its original report preserves every buffer size, lifetime and final offset. I used those records to reproduce the two memory maps below **at their recorded byte positions**, rather than inventing a convenient arrangement of colored strips.
 
 For Person Detect and Tiny U-Net, I can also reproduce the manually prepared Conflict Data arrays. The complete per-buffer offsets for those larger model traces are not asserted here: the preceding figures are reconstructions of peak values and placement patterns, not an executable log replay.
 
-### Constructed test — original Figures 10–16
+### The exact positions in the constructed test
 
 <figure className="project-concept-figure"><a href="/figures/journals/tflm-report-figure-10.svg" target="_blank" rel="noopener noreferrer"><img src="/figures/journals/tflm-report-figure-10.svg" alt="Exact eight AddBuffer calls transcribed from original Figure 10, including sizes and first/last-use times." loading="lazy" decoding="async" /></a><figcaption>Analytical vector reconstruction of Figure 10 · The eight exact `AddBuffer(size, first, last)` calls in the constructed test. These are inputs to the experiment, not synthetic new buffers.</figcaption></figure>
 
@@ -461,10 +445,26 @@ For Person Detect and Tiny U-Net, I can also reproduce the manually prepared Con
 
 <figure className="project-concept-figure"><a href="/figures/journals/tflm-report-figure-16.svg" target="_blank" rel="noopener noreferrer"><img src="/figures/journals/tflm-report-figure-16.svg" alt="Time versus address memory map using exact conflict-aware offsets from original Figure 16, reaching 3,585 bytes." loading="lazy" decoding="async" /></a><figcaption>Analytical vector reconstruction of Figure 16 · Exact recorded offsets give a 3,585-byte peak. Buffer 3 occupies [2,564, 3,585) while buffer 4 occupies [2,308, 3,333); buffer 4 also overlaps buffer 6's [2,052, 3,076) range. Buffer 2 does not need to overlap buffer 3. These are address-sharing facts, not by themselves an inference-correctness proof.</figcaption></figure>
 
-### Model-specific Conflict Data — original Figures 19 and 24
+### The Conflict Data supplied to each model
 
 <figure className="project-concept-figure"><a href="/figures/journals/tflm-report-figure-19.svg" target="_blank" rel="noopener noreferrer"><img src="/figures/journals/tflm-report-figure-19.svg" alt="31 manually calculated Person Detect Conflict Data entries transcribed from the source report." loading="lazy" decoding="async" /></a><figcaption>Analytical vector reconstruction of Figure 19 · All 31 Person Detect entries transcribed from the original handwritten-to-code dataset, including zero boundaries. This is supplied model metadata, not the output of an implemented automatic profiler.</figcaption></figure>
 
 <figure className="project-concept-figure"><a href="/figures/journals/tflm-report-figure-24.svg" target="_blank" rel="noopener noreferrer"><img src="/figures/journals/tflm-report-figure-24.svg" alt="44 manually calculated Tiny U-Net Conflict Data entries transcribed from the source report." loading="lazy" decoding="async" /></a><figcaption>Analytical vector reconstruction of Figure 24 · The 44 Tiny U-Net entries include larger negative overlap boundaries and cross-branch pairs, underlining why tensor size alone cannot determine a safe in-place placement.</figcaption></figure>
 
 The original report also contains longer planner listings and full allocation screenshots (Figures 17–18, 20–23, 25–26). They informed the earlier result comparisons. I have deliberately not assigned fictitious offsets to those model traces just to make another vector chart look complete. The exact constructed-buffer traces and the manually supplied model constraints above are the records that can be reconstructed numerically without that risk.
+
+## What I learned, and what remained open
+
+The project established a concrete capability: **I modified and integrated a C++ memory planner that could consume operator-specific overlap constraints and produce lower planned peak buffer usage** on a constructed test and two TFLM models.
+
+It also exposed a deeper problem. **Who proves that an overlap constraint is safe?** A graph-level tensor lifetime cannot answer that question; the runtime must consider the actual read/write schedule of the selected kernel, and correctness must survive optimized access patterns and the rest of the graph.
+
+The original report already identified two directions worth pursuing: automatically derive Conflict Data through profiling or compiler analysis, and replace fixed BFS ordering with placement decisions scored by how much they increase the global peak. From our later discussions, I would add a mandatory **baseline-versus-modified inference-equivalence test**. Those improvements are a continuation of the work, not features I claim were completed in 2024.
+
+The achievement here was not simply finding a lower number. It was turning an observation about **data last-use inside an operator** into explicit placement constraints, implementing those constraints in a real TFLM memory planner, and demonstrating their effect on the arena layout.
+
+## References
+
+- Primary evidence: my 2024 Kyung Hee University report, *Memory Management through Lifecycle Analysis in TFLite Micro for Resource-Constrained Devices*, including Figures 1–26 and implementation logs. Raw report screenshots and personal identifiers are not hosted here.
+- R. David et al., [*TensorFlow Lite Micro: Embedded Machine Learning on TinyML Systems*](https://arxiv.org/abs/2010.08678).
+- [TensorFlow Lite Micro repository](https://github.com/tensorflow/tflite-micro).

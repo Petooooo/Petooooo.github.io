@@ -37,6 +37,15 @@ These roles can coexist: a source image demonstrates what was recorded; an analy
 - Keep source screenshot wrappers, exact-data vectors, and schematic explanatory diagrams distinguishable in filenames and captions.
 - Verify source-file integrity (hash when available), SVG XML parsing, figure links and counts, responsive layout, all localization strings, Astro check/build, Git diff safety, and the live Pages deployment.
 
+## Tell the engineering story, not the asset-production story
+
+- Make titles about the technical question, implementation, decisions and evidence, not the file formats used to illustrate them. A heading about SVG or a screenshot gallery usually belongs in a figure caption or a short provenance note.
+- Write the Korean edition independently in a natural, personal engineering voice. Preserve the original scope: observation, suspected cause, options considered, implemented changes, actual tests, limits and remaining questions. Avoid literal translation and invented first-person claims.
+- Keep established terms in English when that is more idiomatic: TFLM, Memory Planner, Tensor Lifetime, Kernel, Last Read, Conflict Data, Offset, Peak Memory, Reverse BFS. Do not mechanically translate Memory Planning as 메모리 계획.
+- Use an en dash for ranges such as 17–18, 20–23, 25–26. Plain numeric tildes in Markdown can become strikethrough delimiters. The build checker rejects those ranges in editorial source files.
+- Place implementation reflections and the actual limitations after experimental figures, with references last. Never end a personal engineering article with an administrative description of the image format.
+- Check the rendered Korean H1, browser tab title and final HTML for malformed Markdown, unintended deleted text, code/text encoding defects and awkward technical terminology.
+
 ## Completion protocol
 
 Finish **one article before starting the next**. At the end of the actual publication cycle, report:

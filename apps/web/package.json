@@ -5,10 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "astro dev --host 0.0.0.0",
-    "prebuild": "python3 ../../automation/scripts/validate-mdx-inline-code.py && python3 ../../automation/scripts/check-project-titles.py && python3 ../../automation/scripts/check-source-figure-resolution.py",
+    "prebuild": "python3 ../../automation/scripts/validate-mdx-inline-code.py && python3 ../../automation/scripts/check-project-titles.py && python3 ../../automation/scripts/check-source-figure-resolution.py && python3 ../../automation/scripts/check-editorial-typography.py",
     "build": "astro check && astro build",
     "preview": "astro preview --host 0.0.0.0",
-    "precheck": "python3 ../../automation/scripts/validate-mdx-inline-code.py && python3 ../../automation/scripts/check-project-titles.py && python3 ../../automation/scripts/check-source-figure-resolution.py",
+    "precheck": "python3 ../../automation/scripts/validate-mdx-inline-code.py && python3 ../../automation/scripts/check-project-titles.py && python3 ../../automation/scripts/check-source-figure-resolution.py && python3 ../../automation/scripts/check-editorial-typography.py",
     "check": "astro check",
     "lint": "astro check",
     "postbuild": "node scripts/render-ko-editorials.mjs && python3 ../../automation/scripts/localize-static-site.py build && python3 ../../automation/scripts/check-korean-editions.py",

@@ -1,4 +1,4 @@
-2024년 5~6월에는 두 명이 한 팀을 이루어 **Verilog 기반 5단계 RISC CPU, RISC TOY**를 구현했다. IF·ID·EX·MEM·WB 구조로 명령어를 처리하는 프로세서였고, 나는 데이터 경로와 제어 로직을 구성하면서 **Forwarding, Load-use Stall, Branch·Jump에 따른 Control Hazard, Register File의 Writeback 타이밍**을 직접 다뤘다. 명령어를 조합한 Testbench로 레지스터 값과 실행 흐름도 확인했다.
+2024년 5–6월에는 두 명이 한 팀을 이루어 **Verilog 기반 5단계 RISC CPU, RISC TOY**를 구현했다. IF·ID·EX·MEM·WB 구조로 명령어를 처리하는 프로세서였고, 나는 데이터 경로와 제어 로직을 구성하면서 **Forwarding, Load-use Stall, Branch·Jump에 따른 Control Hazard, Register File의 Writeback 타이밍**을 직접 다뤘다. 명령어를 조합한 Testbench로 레지스터 값과 실행 흐름도 확인했다.
 
 당시에 남긴 13쪽 설계 보고서를 다시 읽어보니, 이 프로젝트에서 가장 오래 고민했던 부분이 무엇이었는지 선명하게 드러났다. 명령어 하나를 실행하는 ALU보다 어려웠던 것은 **여러 명령어가 동시에 파이프라인에 들어와 있을 때 어떤 레지스터 값을 읽어야 하는지, 그리고 언제 다음 단계로 진행해도 되는지** 결정하는 일이었다.
 

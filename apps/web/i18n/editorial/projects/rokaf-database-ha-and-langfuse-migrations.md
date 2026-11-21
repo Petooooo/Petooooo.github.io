@@ -65,9 +65,9 @@ Read-only 상태는 Replica와 Keeper 쪽에서, 저장 공간 부족은 디스�
 
 Langfuse라면 과거 Trace와 Observation이 조회되는지, 새로 기록한 데이터를 다시 읽을 수 있는지, 재시작 뒤에도 백그라운드 작업이 진행되는지 확인해야 한다. ClickHouse라면 쓰기 가능한 상태와 복제 큐 외에 데이터 자체의 비교가 필요하고, MongoDB라면 애플리케이션이 원하는 읽기·쓰기 정책 아래 Primary와 통신할 수 있어야 한다.
 
-이 글을 처음 정리하던 때에는 Langfuse v4 마이그레이션에도 끝나지 않은 단계가 있었다. 하지만 그 상태가 최종 결과는 아니었다. **2026년 11월 17일에는 Step 1~5를 모두 마쳤고, `events_only` 모드에서 과거와 신규 데이터 검증을 통과했다.** 마지막에는 이전을 위해 사용한 임시 정렬 테이블을 정리했으며, 기존 `traces`와 `observations` 원본 테이블을 삭제한 것은 아니었다. 중간 장애와 최종 검증의 차이는 [Langfuse 이전 기록](/projects/rokaf-langfuse-v4-migration-field-notes/)에 따로 남겨두었다.
+이 글을 처음 정리하던 때에는 Langfuse v4 마이그레이션에도 끝나지 않은 단계가 있었다. 하지만 그 상태가 최종 결과는 아니었다. **2026년 11월 17일에는 Step 1–5를 모두 마쳤고, `events_only` 모드에서 과거와 신규 데이터 검증을 통과했다.** 마지막에는 이전을 위해 사용한 임시 정렬 테이블을 정리했으며, 기존 `traces`와 `observations` 원본 테이블을 삭제한 것은 아니었다. 중간 장애와 최종 검증의 차이는 [Langfuse 이전 기록](/projects/rokaf-langfuse-v4-migration-field-notes/)에 따로 남겨두었다.
 
-Langfuse v4 데이터 이전은 **Step 1~5를 마치고 과거·신규 데이터 조회까지 확인**했다. MongoDB의 Primary 탐색 문제와 ClickHouse의 Replica 전환은 각각 연결 경로와 복제 상태를 기준으로 조사했다. 서로 다른 데이터베이스의 장애를 하나의 복구 결과로 묶지 않고, 실제로 확인한 단계별 결과를 남겼다.
+Langfuse v4 데이터 이전은 **Step 1–5를 마치고 과거·신규 데이터 조회까지 확인**했다. MongoDB의 Primary 탐색 문제와 ClickHouse의 Replica 전환은 각각 연결 경로와 복제 상태를 기준으로 조사했다. 서로 다른 데이터베이스의 장애를 하나의 복구 결과로 묶지 않고, 실제로 확인한 단계별 결과를 남겼다.
 
 ## 관련 기록
 
