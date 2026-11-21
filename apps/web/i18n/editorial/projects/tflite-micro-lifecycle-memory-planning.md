@@ -212,11 +212,65 @@ Person Detect에서는 전체 크기에 비해 중복 배치의 이점이 컸고
 - R. David 외, [*TensorFlow Lite Micro: Embedded Machine Learning on TinyML Systems*](https://arxiv.org/abs/2010.08678)
 - [TensorFlow Lite Micro 소스 저장소](https://github.com/tensorflow/tflite-micro)
 
-## 실험 결과와 배치 변화
+## 원본 실험 화면 아카이브 — 보고서 그림 10~26
+
+최종 절감률만으로는 당시의 메모리 배치가 실제로 어떻게 달라졌는지 알기 어렵다. 원본 보고서에는 버퍼를 등록한 코드부터 정렬 로그, 수동으로 계산한 Conflict Data, 텐서들이 겹치는 모습을 색으로 표시한 콘솔 화면까지 남아 있었다. 아래에는 **그림 10~26의 원본 이미지 17개를 빠짐없이** 실었다.
+
+여기에서 사용하는 SVG는 원본 JPEG를 그대로 담는 **보존용 컨테이너**다. 원본 이미지의 모양과 글자·색상·배치를 바꾸지 않았지만, 내부까지 벡터로 변환한 것은 아니다. 각 그림을 열면 원본 해상도로 확인할 수 있다. 그 뒤에 나오는 벡터 도식은 이 자료를 이해하기 쉽게 따로 재구성한 분석용 그림이다.
+
+### 직접 구성한 버퍼 테스트 — 그림 10~16
+
+{{figure /figures/journals/tflm-source-figure-10.svg | 원본 그림 10. 직접 구성한 실험의 버퍼 8개를 등록한 코드다. Size와 First/Last Use를 원본 그대로 보존했다.}}
+
+{{figure /figures/journals/tflm-source-figure-11.svg | 원본 그림 11. 기존·개선 플래너가 최종 Offset을 계산하기 전의 버퍼 출력 결과다.}}
+
+{{figure /figures/journals/tflm-source-figure-12.svg | 원본 그림 12. 기존 Greedy Planner가 버퍼를 크기 중심으로 정렬한 순서와 실제 Offset이 담겨 있다.}}
+
+{{figure /figures/journals/tflm-source-figure-13.svg | 원본 그림 13. 기존 방식의 주소 배치가 콘솔 문자로 그려진 원본이다. 계획상 Peak는 4,101 bytes였다.}}
+
+{{figure /figures/journals/tflm-source-figure-14.svg | 원본 그림 14. (2,3,−256), (3,4,−256), (4,6,−256) 관계를 등록한 실제 코드 화면이다.}}
+
+{{figure /figures/journals/tflm-source-figure-15.svg | 원본 그림 15. 개선 Planner가 결정한 배치 순서와 각 버퍼의 Offset·Lifetime이 출력된 결과다.}}
+
+{{figure /figures/journals/tflm-source-figure-16.svg | 원본 그림 16. 중복 주소가 허용된 결과를 콘솔 문자와 ! 표시로 확인할 수 있다. Peak는 3,585 bytes였다.}}
+
+작은 구성이라서 배치 전략의 차이가 선명하다. 기존 Greedy Planner는 **4,101 bytes**, 개선 Planner는 **3,585 bytes**를 사용했다. 아래 분석용 SVG에서는 이 원본 로그에 기록된 Size·Lifetime·Offset을 그대로 이용해 각 버퍼의 위치를 다시 그렸다.
+
+### Person Detect — 그림 17~21
+
+{{figure /figures/journals/tflm-source-figure-17.svg | 원본 그림 17. Person Detect의 기존 Greedy Planner가 계산한 버퍼 배치 순서·Offset 목록이다.}}
+
+{{figure /figures/journals/tflm-source-figure-18.svg | 원본 그림 18. Person Detect의 기존 배치 결과다. 각 색의 텐서가 시간·주소 공간을 차지하는 실제 화면으로, Peak는 55,296 bytes였다.}}
+
+{{figure /figures/journals/tflm-source-figure-19.svg | 원본 그림 19. Person Detect에 대해 팀원이 수동으로 계산해 전달했던 Conflict Data 배열이다.}}
+
+{{figure /figures/journals/tflm-source-figure-20.svg | 원본 그림 20. Non-Conflict Online Buffer와 BFS로 정렬한 Conflict Buffer가 구분되는 실제 로그다.}}
+
+{{figure /figures/journals/tflm-source-figure-21.svg | 원본 그림 21. Conflict Data를 적용한 뒤 실제로 출력된 다색 배치 화면이다. 계획상 Peak는 39,636 bytes로 감소했다.}}
+
+두 메모리 배치 화면을 비교하면 무엇이 바뀌었는지 더 분명하게 보인다. **55,296 bytes에서 39,636 bytes**로 줄어든 것은 버퍼의 내용을 압축해서가 아니라, 수동으로 전달한 Conflict 경계에 따라 같은 메모리 주소를 다른 데이터가 재사용하도록 했기 때문이다.
+
+### Tiny U-Net — 그림 22~26
+
+{{figure /figures/journals/tflm-source-figure-22.svg | 원본 그림 22. Tiny U-Net에서 Size 순으로 배치한 기존 플래너의 긴 버퍼·Offset 목록이다.}}
+
+{{figure /figures/journals/tflm-source-figure-23.svg | 원본 그림 23. 큰 버퍼와 긴 Lifetime이 드러나는 Tiny U-Net의 기존 메모리 배치 화면이다. Peak는 230,416 bytes였다.}}
+
+{{figure /figures/journals/tflm-source-figure-24.svg | 원본 그림 24. Tiny U-Net에 전달한 수동 Conflict Data 목록을 원본 화면 그대로 보존했다.}}
+
+{{figure /figures/journals/tflm-source-figure-25.svg | 원본 그림 25. 일반 버퍼와 Conflict BFS 대상 버퍼의 순서가 나뉜 개선 Planner 로그다.}}
+
+{{figure /figures/journals/tflm-source-figure-26.svg | 원본 그림 26. 큰 버퍼 주변에 허용된 중복이 적용된 최종 배치 화면이다. 계획상 Peak는 198,120 bytes였다.}}
+
+Tiny U-Net은 큰 버퍼와 긴 Lifetime 때문에 배치가 더 복잡했다. 원본 화면에는 **230,416 bytes에서 198,120 bytes**로 감소한 결과가 남아 있다. 다만 이 화면만으로 모든 Operator의 In-place 연산이 항상 정확하다는 것을 증명할 수는 없다.
+
+---
+
+## 분석용 벡터 SVG: 모델별 결과 비교
 
 원본 보고서에는 버퍼 구성부터 정렬 순서, Offset 출력, 모델별 Memory Allocation Plan까지 많은 결과 그림이 있다. 기존 글에서는 최종 수치만 남아 있었지만, 이 실험에서 중요한 것은 **어떤 배치가 실제로 달라졌는지**다.
 
-아래 SVG는 보고서의 그림 10~26과 수치 결과를 바탕으로 결과를 비교하기 쉽게 다시 구성했다. **원본 콘솔 화면을 그대로 재실행한 캡처가 아니라, 확인된 수치·배치 단계의 벡터 재구성**이다. 개별 버퍼의 길이나 Offset은 모두 기계적으로 추출할 수 없었으므로, 색으로 표시한 배치 패턴은 구조를 설명하는 용도로 사용했다.
+원본 화면은 위에 보존했다. 아래의 별도 분석용 벡터 SVG는 보고서의 그림 10~26과 수치 결과를 바탕으로 결과를 비교하기 쉽게 다시 구성했다. **원본 콘솔 화면을 그대로 재실행한 캡처가 아니라, 확인된 수치·배치 단계의 벡터 재구성**이다. 개별 버퍼의 길이나 Offset은 모두 기계적으로 추출할 수 없었으므로, 색으로 표시한 배치 패턴은 구조를 설명하는 용도로 사용했다.
 
 ### 1. 직접 구성한 버퍼 테스트
 
@@ -250,7 +304,7 @@ Tiny U-Net에는 크기가 큰 버퍼와 Lifetime이 긴 버퍼가 더 많이 �
 
 {{figure /figures/journals/tflm-result-peak-summary.svg | 원본 보고서에 기재된 Byte 수치를 기준으로 세 실험의 Before·After를 비교한 그래프다. 각 실험 안에서는 같은 축척을 사용했고, 원본 감소율은 별도로 표시했다.}}
 
-## 원본 배치 로그에서 다시 확인한 결과
+## 분석용 벡터 SVG: 원본 수치로 재구성한 배치
 
 감소율만 보여주면 그 숫자가 어떤 과정을 거쳐 나왔는지 알기 어렵다. 직접 만든 버퍼 실험은 다행히 원본 보고서에 각 버퍼의 **크기, 활성 구간, 최종 Offset**이 모두 남아 있다. 그래서 이번에는 임의로 막대의 길이를 맞추지 않고, 실제로 기록된 주소와 활성 구간을 기준으로 메모리 배치를 다시 그렸다.
 
