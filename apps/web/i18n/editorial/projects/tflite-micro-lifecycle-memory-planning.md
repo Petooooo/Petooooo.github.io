@@ -8,6 +8,8 @@ Convolution은 입력을 한꺼번에 읽고 출력을 한꺼번에 만드는 �
 
 2024년에 작성한 **8쪽 보고서와 남겨 둔 버퍼 출력·배치 화면**을 바탕으로 구현 과정을 다시 정리했다. 실험 자체는 2024년의 결과이며, 자동화하지 못한 부분이나 검증 범위를 넘는 주장은 구분해 두었다.
 
+> 내가 직접 구현한 부분은 **C++ Memory Planner의 Buffer Ordering과 Offset 탐색, TFLM 통합**이었다. 모델별 Conflict Data는 팀원이 수동으로 계산했다. 아래 결과는 2024년에 남긴 실험 기록이며, Compiler Profiling으로 Conflict Data를 자동 추출하는 기능까지 완성한 것은 아니다.
+
 ## 기존 Greedy Planner부터 다시 들여다봤다
 
 기존 Greedy Memory Planner의 동작을 정확히 이해하는 일이 출발점이었다. 구현을 분석하면서 버퍼의 크기와 활성 구간을 받는 `AddBuffer()`, 필요한 시점에 배치 결과를 계산하는 `GetOffsetForBuffer()`, 내부 계산 함수인 `CalculateOffsetsIfNeeded()` 등을 따라갔다. 각 버퍼의 **Size, Lifetime, Offset**도 출력해 어떤 순서로 배치되는지 확인했다.

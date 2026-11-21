@@ -127,6 +127,17 @@ def main():
         if source_figures!=translated_figures:
             errors.append(f"Figure mismatch: {slug}, missing={source_figures-translated_figures}, extra={translated_figures-source_figures}")
         rendered=html_file.read_text()
+        # The English project may contain a real Markdown blockquote (>).
+        # Those notes were silently omitted from some independently edited Korean articles.
+        # Compare rendered HTML, not only the number of > characters in source files.
+        source_html = DIST / "projects" / slug / "index.html"
+        if source_html.is_file():
+            en_blockquotes = len(re.findall(r"<blockquote(?:\\s|>)", source_html.read_text(encoding="utf-8")))
+            ko_blockquotes = len(re.findall(r"<blockquote(?:\\s|>)", rendered))
+            if ko_blockquotes < en_blockquotes:
+                errors.append(
+                    f"Missing Korean blockquote: {slug}, English={en_blockquotes}, Korean={ko_blockquotes}"
+                )
         if "hand-edited Korean editorial: "+slug not in rendered:
             errors.append(f"Expected curated Korean article body: {slug}")
         for figure in source_figures:
