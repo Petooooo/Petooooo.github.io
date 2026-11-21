@@ -21,7 +21,7 @@
   "rokaf-self-hosted-services-integration": "12a5e2972f3b8cb441de700122216f02785d7136c98ab4eba0e4f93d8be61633",
   "rokaf-service-lb-hostport-conflict": "6b2d5bd5a4daae723e960462086d3927ed7787ed87fbae71724d68c74caa3600",
   "rokaf-stateful-storage-and-recovery": "2f744a7c382887fc03f48774a4276cf5a6e11b9be6e686e6e4e05665854f7eec",
-  "tflite-micro-lifecycle-memory-planning": "a0da137cc50046989fad36e41151ff66ae0116e632e467f6197ad96d7dbe665a",
+  "tflite-micro-lifecycle-memory-planning": "f7127cb25b7d43dc0dfa669f7832351d2b68999d4d05440abff484f9ca6934b9",
   "rokaf-memory-pressure-and-service-recovery": "f0652feb8caf2c12765e778ba469933a29a38192dfc87d5f0b96d9f1bd4d005a",
   "rokaf-storage-placement-and-failure-domains": "f59e15f3204afc9d5649190186d2742ad7e3a2d99761dcd5bfa20a0e58c02a47",
   "rokaf-k3s-cni-service-datapath": "e132b7eb612f18a9367e680509a1e16f0b1d123d7709264bf40fd909a1a85a7a",

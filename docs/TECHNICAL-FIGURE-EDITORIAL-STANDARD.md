@@ -1,6 +1,6 @@
 # Source-grounded technical figure editorial standard
 
-This is the default procedure for **one engineering project article at a time**. It supplements the portfolio's writing and publication checks. Source fidelity matters more than decorative consistency.
+This is the default procedure for **one engineering project article at a time**. It supplements the portfolio's writing and publication checks. Source fidelity, natural display resolution and explanatory value matter more than decorative consistency.
 
 ## Work from the original evidence
 
@@ -16,6 +16,17 @@ This is the default procedure for **one engineering project article at a time**.
 **Analytical vector redraws** come afterward. Show precisely the mechanism the reader needs: time–address layout, allocation conflict graph, dependency, measured comparison, timing sequence, or other subject-appropriate view. When source data contain exact values, use them; if individual offsets or coordinates were not recorded, explicitly label the diagram illustrative and avoid invented numerical precision.
 
 These roles can coexist: a source image demonstrates what was recorded; an analytical diagram explains why it matters. Include a rich assortment of meaningful figures without creating redundant or irrelevant decoration.
+
+## Resolution and legibility are non-negotiable
+
+- Record each source image's intrinsic pixel width/height, provenance and whether it is an original bitmap, vector source or PDF page render. Increasing PDF rendering DPI does not recover detail from an embedded low-resolution screenshot.
+- Never enlarge a low-resolution raster to fill an article, diagram or SVG viewport. Display at intrinsic CSS pixel size or shrink responsively. Link the source at native size and do not substitute artificial sharpening or AI super-resolution for real evidence.
+- Name SVG-wrapped source bitmaps with the pattern `*-source-figure-N.svg` and apply the reusable `project-source-figure` class. The image keeps its intrinsic width on desktop and shrinks only on narrow screens.
+- When the original is too small to read, preserve it faithfully and add a separately identified native-vector transcription/reconstruction using confirmed text, data, geometry and logs. An SVG container with a JPEG remains raster content.
+- A faithful redraw retains meaningful source grouping, colors, labels, relative geometry, console text and comparison structure. Mark any omission, interpolation, abstraction or unknown offset explicitly rather than inventing precision.
+- Pursue as many distinct evidence-bearing diagrams as useful: source preserves, exact-data redraws, mechanism diagrams, timelines, dependency graphs, architecture-specific structures, comparisons and result plots. Do not create repetitive filler simply to raise the SVG count.
+- Verify native-resolution desktop display, mobile downscaling, full-size links, glyph rendering and both language variants. Do not publish if the site forces tiny bitmaps to full width or if the original and reconstruction captions are indistinguishable.
+
 
 ## Build bilingual, verifiable evidence
 

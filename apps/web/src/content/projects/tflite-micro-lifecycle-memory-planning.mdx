@@ -233,57 +233,57 @@ The achievement here was not simply finding a lower number. It was turning an ob
 
 ## Original figure archive: the 2024 output, not a redesign
 
-The original report contains a much richer record than a table of final percentages: the exact `AddBuffer` inputs, console logs, hand-prepared Conflict Data, and colored memory-allocation maps. The 17 figures below preserve those **original screenshots from Figures 10–26** at their original image dimensions. Each is an SVG **container embedding the source JPEG**, not a newly rerun simulation or a vector trace. Click an image to inspect the preserved screenshot without an interpretive redesign.
+The original report contains a much richer record than a table of final percentages: the exact `AddBuffer` inputs, console logs, hand-prepared Conflict Data, and colored memory-allocation maps. The 17 figures below preserve those **original screenshots from Figures 10–26** at their original image dimensions. Each is an SVG **container embedding the source JPEG**, not a newly rerun simulation or a vector trace. Click an image to inspect the preserved screenshot without an interpretive redesign. **Small source images are displayed at their native pixel width, not stretched to fill the article.** Larger screenshots may shrink to fit the screen; open the linked SVG for the original resolution. Wrapping a JPEG in SVG does not restore detail missing from the source.
 
 These are primary visual evidence; after the archive, I keep my separately labeled vector diagrams and numeric reconstructions to explain what is happening in them.
 
 ### Constructed-buffer experiment — Figures 10–16
 
-<figure className="project-concept-figure">
+<figure className="project-concept-figure project-source-figure">
   <a href="/figures/journals/tflm-source-figure-10.svg" target="_blank" rel="noopener noreferrer" aria-label="Open original report figure 10">
-    <img src="/figures/journals/tflm-source-figure-10.svg" alt="Original report Figure 10: The exact eight AddBuffer calls that define tensor sizes and first/last use in the constructed test." className="mx-auto max-h-[48rem] w-full object-contain" loading="lazy" decoding="async" />
+    <img src="/figures/journals/tflm-source-figure-10.svg" alt="Original report Figure 10: The exact eight AddBuffer calls that define tensor sizes and first/last use in the constructed test." className="mx-auto object-contain" loading="lazy" decoding="async" />
   </a>
   <figcaption><strong>Original Figure 10 · Eight AddBuffer calls.</strong> The exact eight AddBuffer calls that define tensor sizes and first/last use in the constructed test.</figcaption>
 </figure>
 
-<figure className="project-concept-figure">
+<figure className="project-concept-figure project-source-figure">
   <a href="/figures/journals/tflm-source-figure-11.svg" target="_blank" rel="noopener noreferrer" aria-label="Open original report figure 11">
-    <img src="/figures/journals/tflm-source-figure-11.svg" alt="Original report Figure 11: The source console output before the two planners assign their final offsets." className="mx-auto max-h-[48rem] w-full object-contain" loading="lazy" decoding="async" />
+    <img src="/figures/journals/tflm-source-figure-11.svg" alt="Original report Figure 11: The source console output before the two planners assign their final offsets." className="mx-auto object-contain" loading="lazy" decoding="async" />
   </a>
   <figcaption><strong>Original Figure 11 · Initial buffer records.</strong> The source console output before the two planners assign their final offsets.</figcaption>
 </figure>
 
-<figure className="project-concept-figure">
+<figure className="project-concept-figure project-source-figure">
   <a href="/figures/journals/tflm-source-figure-12.svg" target="_blank" rel="noopener noreferrer" aria-label="Open original report figure 12">
-    <img src="/figures/journals/tflm-source-figure-12.svg" alt="Original report Figure 12: Baseline sorted buffer records, including each selected final offset and lifetime." className="mx-auto max-h-[48rem] w-full object-contain" loading="lazy" decoding="async" />
+    <img src="/figures/journals/tflm-source-figure-12.svg" alt="Original report Figure 12: Baseline sorted buffer records, including each selected final offset and lifetime." className="mx-auto object-contain" loading="lazy" decoding="async" />
   </a>
   <figcaption><strong>Original Figure 12 · Greedy placement order.</strong> Baseline sorted buffer records, including each selected final offset and lifetime.</figcaption>
 </figure>
 
-<figure className="project-concept-figure">
+<figure className="project-concept-figure project-source-figure">
   <a href="/figures/journals/tflm-source-figure-13.svg" target="_blank" rel="noopener noreferrer" aria-label="Open original report figure 13">
-    <img src="/figures/journals/tflm-source-figure-13.svg" alt="Original report Figure 13: The original console-based memory map: the baseline reaches a planned peak of 4,101 bytes." className="mx-auto max-h-[48rem] w-full object-contain" loading="lazy" decoding="async" />
+    <img src="/figures/journals/tflm-source-figure-13.svg" alt="Original report Figure 13: The original console-based memory map: the baseline reaches a planned peak of 4,101 bytes." className="mx-auto object-contain" loading="lazy" decoding="async" />
   </a>
   <figcaption><strong>Original Figure 13 · Greedy address map.</strong> The original console-based memory map: the baseline reaches a planned peak of 4,101 bytes.</figcaption>
 </figure>
 
-<figure className="project-concept-figure">
+<figure className="project-concept-figure project-source-figure">
   <a href="/figures/journals/tflm-source-figure-14.svg" target="_blank" rel="noopener noreferrer" aria-label="Open original report figure 14">
-    <img src="/figures/journals/tflm-source-figure-14.svg" alt="Original report Figure 14: The three actual AddConflict declarations supplied to the constructed test." className="mx-auto max-h-[48rem] w-full object-contain" loading="lazy" decoding="async" />
+    <img src="/figures/journals/tflm-source-figure-14.svg" alt="Original report Figure 14: The three actual AddConflict declarations supplied to the constructed test." className="mx-auto object-contain" loading="lazy" decoding="async" />
   </a>
   <figcaption><strong>Original Figure 14 · Hand-written conflict relations.</strong> The three actual AddConflict declarations supplied to the constructed test.</figcaption>
 </figure>
 
-<figure className="project-concept-figure">
+<figure className="project-concept-figure project-source-figure">
   <a href="/figures/journals/tflm-source-figure-15.svg" target="_blank" rel="noopener noreferrer" aria-label="Open original report figure 15">
-    <img src="/figures/journals/tflm-source-figure-15.svg" alt="Original report Figure 15: The original modified-planner ordering log, showing buffer offsets and lifetimes." className="mx-auto max-h-[48rem] w-full object-contain" loading="lazy" decoding="async" />
+    <img src="/figures/journals/tflm-source-figure-15.svg" alt="Original report Figure 15: The original modified-planner ordering log, showing buffer offsets and lifetimes." className="mx-auto object-contain" loading="lazy" decoding="async" />
   </a>
   <figcaption><strong>Original Figure 15 · Conflict-aware placement order.</strong> The original modified-planner ordering log, showing buffer offsets and lifetimes.</figcaption>
 </figure>
 
-<figure className="project-concept-figure">
+<figure className="project-concept-figure project-source-figure">
   <a href="/figures/journals/tflm-source-figure-16.svg" target="_blank" rel="noopener noreferrer" aria-label="Open original report figure 16">
-    <img src="/figures/journals/tflm-source-figure-16.svg" alt="Original report Figure 16: The original ASCII memory map, including overlap marks; planned peak is 3,585 bytes." className="mx-auto max-h-[48rem] w-full object-contain" loading="lazy" decoding="async" />
+    <img src="/figures/journals/tflm-source-figure-16.svg" alt="Original report Figure 16: The original ASCII memory map, including overlap marks; planned peak is 3,585 bytes." className="mx-auto object-contain" loading="lazy" decoding="async" />
   </a>
   <figcaption><strong>Original Figure 16 · Conflict-aware address map.</strong> The original ASCII memory map, including overlap marks; planned peak is 3,585 bytes.</figcaption>
 </figure>
@@ -292,37 +292,37 @@ In this eight-buffer test, the original Greedy Planner finished at **4,101 bytes
 
 ### Person Detect — Figures 17–21
 
-<figure className="project-concept-figure">
+<figure className="project-concept-figure project-source-figure">
   <a href="/figures/journals/tflm-source-figure-17.svg" target="_blank" rel="noopener noreferrer" aria-label="Open original report figure 17">
-    <img src="/figures/journals/tflm-source-figure-17.svg" alt="Original report Figure 17: Original Greedy ordering and offsets for the TFLM Person Detect model." className="mx-auto max-h-[48rem] w-full object-contain" loading="lazy" decoding="async" />
+    <img src="/figures/journals/tflm-source-figure-17.svg" alt="Original report Figure 17: Original Greedy ordering and offsets for the TFLM Person Detect model." className="mx-auto object-contain" loading="lazy" decoding="async" />
   </a>
   <figcaption><strong>Original Figure 17 · Greedy buffer list.</strong> Original Greedy ordering and offsets for the TFLM Person Detect model.</figcaption>
 </figure>
 
-<figure className="project-concept-figure">
+<figure className="project-concept-figure project-source-figure">
   <a href="/figures/journals/tflm-source-figure-18.svg" target="_blank" rel="noopener noreferrer" aria-label="Open original report figure 18">
-    <img src="/figures/journals/tflm-source-figure-18.svg" alt="Original report Figure 18: Original multicolored time–memory allocation output; peak reported as 55,296 bytes." className="mx-auto max-h-[48rem] w-full object-contain" loading="lazy" decoding="async" />
+    <img src="/figures/journals/tflm-source-figure-18.svg" alt="Original report Figure 18: Original multicolored time–memory allocation output; peak reported as 55,296 bytes." className="mx-auto object-contain" loading="lazy" decoding="async" />
   </a>
   <figcaption><strong>Original Figure 18 · Greedy colored allocation.</strong> Original multicolored time–memory allocation output; peak reported as 55,296 bytes.</figcaption>
 </figure>
 
-<figure className="project-concept-figure">
+<figure className="project-concept-figure project-source-figure">
   <a href="/figures/journals/tflm-source-figure-19.svg" target="_blank" rel="noopener noreferrer" aria-label="Open original report figure 19">
-    <img src="/figures/journals/tflm-source-figure-19.svg" alt="Original report Figure 19: The exact model-specific Conflict Data screenshot used in the 2024 evaluation." className="mx-auto max-h-[48rem] w-full object-contain" loading="lazy" decoding="async" />
+    <img src="/figures/journals/tflm-source-figure-19.svg" alt="Original report Figure 19: The exact model-specific Conflict Data screenshot used in the 2024 evaluation." className="mx-auto object-contain" loading="lazy" decoding="async" />
   </a>
   <figcaption><strong>Original Figure 19 · Manual Conflict Data.</strong> The exact model-specific Conflict Data screenshot used in the 2024 evaluation.</figcaption>
 </figure>
 
-<figure className="project-concept-figure">
+<figure className="project-concept-figure project-source-figure">
   <a href="/figures/journals/tflm-source-figure-20.svg" target="_blank" rel="noopener noreferrer" aria-label="Open original report figure 20">
-    <img src="/figures/journals/tflm-source-figure-20.svg" alt="Original report Figure 20: Original output separating large non-conflict online buffers from BFS-ordered conflict buffers." className="mx-auto max-h-[48rem] w-full object-contain" loading="lazy" decoding="async" />
+    <img src="/figures/journals/tflm-source-figure-20.svg" alt="Original report Figure 20: Original output separating large non-conflict online buffers from BFS-ordered conflict buffers." className="mx-auto object-contain" loading="lazy" decoding="async" />
   </a>
   <figcaption><strong>Original Figure 20 · Conflict-aware ordering log.</strong> Original output separating large non-conflict online buffers from BFS-ordered conflict buffers.</figcaption>
 </figure>
 
-<figure className="project-concept-figure">
+<figure className="project-concept-figure project-source-figure">
   <a href="/figures/journals/tflm-source-figure-21.svg" target="_blank" rel="noopener noreferrer" aria-label="Open original report figure 21">
-    <img src="/figures/journals/tflm-source-figure-21.svg" alt="Original report Figure 21: The original planned layout after applying Conflict Data; peak reported as 39,636 bytes." className="mx-auto max-h-[48rem] w-full object-contain" loading="lazy" decoding="async" />
+    <img src="/figures/journals/tflm-source-figure-21.svg" alt="Original report Figure 21: The original planned layout after applying Conflict Data; peak reported as 39,636 bytes." className="mx-auto object-contain" loading="lazy" decoding="async" />
   </a>
   <figcaption><strong>Original Figure 21 · Conflict-aware colored allocation.</strong> The original planned layout after applying Conflict Data; peak reported as 39,636 bytes.</figcaption>
 </figure>
@@ -331,37 +331,37 @@ The two colored memory maps are especially revealing: the reduction from **55,29
 
 ### Tiny U-Net — Figures 22–26
 
-<figure className="project-concept-figure">
+<figure className="project-concept-figure project-source-figure">
   <a href="/figures/journals/tflm-source-figure-22.svg" target="_blank" rel="noopener noreferrer" aria-label="Open original report figure 22">
-    <img src="/figures/journals/tflm-source-figure-22.svg" alt="Original report Figure 22: The larger model's original Greedy sorted buffers and offsets." className="mx-auto max-h-[48rem] w-full object-contain" loading="lazy" decoding="async" />
+    <img src="/figures/journals/tflm-source-figure-22.svg" alt="Original report Figure 22: The larger model's original Greedy sorted buffers and offsets." className="mx-auto object-contain" loading="lazy" decoding="async" />
   </a>
   <figcaption><strong>Original Figure 22 · Greedy buffer list.</strong> The larger model's original Greedy sorted buffers and offsets.</figcaption>
 </figure>
 
-<figure className="project-concept-figure">
+<figure className="project-concept-figure project-source-figure">
   <a href="/figures/journals/tflm-source-figure-23.svg" target="_blank" rel="noopener noreferrer" aria-label="Open original report figure 23">
-    <img src="/figures/journals/tflm-source-figure-23.svg" alt="Original report Figure 23: Original dense multicolored allocation map; planned peak reported as 230,416 bytes." className="mx-auto max-h-[48rem] w-full object-contain" loading="lazy" decoding="async" />
+    <img src="/figures/journals/tflm-source-figure-23.svg" alt="Original report Figure 23: Original dense multicolored allocation map; planned peak reported as 230,416 bytes." className="mx-auto object-contain" loading="lazy" decoding="async" />
   </a>
   <figcaption><strong>Original Figure 23 · Greedy colored allocation.</strong> Original dense multicolored allocation map; planned peak reported as 230,416 bytes.</figcaption>
 </figure>
 
-<figure className="project-concept-figure">
+<figure className="project-concept-figure project-source-figure">
   <a href="/figures/journals/tflm-source-figure-24.svg" target="_blank" rel="noopener noreferrer" aria-label="Open original report figure 24">
-    <img src="/figures/journals/tflm-source-figure-24.svg" alt="Original report Figure 24: The source Conflict Data screenshot for the larger Tiny U-Net evaluation." className="mx-auto max-h-[48rem] w-full object-contain" loading="lazy" decoding="async" />
+    <img src="/figures/journals/tflm-source-figure-24.svg" alt="Original report Figure 24: The source Conflict Data screenshot for the larger Tiny U-Net evaluation." className="mx-auto object-contain" loading="lazy" decoding="async" />
   </a>
   <figcaption><strong>Original Figure 24 · Manual Conflict Data.</strong> The source Conflict Data screenshot for the larger Tiny U-Net evaluation.</figcaption>
 </figure>
 
-<figure className="project-concept-figure">
+<figure className="project-concept-figure project-source-figure">
   <a href="/figures/journals/tflm-source-figure-25.svg" target="_blank" rel="noopener noreferrer" aria-label="Open original report figure 25">
-    <img src="/figures/journals/tflm-source-figure-25.svg" alt="Original report Figure 25: The original buffer list with non-conflict and conflict-BFS groups distinguished." className="mx-auto max-h-[48rem] w-full object-contain" loading="lazy" decoding="async" />
+    <img src="/figures/journals/tflm-source-figure-25.svg" alt="Original report Figure 25: The original buffer list with non-conflict and conflict-BFS groups distinguished." className="mx-auto object-contain" loading="lazy" decoding="async" />
   </a>
   <figcaption><strong>Original Figure 25 · Conflict-aware ordering log.</strong> The original buffer list with non-conflict and conflict-BFS groups distinguished.</figcaption>
 </figure>
 
-<figure className="project-concept-figure">
+<figure className="project-concept-figure project-source-figure">
   <a href="/figures/journals/tflm-source-figure-26.svg" target="_blank" rel="noopener noreferrer" aria-label="Open original report figure 26">
-    <img src="/figures/journals/tflm-source-figure-26.svg" alt="Original report Figure 26: Original multicolored layout after safe partial overlaps; planned peak reported as 198,120 bytes." className="mx-auto max-h-[48rem] w-full object-contain" loading="lazy" decoding="async" />
+    <img src="/figures/journals/tflm-source-figure-26.svg" alt="Original report Figure 26: Original multicolored layout after safe partial overlaps; planned peak reported as 198,120 bytes." className="mx-auto object-contain" loading="lazy" decoding="async" />
   </a>
   <figcaption><strong>Original Figure 26 · Conflict-aware colored allocation.</strong> Original multicolored layout after safe partial overlaps; planned peak reported as 198,120 bytes.</figcaption>
 </figure>

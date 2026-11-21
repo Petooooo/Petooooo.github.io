@@ -27,7 +27,7 @@ const esc = (s) => s.replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('
 const inlineCaption = (caption) => esc(caption).replace(/`([^`\n]+)`/g, '<code>$1</code>');
 function figures(text) {
   return text.replace(/^\{\{figure\s+(\/figures\/[^\s|]+\.svg)\s*\|\s*(.+)\}\}[ \t]*$/gm, (_, src, caption) => (
-    '<figure class="project-concept-figure">\n'
+    '<figure class="project-concept-figure' + (src.includes('-source-figure-') ? ' project-source-figure' : '') + '">\n'
     + '  <a href="' + esc(src) + '" target="_blank" rel="noopener noreferrer" aria-label="' + esc(caption.replaceAll('`', '')) + '">\n'
     + '    <img src="' + esc(src) + '" alt="' + esc(caption.replaceAll('`', '')) + '" loading="lazy" decoding="async" />\n'
     + '  </a>\n  <figcaption>' + inlineCaption(caption) + '</figcaption>\n</figure>\n\n'
