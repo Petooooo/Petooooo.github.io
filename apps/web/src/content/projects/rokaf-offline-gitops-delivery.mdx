@@ -192,6 +192,10 @@ This checklist ties the CI artifact to the GitOps change and finally to an appli
 
 I implemented and troubleshot the **GitLab Runner–Kaniko–internal Registry delivery path**, including the wrapper-image execution environment and private CA handling, and connected the pipeline to Argo CD's desired-state model. A complete promotion and failover exercise across every service remained separate from those completed integration tasks.
 
+## Service exposure as another desired-state boundary
+
+The same separation between a Git declaration and actual working behavior later helped me organize internal application addresses. [The domain and HTTPS exposure record](/projects/rokaf-gitops-domain-tls-standardization/) covers Certificate declarations, the cert-manager reconciler, Traefik Host routes and a CoreDNS-to-VIP mapping. Git revision alone does not verify a user's HTTPS request.
+
 ## References and connected engineering records
 
 - [Argo CD — core concepts: target state, sync and health](https://argo-cd.readthedocs.io/en/stable/core_concepts/)

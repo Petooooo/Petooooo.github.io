@@ -87,6 +87,10 @@ I also considered whether Docker and K3s rules could interfere on the same host.
 
 In a **separate K3s startup incident**, I also recovered the iptables rule-bootstrap phase after `iptables-restore` encountered xtables lock contention. The rules were regenerated and K3s later logged `bootstrap done`. That was a completed operational recovery checkpoint—not evidence that the unrelated intermittent Pod-to-ClusterIP failure had the same cause.
 
+## Later, I standardized the service exposure path
+
+A later operating change addressed a different problem from these incident investigations: making a **consistent onboarding path for new internal hostnames and certificates**. I tied the established private CA into cert-manager Certificate resources, served their TLS Secrets through Traefik IngressRoutes and pointed CoreDNS application names at the existing MetalLB VIP. That implementation is described separately in [the GitOps domain and TLS standardization record](/projects/rokaf-gitops-domain-tls-standardization/). It does not establish that the earlier intermittent CNI, VIP and DNS symptoms shared a cause or were all resolved.
+
 ## The client became my starting point
 
 When investigating another connection failure, I now begin by asking **who made the request**. Was it a browser, a Pod, containerd, Kaniko, or a backend application calling another service? From which host or network path? Only after that can I usefully interpret a DNS error, TLS warning, connection refusal, HTTP response or missing application behavior.

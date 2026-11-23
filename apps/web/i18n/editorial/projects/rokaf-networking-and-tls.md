@@ -54,6 +54,10 @@ CoreDNS 가용성이나 MetalLB VIP의 불안정한 접근도 조사했다. 어�
 
 별도의 **K3s 기동 장애에서는 iptables 규칙 적용 오류를 복구**했다. `iptables-restore`가 xtables Lock을 확보하지 못하던 상태에서 조사와 재시작을 진행했고, 이후 규칙이 다시 생성되며 `bootstrap done`이 확인됐다. 이 기동 복구는 실제 완료한 작업이며, 앞서 조사한 DNS·VIP 문제의 원인을 확정한 것과는 다르다.
 
+## 이후에는 서비스 도메인 노출 절차를 따로 정리했다
+
+나중에 새 서비스를 붙일 때마다 주소와 TLS를 제각각 설정하는 문제를 줄이려고, 기존 사설 CA·cert-manager·Traefik IngressRoute·CoreDNS·MetalLB VIP를 하나의 서비스 노출 절차로 묶었다. [폐쇄망 K3s에서 서비스 주소와 TLS를 한 흐름으로 묶은 기록](/projects/rokaf-gitops-domain-tls-standardization/)에 그 과정을 따로 적었다. 다만 이것을 앞서 조사했던 간헐적인 DNS·VIP·CNI 장애 전체가 해결됐다는 의미로 연결하지는 않는다.
+
 ## 오류를 보기보다 실패한 요청의 주체를 먼저 봤다
 
 이후 비슷한 접속 문제를 만나면 우선 요청을 **누가 보냈는지**부터 확인하려 한다. 브라우저인지, 특정 Pod인지, K3s의 containerd인지, 백엔드에서 외부 API를 호출하는 애플리케이션인지가 먼저다. 같은 주소라도 시작점이 다르면 DNS와 인증서 신뢰, 방화벽 경로가 다를 수 있기 때문이다.

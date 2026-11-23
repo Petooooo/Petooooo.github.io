@@ -124,6 +124,10 @@ A stronger future verification would pair observations with the actual caller: t
 
 The confirmed checkpoints were the WebSocket `101` handshake and client certificate improvements. The next checks were provider requests from Outline's runtime, the exact OAuth callback received by GitLab and the browser's failing file request—not another generic test of whether the wiki home page loaded.
 
+## A later standard for exposing internal service addresses
+
+The earlier Outline failures had several independent causes: browser trust, WebSocket proxying, backend identity-provider requests and OAuth callbacks. Later I organized the common HTTPS entry path using a private CA, cert-manager, Traefik Host rules and CoreDNS records. That later [domain and TLS onboarding record](/projects/rokaf-gitops-domain-tls-standardization/) explains the shared entry pattern; it does **not** claim that an HTTP redirect alone repairs application-generated base URLs or resolves every Outline/OAuth incident.
+
 ## References
 
 - [Outline — OIDC hosting configuration](https://docs.getoutline.com/s/hosting/doc/oidc-8CPBm6uC0I)

@@ -1,0 +1,174 @@
+---
+title: "Making Internal K3s Service Addresses and TLS Predictable"
+description: "How I brought cert-manager, a private CA, Traefik IngressRoute, CoreDNS and MetalLB under one GitOps-managed HTTPS exposure pattern."
+date: "2026-11-23"
+updated: "2026-11-23"
+draft: false
+reviewed: true
+sensitivity: sanitized
+category: "Systems Engineering"
+area: "Networking & TLS"
+tags: ["K3s", "GitOps", "cert-manager", "Traefik", "CoreDNS", "MetalLB", "PKI"]
+type: "implementation-note"
+role: "Certificate declarations, HTTPS ingress routing, DNS-to-VIP mapping and exposure workflow"
+period: "Nov 2026"
+status: "active"
+techStack: ["K3s", "cert-manager", "Traefik", "CoreDNS", "MetalLB", "GitOps"]
+---
+
+> **November 2026 · sanitized operating record.** I standardized how internal K3s applications receive DNS names, TLS certificates and HTTPS ingress routes, building on an existing private root CA and a previously established MetalLB VIP. Hostnames, addresses, issuer names and namespace names below are fictitious documentation values, not exports from the environment.
+
+A running Pod was only part of exposing a service. A client also needed a name it could resolve, a network entry point it could reach, a certificate matching the requested identity, and a router that knew which Kubernetes Service to choose. Earlier I had dealt with Traefik sending `TRAEFIK DEFAULT CERT`, IP SAN mismatches and private CA trust differences. Each incident reminded me that a healthy app and a working HTTPS entry point were not the same thing.
+
+I recently brought the work into a more repeatable pattern: **GitOps Certificate declaration → cert-manager TLS Secret → Traefik IngressRoute → CoreDNS name pointing to the MetalLB VIP**. This was a service-onboarding improvement, not evidence that every earlier intermittent DNS, VIP or CNI investigation had been resolved.
+
+## Giving the request path a single shape
+
+<figure className="project-concept-figure"><a href="/figures/journals/gitops-domain-01-request-path.svg" target="_blank" rel="noopener noreferrer"><img src="/figures/journals/gitops-domain-01-request-path.svg" alt="Request flow from client and CoreDNS through VIP, Traefik and Kubernetes Service to Pod." loading="lazy" decoding="async" /></a><figcaption>Illustrative request path, with DNS, VIP, TLS and HTTP forwarding as separate stages. Not an internal infrastructure map.</figcaption></figure>
+
+The client resolves `app.apps.example.test`, receives a frontend VIP, connects to Traefik on `websecure`, and then Traefik uses a `Host` and `PathPrefix` rule to reach the appropriate Service. cert-manager maintains the separate TLS identity presented at that entry point. **CoreDNS does not issue certificates; MetalLB does not select HTTP backends; an IngressRoute cannot make the client's trust store accept a private CA.**
+
+## Bringing the old root CA into certificate reconciliation
+
+<figure className="project-concept-figure"><a href="/figures/journals/gitops-domain-02-ca-lifecycle.svg" target="_blank" rel="noopener noreferrer"><img src="/figures/journals/gitops-domain-02-ca-lifecycle.svg" alt="GitOps Certificate, cert-manager, CA signer, leaf TLS Secret and separate client trust relationships." loading="lazy" decoding="async" /></a><figcaption>The GitOps repository declares the desired certificate, but does not contain the signing CA's private key or the issued leaf private key.</figcaption></figure>
+
+I reused the private Root CA trust chain I had worked with before, rather than making every new application manage its own unrelated self-signed certificate. The `Certificate` manifest in Git specifies `issuerRef` and `secretName`. cert-manager reconciles the certificate through the configured signing authority and writes the issued certificate and key to a Kubernetes TLS Secret. The application's `IngressRoute` references that Secret. Client CA trust still has to be provisioned independently.
+
+The following is **sanitized example YAML**, not a copy of the actual GitOps repository:
+
+```yaml
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: apps-https-certificate
+  namespace: example-apps
+spec:
+  secretName: apps-https-tls
+  issuerRef:
+    kind: ClusterIssuer     # Illustrative issuer type
+    name: internal-ca-issuer
+  commonName: apps.example.test
+  dnsNames:
+    - apps.example.test
+    - "*.apps.example.test"
+  ipAddresses:
+    - 192.0.2.80           # Documentation-only VIP
+  privateKey:
+    algorithm: RSA
+    size: 2048
+    rotationPolicy: Never
+```
+
+<figure className="project-concept-figure"><a href="/figures/journals/gitops-domain-03-certificate-fields.svg" target="_blank" rel="noopener noreferrer"><img src="/figures/journals/gitops-domain-03-certificate-fields.svg" alt="Annotated cert-manager Certificate fields for issuer, Secret, DNS SAN, IP SAN and private key policy." loading="lazy" decoding="async" /></a><figcaption>`dnsNames` contains client-facing hostnames, not the CoreDNS resolver IP. The optional `ipAddresses` SAN concerns direct-IP TLS identity.</figcaption></figure>
+
+I recorded the intended domain in `commonName` and included the needed names in `dnsNames`. Importantly, a DNS SAN is **not a CoreDNS server address**: it is the hostname the TLS client validates. If clients use an additional DNS alias, that alias may need its own SAN. A wildcard like `*.apps.example.test` covers one subdomain label, not arbitrarily deep nested names. The VIP in `ipAddresses` is useful when direct-IP HTTPS is intentionally supported; it is not a requirement for domain-based routing.
+
+In the configuration I described, the private key policy was `RSA 2048` and `rotationPolicy: Never`. Here `Never` means **reuse the private key on reissuance**, not disable certificate renewal. It should not be interpreted as a general security recommendation: `Always` rotates keys on reissuance and is preferable where the application lifecycle supports it.
+
+## The certificate has to be selected before HTTP routing
+
+<figure className="project-concept-figure"><a href="/figures/journals/gitops-domain-04-tls-before-route.svg" target="_blank" rel="noopener noreferrer"><img src="/figures/journals/gitops-domain-04-tls-before-route.svg" alt="Sequence showing certificate selection in TLS handshake before HTTP Host and PathPrefix routing." loading="lazy" decoding="async" /></a><figcaption>The SNI/certificate decision precedes any HTTP path match; this is why changing a PathPrefix rule cannot cure a default-certificate warning.</figcaption></figure>
+
+I used the Traefik CRD group available in that environment, `traefik.containo.us/v1alpha1`, with a `websecure` entry point. Its `Host` matcher names the exact application subdomain; `PathPrefix(`/`)` captures the app's paths; `tls.secretName` connects the certificate issued by cert-manager.
+
+```yaml
+apiVersion: traefik.containo.us/v1alpha1
+kind: IngressRoute
+metadata:
+  name: example-app-https
+  namespace: example-apps
+spec:
+  entryPoints: [websecure]
+  routes:
+    - kind: Rule
+      match: Host(`app.apps.example.test`) && PathPrefix(`/`)
+      services:
+        - name: example-app-service
+          port: 80
+  tls:
+    secretName: apps-https-tls
+```
+
+<figure className="project-concept-figure"><a href="/figures/journals/gitops-domain-05-host-routing.svg" target="_blank" rel="noopener noreferrer"><img src="/figures/journals/gitops-domain-05-host-routing.svg" alt="Separate subdomains sharing a VIP but matched by different Host rules and Service backends." loading="lazy" decoding="async" /></a><figcaption>A wildcard certificate can cover multiple names without creating a catch-all route. Each app needs its intended Host match.</figcaption></figure>
+
+A wildcard **certificate** and a wildcard **route** are different things. My illustrated route uses an exact hostname so one application does not unintentionally receive unrelated subdomains. In other designs `HostRegexp` can match a controlled pattern. Traefik's current documentation uses the newer `traefik.io/v1alpha1` group; the installed CRDs determine which `apiVersion` is accepted. Also, a TLS Secret referenced by an IngressRoute must normally live in its namespace.
+
+## Redirecting incoming HTTP did not fix every base URL
+
+A related problem appeared when an application generated absolute `http://` links or sent its user back to a plaintext URL. I added a Traefik `redirectScheme` Middleware where necessary, but the request must actually pass through a corresponding **HTTP `web` route** for that middleware to run.
+
+<figure className="project-concept-figure"><a href="/figures/journals/gitops-domain-06-redirect.svg" target="_blank" rel="noopener noreferrer"><img src="/figures/journals/gitops-domain-06-redirect.svg" alt="HTTP entry point with RedirectScheme middleware beside HTTPS entry point with application routing." loading="lazy" decoding="async" /></a><figcaption>The HTTP route redirects; the HTTPS route serves. A bad app-generated base URL can still create a redirect loop.</figcaption></figure>
+
+```yaml
+apiVersion: traefik.containo.us/v1alpha1
+kind: Middleware
+metadata:
+  name: force-https
+  namespace: example-apps
+spec:
+  redirectScheme:
+    scheme: https
+    permanent: true
+---
+apiVersion: traefik.containo.us/v1alpha1
+kind: IngressRoute
+metadata:
+  name: example-app-http
+  namespace: example-apps
+spec:
+  entryPoints: [web]
+  routes:
+    - kind: Rule
+      match: Host(`app.apps.example.test`) && PathPrefix(`/`)
+      middlewares:
+        - name: force-https
+      services:
+        - name: example-app-service
+          port: 80
+```
+
+A middleware attached only to `websecure` cannot intercept plain HTTP on `web`. Equally, `redirectScheme` cannot rewrite the application's own `Location: http://...` response or correct every login callback. If a browser follows HTTP → HTTPS → HTTP repeatedly, the application-facing `BASE_URL` and reverse proxy `X-Forwarded-Proto` configuration need attention. Treating redirect as one boundary rather than a magical fix avoids that ambiguity.
+
+## CoreDNS provided names; Traefik selected the backend
+
+<figure className="project-concept-figure"><a href="/figures/journals/gitops-domain-07-dns-vip.svg" target="_blank" rel="noopener noreferrer"><img src="/figures/journals/gitops-domain-07-dns-vip.svg" alt="CoreDNS example zone records pointing multiple names to documentation VIP with separate backend host routes." loading="lazy" decoding="async" /></a><figcaption>Synthetic zone records and a documentation-only VIP, not an actual internal zone file or application inventory.</figcaption></figure>
+
+In the CoreDNS zone data I added A records for the application subdomains, mapping them to the established MetalLB VIP instead of individual Pod or node IPs. In a **fictitious** `apps.example.test` zone, the basic relationship looks like this:
+
+```text
+app       IN A 192.0.2.80
+wiki      IN A 192.0.2.80
+dashboard IN A 192.0.2.80
+```
+
+That snippet is not a complete CoreDNS configuration. The DNS resolver maps names to the frontend; Traefik's Host rules make the application choice. A successful A-record lookup does not prove that a particular client's network can reach the VIP.
+
+## What I put under GitOps, and what remained separate
+
+<figure className="project-concept-figure"><a href="/figures/journals/gitops-domain-08-gitops-contract.svg" target="_blank" rel="noopener noreferrer"><img src="/figures/journals/gitops-domain-08-gitops-contract.svg" alt="GitOps declared Certificate, IngressRoutes and optional Middleware compared with controller-generated Secrets and CoreDNS zone management." loading="lazy" decoding="async" /></a><figcaption>Desired manifests live in Git; controllers and the DNS-management path produce their own live state. Private CA/key material is excluded from Git.</figcaption></figure>
+
+The repeatable sequence became: choose the hostname, declare the Certificate, confirm its Secret, attach an HTTPS route, add an HTTP redirect when necessary, add the DNS A record, and check the actual client path. If CoreDNS zone data is managed outside the GitOps repository, that DNS edit is still a separate step; I do not claim all DNS administration was GitOps-automated simply because the Certificate and IngressRoute were.
+
+<figure className="project-concept-figure"><a href="/figures/journals/gitops-domain-09-verification.svg" target="_blank" rel="noopener noreferrer"><img src="/figures/journals/gitops-domain-09-verification.svg" alt="Layered checks from Certificate Ready and DNS answer to client-facing TLS, routing and app URL behavior." loading="lazy" decoding="async" /></a><figcaption>Verification stages; not evidence of a complete service-by-service production audit.</figcaption></figure>
+
+| Boundary | What would establish confidence |
+| --- | --- |
+| Issuance | Requested SANs, issued Secret, expiry and renewal status |
+| DNS | The actual client resolver returns the intended name-to-VIP mapping |
+| Network | The requesting client can reach the advertised VIP and port |
+| TLS | The endpoint presents the intended certificate for the SNI hostname |
+| Routing | The expected Host rule reaches the correct Service and endpoints |
+| HTTP redirect | Plain HTTP changes to HTTPS without an endless loop |
+| App behavior | External links, cookies, callbacks and representative actions are correct |
+
+Those are **checks to perform**, not a claim that every client segment and every deployed app passed an exhaustive test. The design standardizes how certificates and routes are declared. It does not retroactively prove that intermittent CNI, VIP or resolver incidents had one cause.
+
+## What I kept from this work
+
+Service exposure stopped looking like a single IngressRoute edit. It became a chain of specific ownership: CoreDNS resolves names, MetalLB advertises the VIP, Traefik chooses routes and serves TLS identity, cert-manager reconciles the Certificate, and the application controls the URLs it generates. That makes the next deployment easier to reason about and the exceptions easier to locate.
+
+**Related work:** [K3s networking and TLS incidents](/projects/rokaf-networking-and-tls/) · [Offline GitOps delivery](/projects/rokaf-offline-gitops-delivery/) · [Outline authentication and WebSocket issues](/projects/rokaf-internal-app-auth-and-tls/) · [K3s platform overview](/projects/independent-on-premises-k3s-platform-engineering/).
+
+**Documentation:** [cert-manager Certificate](https://cert-manager.io/docs/usage/certificate/) · [Traefik IngressRoute](https://doc.traefik.io/traefik/reference/routing-configuration/kubernetes/crd/http/ingressroute/) · [Traefik RedirectScheme](https://doc.traefik.io/traefik/middlewares/http/redirectscheme/).
+
+*Publication note: all domains, VIPs, resource names and cluster labels here are illustrative. The diagrams are original explanatory vectors, not screenshots or exports of an internal environment.*

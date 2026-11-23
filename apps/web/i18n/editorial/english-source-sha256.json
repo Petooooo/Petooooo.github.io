@@ -1,6 +1,6 @@
 {
   "bit-shift-cnn-accelerator-zynq": "254ef8393d59459dc23be3e1c71953f40e27db45c2888ba6765c4aa448fe3a41",
-  "independent-on-premises-k3s-platform-engineering": "8c023405af757fa314e14bf505bb004ac5ff1125b463ceb324b9f117961be354",
+  "independent-on-premises-k3s-platform-engineering": "7d45e8d5b629beb4713eadaf5510e3becde60d61a9a32d25217696596cc7a76f",
   "rokaf-async-workers-and-idempotency": "7558d5dd905afa6d50b7dac66858c2f3199234be77d36331ed234ec224c4403e",
   "rokaf-chat-attachments-object-storage": "1e882ca2caeeaecb25b86cfc051b4c59135ed6ff4f3c624fb86d096a569d67ce",
   "rokaf-clickhouse-replication-migration": "2e30e06627899201082179d0e10e40114bb6d33d8c2de14dae012690ae8d6635",
@@ -10,12 +10,12 @@
   "rokaf-gpu-discovery-open-investigation": "152d248d4986afbf40bf9c446a239d6501aa2c1b0fa64c73b1ea9cc3de8f9b08",
   "rokaf-gpu-scheduling-and-capacity": "f0985acb114a1fe6f85df1cc2635ded98f9166f177bfdbe45295f766f1b2d121",
   "rokaf-identity-rbac-and-policy": "925549610b245cf5f7859035821d72852693626452f4b5755a72db74cc044818",
-  "rokaf-internal-app-auth-and-tls": "7aef20a670629d3413a93a5d4622a956c6366a9ffb530f964a9f57cbf17fc2e5",
+  "rokaf-internal-app-auth-and-tls": "30d943a830f7c1b5e12d58afb53308b5a4341a7b1bab9f8b334230e08ef42c80",
   "rokaf-langfuse-v4-migration-field-notes": "16aac53203939da726f29c55d4797308300370866ddb218cfaaf0b1edbdf0ba6",
-  "rokaf-networking-and-tls": "7966d3ee355888fb8fc5a3e7149ffa5cc103217e876b04464fd0b2046e8647a1",
+  "rokaf-networking-and-tls": "45dfbc695e14fc27c8f56d6affe4de221978e7a5303427a853504ab5e0f99d4d",
   "rokaf-object-storage-migration": "4e3165b7c21b56bfe9a81178f859d24b3eab4a5920ebcd18958a8e8deda23e9c",
   "rokaf-observability-and-failure-evidence": "20d70c373deed726ad973cb5de1f0d7cfdeaf1eed57d710c54235ce7d433f3d4",
-  "rokaf-offline-gitops-delivery": "1171efc844e23f8229a0424314ef2f79ba2b732ca7e5565737f877103f1e4925",
+  "rokaf-offline-gitops-delivery": "1aac9932de7b7696b9f8eda1105d804301dc9bc4f379ac3ccb7d3904ad1e6afc",
   "rokaf-plane-ce-bootstrap-routing": "5949f440f27a6ba18d6d351a44c0ffabeb5f5c0a3e534483701f3dde47889a1d",
   "rokaf-private-artifacts-and-ci": "d02447c9fe3faaa431fafa0907794b6403797de4475ddd5403169a598168abb4",
   "rokaf-self-hosted-services-integration": "12a5e2972f3b8cb441de700122216f02785d7136c98ab4eba0e4f93d8be61633",
@@ -32,5 +32,6 @@
   "fpga-systolic-array-matrix-multiplication": "0e7f2016b4b001efd85a0c3cc9433c2338a7c1685ca867d5b27c3626261ca0f8",
   "python-tokenizer-lex-yacc": "abea04a54cd3012e4aa40b90ae92e33463606d0d520fff0c9af1a915e4a3e836",
   "green-reviewer-flutter-web-platform": "3f5a773c8b1aa7aa0b04f6a6ae1c1a9deb02d180e5c9d672f748cef9343749e0",
-  "escape-from-the-dark-fpga-vga": "7dd1a184d27586c8629362620b0f11e72ea58a5b24a6c54284319cd986431735"
+  "escape-from-the-dark-fpga-vga": "7dd1a184d27586c8629362620b0f11e72ea58a5b24a6c54284319cd986431735",
+  "rokaf-gitops-domain-tls-standardization": "4b0c37f6e75337c1f0c88c084ca39db612b3c28cf7b51a5753df36cf72d27ca3"
 }

@@ -100,6 +100,10 @@ WebSocket은 `101`을 확인한 뒤에도 문제가 나타났던 PC에서 문서
 
 Outline의 실시간 편집 경로를 수정해 **WebSocket `101 Switching Protocols` 응답을 확인**했고, 일부 PC의 인증서 신뢰 문제도 해결했다. GitLab `ETIMEDOUT`과 OAuth Callback, 브라우저별 이미지·저장 오류는 별도 요청 경로에서 나타났으므로 각각의 재현·검증이 필요한 상태로 남겼다.
 
+## 이후에 공통 HTTPS 접속 경로를 정리하면서
+
+Outline에서 경험한 장애는 브라우저의 CA 신뢰, WebSocket 프록시, Backend의 GitLab 요청, OAuth Callback처럼 서로 다른 문제였다. 이후 새 서비스를 공개할 때의 공통 진입 경로를 [cert-manager·Traefik·CoreDNS 기반 도메인/TLS 정리](/projects/rokaf-gitops-domain-tls-standardization/)에 따로 기록했다. 여기에서 사용한 Redirect만으로 앱이 생성하는 Base URL이나 당시 OAuth 문제가 모두 해결된다는 뜻은 아니다.
+
 ## 참고 문서
 
 - [Outline — OIDC 구성](https://docs.getoutline.com/s/hosting/doc/oidc-8CPBm6uC0I)

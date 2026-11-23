@@ -21,6 +21,7 @@ K3s는 이런 서비스의 공통 실행 환경을 제공했지만 모든 책임
 | 주제 | 기록 |
 | --- | --- |
 | 이미지 공급 | [내부 Registry와 Kaniko 실행 환경](/projects/rokaf-private-artifacts-and-ci/) — Kaniko 실행 환경, Registry CA, S3 Blob Store와 복구 이미지의 순환 의존성 |
+| 서비스 도메인과 HTTPS | [폐쇄망 K3s에서 서비스 주소와 TLS를 한 흐름으로 묶기](/projects/rokaf-gitops-domain-tls-standardization/) — cert-manager, Traefik, CoreDNS, MetalLB VIP 연결 |
 | 배포 조정 | [GitOps의 두 제어 루프](/projects/rokaf-offline-gitops-delivery/) — 빌드 성공과 Kubernetes 상태 동기화의 차이 |
 | Longhorn 복구 | [Longhorn Replica 장애와 볼륨 복구](/projects/rokaf-stateful-storage-and-recovery/) — Unknown·Stopped Replica, Attach 장애와 데이터 검증의 차이 |
 | 스토리지 배치 | [Kubernetes 스토리지 배치와 장애 영역 설계](/projects/rokaf-storage-placement-and-failure-domains/) — 노드별 Local-path 경로, Longhorn 복구, DB 자체 복제, MinIO 객체 분산의 책임 구분 |

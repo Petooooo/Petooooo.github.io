@@ -296,7 +296,7 @@
   "NVMe · ZNS · File systems": "NVMe · ZNS · 파일시스템",
   "Network path, endpoint, protocol, timeout or exporter logs": "네트워크 경로·Endpoint·프로토콜·타임아웃·Exporter 로그",
   "Networking & Reliability": "네트워크·신뢰성",
-  "Networking & TLS": "네트워크·TLS",
+  "Networking & TLS": "Networking & TLS",
   "Networking incident investigation, Service exposure design and remediation evaluation": "ServiceLB 포트 충돌 조사와 외부 접속 설계",
   "Nexus3, GitLab Runner/Kaniko and bootstrap dependencies": "Nexus3, GitLab Runner·Kaniko, 초기 구동과 복구 의존성",
   "No GPU": "GPU 없음",
@@ -848,5 +848,11 @@
   "Pipeline datapath, control signals, data/control hazard handling and testbench implementation in a two-person project": "2인 프로젝트에서 파이프라인 데이터 경로·제어 신호·Hazard 처리와 Testbench 구현",
   "Forwarding": "Forwarding",
   "How a conflict-aware TFLM planner used operator-level last-read constraints, output-first BFS ordering and C++ offset placement to reduce peak tensor arena usage in three evaluations.": "Tensor의 Lifetime이 끝나기 전에 메모리를 재사용할 수 있을까. Convolution의 Last Read에 주목해, 수동으로 준비한 Conflict Data를 활용하는 TFLM Memory Planner를 구현하고 배치 결과를 비교했다.",
-  "Memory planning": "Memory Planning"
+  "Memory planning": "Memory Planning",
+  "Making Internal K3s Service Addresses and TLS Predictable": "폐쇄망 K3s에서 서비스 주소와 TLS를 한 흐름으로 묶기",
+  "How I brought cert-manager, a private CA, Traefik IngressRoute, CoreDNS and MetalLB under one GitOps-managed HTTPS exposure pattern.": "기존 Root CA를 바탕으로 cert-manager의 Certificate와 Traefik IngressRoute, CoreDNS 레코드, MetalLB VIP를 묶어 내부 서비스의 HTTPS 접속 방식을 정리한 경험.",
+  "Certificate declarations, HTTPS ingress routing, DNS-to-VIP mapping and exposure workflow": "Certificate 선언, HTTPS IngressRoute, DNS와 VIP 연결, 서비스 노출 절차 정리",
+  "Nov 2026": "2026년 11월",
+  "Making Internal K3s Service Addresses and TLS Predictable | Jihwan Park": "폐쇄망 K3s에서 서비스 주소와 TLS를 한 흐름으로 묶기 | 박지환",
+  "cert-manager": "cert-manager"
 }

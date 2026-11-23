@@ -72,6 +72,10 @@ Auto Sync를 사용하더라도 Prune, Self-Heal 같은 정책을 어떤 애플�
 
 폐쇄망에서 GitLab Runner·Kaniko·내부 Registry·Argo CD를 연결하면서 **빌드 실행 환경, 사설 CA, 이미지 Push/Pull과 GitOps 동기화**를 각각 다뤘다. Wrapper 이미지와 인증서 신뢰 설정처럼 실제 발생한 오류의 수정 내용은 구체적으로 남겨두었다. 배포 변경의 최종 검증에는 소스 Revision, 이미지 Digest, Argo CD 동기화 상태와 애플리케이션 응답을 이어서 확인하는 과정이 필요하며, 전체 Stateful 롤백과 Registry 장애 중 재배포 시험은 별도 검증 항목이다.
 
+## 도메인과 HTTPS도 별도의 GitOps 경계였다
+
+나중에는 새 앱의 도메인과 인증서도 GitOps에서 선언하도록 정리했다. [cert-manager·Traefik·CoreDNS로 내부 서비스 주소를 정리한 기록](/projects/rokaf-gitops-domain-tls-standardization/)에서는 Certificate의 Desired State, TLS Secret, IngressRoute와 실제 사용자 접속을 각각 검증해야 한다는 점을 다뤘다. Git의 변경만으로 HTTPS 연결 성공이 증명되지는 않는다.
+
 ## 관련 기록
 
 - [사설 Registry와 Kaniko CI 문제](/projects/rokaf-private-artifacts-and-ci/)
