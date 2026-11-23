@@ -46,6 +46,8 @@ IM2COL 그림에는 차원 관계가 분명하게 적혀 있다. M은 Output Cha
 
 {{figure /figures/journals/cnn-poster-05-im2col-mkn.svg | 원본의 M×K × K×N = M×N 관계를 유지했다. Matrix 색상은 재배치를 설명하기 위한 것이다.}}
 
+앞서 진행한 [FPGA Systolic Array 행렬곱 프로젝트](/projects/fpga-systolic-array-matrix-multiplication/)에서는 이처럼 Operand가 제때 PE에 도착하도록 하는 문제 자체에 집중했다. 초기 프로젝트의 LUT·Latency 결과가 남아 있는 것은 아니므로, 여기에서 측정한 CNN 가속기의 수치를 이전 프로젝트로 옮겨 적지는 않았다.
+
 WS 구조에서는 가중치를 상대적으로 오래 유지하고 입력과 누산 값을 이동시키는 방식에 집중한다. IS 구조에서는 입력 재사용에 초점을 둔다. 어느 쪽이 유리한지는 입력 크기와 연산량뿐 아니라 메모리에서 가져와야 하는 데이터의 양에도 좌우된다.
 
 내가 특히 많이 다뤘던 영역은 PS의 소프트웨어 전체, PL의 아키텍처와 타이밍 설계, Systolic Array 가속기와 WS/IS Dataflow였다. BRAM을 이용하는 데이터 경로는 팀원과 공동으로 설계했다. 양자화 CNN 학습과 곱셈기 기반·시프트 기반 행렬 곱 가속기를 각각 구현해 비교한 작업도 담당했다. 원래 포트폴리오에는 모바일 애플리케이션과 통신 서버 개발도 기록돼 있다.

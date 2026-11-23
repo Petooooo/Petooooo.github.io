@@ -854,5 +854,9 @@
   "Certificate declarations, HTTPS ingress routing, DNS-to-VIP mapping and exposure workflow": "Certificate 선언, HTTPS IngressRoute, DNS와 VIP 연결, 서비스 노출 절차 정리",
   "Nov 2026": "2026년 11월",
   "Making Internal K3s Service Addresses and TLS Predictable | Jihwan Park": "폐쇄망 K3s에서 서비스 주소와 TLS를 한 흐름으로 묶기 | 박지환",
-  "cert-manager": "cert-manager"
+  "cert-manager": "cert-manager",
+  "Systolic Array on FPGA: Designing the Timing of Matrix Multiplication": "FPGA Systolic Array에서 데이터가 만나는 시점을 맞추기",
+  "Systolic Array on FPGA: Designing the Timing of Matrix Multiplication | Jihwan Park": "FPGA Systolic Array에서 데이터가 만나는 시점을 맞추기 | 박지환",
+  "How I moved matrix multiplication into a Verilog systolic array, and a separately verified 2×2 example explaining PE dataflow, operand skew, accumulation and output timing.": "Verilog로 FPGA Systolic Array 행렬곱 연산기를 구현하며 고민했던 PE 데이터 흐름과 Input Skew, Partial Sum, Output Valid를 별도의 검증용 2×2 예제로 풀어낸 기록.",
+  "Full Verilog design and implementation of FPGA systolic-array matrix multiplier (2024 project record)": "Verilog 기반 FPGA Systolic Array 행렬곱 연산기 전체 개발(2024년 프로젝트 기록)"
 }

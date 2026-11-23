@@ -119,6 +119,8 @@ The IM2COL panel is particularly useful because its matrix dimensions are explic
   <figcaption>The poster's symbolic M×K × K×N = M×N relation is preserved; cell colors only illustrate rearrangement.</figcaption>
 </figure>
 
+My earlier [FPGA Systolic Array matrix-multiplication project](/projects/fpga-systolic-array-matrix-multiplication/) focused on the operand scheduling problem itself. That earlier Verilog project has no archived LUT or latency numbers to borrow from this CNN system; they remain distinct projects.
+
 It also compares **weight-stationary (WS)** and **input-stationary (IS)** systolic-array structures. Both aim to reduce avoidable data movement by retaining one kind of operand while other values flow through the array.
 
 Within one PE, the documented computation is deliberately simple:

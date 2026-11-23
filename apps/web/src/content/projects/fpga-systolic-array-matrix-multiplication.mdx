@@ -1,60 +1,168 @@
 ---
-title: "FPGA Systolic Array: Matrix Multiplication Dataflow"
-description: "Implemented a systolic-array matrix multiplication accelerator and examined how local processing elements and data movement support convolution-oriented computation."
+title: "Systolic Array on FPGA: Designing the Timing of Matrix Multiplication"
+description: "How I moved matrix multiplication into a Verilog systolic array, and a separately verified 2×2 example explaining PE dataflow, operand skew, accumulation and output timing."
 date: "2024-05-28"
-updated: "2026-11-20"
+updated: "2026-11-23"
 draft: false
 reviewed: true
 reviewStatus: "reviewed"
 sensitivity: public
 category: "Computer Engineering"
 area: "Hardware Acceleration"
-tags: ["FPGA", "Verilog", "Systolic Array", "Matrix Multiplication", "Dataflow"]
+tags: ["FPGA", "Verilog", "Systolic Array", "Matrix Multiplication", "Dataflow", "IM2COL"]
 type: "implementation-note"
-role: "Systolic-array matrix multiplication accelerator design and implementation"
+role: "Full Verilog design and implementation of FPGA systolic-array matrix multiplier (2024 project record)"
 period: "Apr–May 2024"
 status: "archived"
 techStack: ["Verilog", "FPGA", "Matrix Multiplication"]
 ---
 
-Before the later bit-shift CNN accelerator, I worked on a **systolic-array matrix multiplication project on FPGA** in April–May 2024. The original objective was to implement an array of processing elements in which operands advance through neighboring stages instead of repeatedly returning to a central compute unit.
+> **April–May 2024 · an earlier FPGA project, revisited in November 2026.** My project portfolio records that I independently developed a Verilog-based systolic-array matrix multiplication accelerator on FPGA, exploring its use for convolution-oriented computation through IM2COL. The original RTL, testbench traces, synthesis reports and benchmarking conditions are not preserved in the materials available for this article. The numbered diagrams below therefore explain a **new, mathematically verified reference example**. They are not screenshots or cycle traces from the 2024 device.
 
-This was a separate, earlier exercise in **dataflow and hardware scheduling**. It provided experience that I later used in the Zynq CNN project, where the array became part of a larger model-to-hardware inference system.
+The idea sounded straightforward when I first encountered it: matrix multiplication contains a large number of independent products, and a grid of Processing Elements (PEs) can distribute the work. Writing a multiplication loop in software, however, hides a question that cannot be ignored in RTL: **which two operands reach each PE on a particular clock?**
 
-*This retrospective was written in November 2026 from my earlier portfolio/CV record. The project date corresponds to the 2024 work, not to publication of this article.*
+That question made this project more interesting than the equation itself. I was not merely looking for a different way to write a dot product. I was trying to understand how computation and data movement should be arranged spatially so that local units can keep processing without individually fetching every element from a shared source.
 
-## Mapping a matrix operation onto hardware
+## A matrix equation does not describe the schedule
 
-Matrix multiplication repeatedly accumulates products from corresponding row and column elements. A systolic array maps that repetition into local processing elements (PEs). Operands enter the array along defined edges, travel between neighboring PEs, and contribute to partial sums as the pipeline advances.
+For two matrices, the underlying operation is familiar:
+
+`C[i,j] = Σ(k=0..K−1) A[i,k] × B[k,j]`
+
+A software implementation can access the required elements by index. In a Systolic Array, an operand must be **physically delivered** to a PE at the right time, and its partial sum must be retained until every required product has been accumulated.
+
+To make the timing discussion concrete, I constructed a small reference case. It is **not an archival 2024 test vector**.
 
 <figure className="project-concept-figure">
-  <a href="/figures/journals/fpga-systolic-matrix-array.svg" target="_blank" rel="noopener noreferrer" aria-label="Open systolic array matrix-multiplication data movement figure">
-    <img src="/figures/journals/fpga-systolic-matrix-array.svg" alt="Local processing element flow for systolic matrix multiplication and partial sum accumulation" loading="lazy" decoding="async" />
+  <a href="/figures/journals/fpga-systolic-01-matmul-example.svg" target="_blank" rel="noopener noreferrer" aria-label="Open the worked 2-by-2 matrix multiplication example">
+    <img src="/figures/journals/fpga-systolic-01-matmul-example.svg" alt="Illustrative 2 by 2 matrix multiplication A times B equals C with result values 19, 22, 43 and 50" loading="lazy" decoding="async" />
   </a>
-  <figcaption>Conceptual systolic-array data movement rather than the measured hardware resource layout.</figcaption>
+  <figcaption>A new reference example: A = [[1,2],[3,4]], B = [[5,6],[7,8]], and C = [[19,22],[43,50]]. The product was checked independently in the figure-generation script.</figcaption>
 </figure>
 
-The central design problem was not the arithmetic expression alone. **Data must arrive at a PE in the correct cycle** for the intended multiplication and accumulation. A valid formula with misaligned operands produces the wrong matrix.
+In this example, each output needs **two Multiply-Accumulate (MAC) steps**. Four outputs therefore require eight products. The array does not magically remove any of those arithmetic operations; it distributes them among PEs whose inputs can be reused and forwarded locally.
 
-## Processing elements and data movement
+## Give each PE one output to accumulate
 
-I implemented a systolic structure for matrix multiplication and worked with the sequencing between **PE computation** and **operand movement**. The local connections reduce the need for each processing element to fetch every operand independently, but the boundary inputs still need coordinated timing.
+There is more than one Systolic Array dataflow. For the following explanation, I chose an **output-stationary** 2×2 array: `PE(i,j)` holds the running sum for `C[i,j]`; matrix A values move **rightward**, and B values move **downward**. This is an explicit *teaching model*, not a claim that the archived 2024 implementation used these exact dimensions or stationary policy.
 
-A systolic design also has startup and drain phases. Not every processing element produces a valid result on the first cycle. The controller and testbench must account for when a partial result becomes meaningful.
+<figure className="project-concept-figure">
+  <a href="/figures/journals/fpga-systolic-02-pe-grid.svg" target="_blank" rel="noopener noreferrer" aria-label="Open PE grid dataflow">
+    <img src="/figures/journals/fpga-systolic-02-pe-grid.svg" alt="Reference 2 by 2 PE array with A operands moving right, B operands moving down and partial sums remaining local" loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Reference array only. The arrows explain local operand forwarding, not the original FPGA floorplan or netlist.</figcaption>
+</figure>
 
-## Why this mattered for convolution
+A local PE must perform more than multiplication. It accepts an A operand and a B operand, updates its accumulator when both are valid, and forwards the operands for the next PE. Depending on the implementation, the forwarding values and partial sum are registered, while reset, valid gating, arithmetic width, sign treatment and overflow behavior must be defined in RTL.
 
-Many convolution implementations can rearrange or tile operations into matrix-like products. A systolic array is therefore a reusable compute pattern, although the complete CNN pipeline adds image-to-matrix conversion, quantization, buffering, nonlinear operations and host/accelerator coordination.
+<figure className="project-concept-figure">
+  <a href="/figures/journals/fpga-systolic-03-pe-anatomy.svg" target="_blank" rel="noopener noreferrer" aria-label="Open PE reference anatomy">
+    <img src="/figures/journals/fpga-systolic-03-pe-anatomy.svg" alt="Reference PE datapath containing A and B registers, multiplication, partial sum accumulation and result validity" loading="lazy" decoding="async" />
+  </a>
+  <figcaption>A minimal PE decomposition. The 2024 source does not establish an original register-transfer schematic, bit width or overflow policy, so those details are not fabricated here.</figcaption>
+</figure>
 
-The later [Bit-Shift CNN Accelerator on Zynq FPGA](/projects/bit-shift-cnn-accelerator-zynq/) introduced that larger system: PS/PL integration, IM2COL, BRAM paths, quantized weights and alternative PE arithmetic. This earlier project is retained separately because it focuses on the **array's spatial data movement**, not the final CNN results.
+This was an important difference from reasoning only about a CPU loop. A result can be arithmetically correct yet arrive in the wrong output slot or become visible before the final term. A useful implementation must define both the **value** and **when that value is valid**.
 
-## Implementation checkpoint
+## Why the edge inputs cannot all begin together
 
-The 2024 portfolio record identifies a completed **FPGA systolic-array matrix-multiplication accelerator**. It does not supply an independently preserved clock-frequency, throughput or FPGA resource table for this earlier project, so the later CNN project's measured results are not attributed to it.
+For this reference mapping, imagine the reduction index `k` moving through the array. An A value for row `i` is introduced with an initial offset of `i` logical slots; a B value for column `j` is introduced with an offset of `j`. Each value then advances by one PE per slot. Both operands for the same term meet at:
 
-The useful outcome was the hardware design experience: translating a parallel mathematical operation into **cycle-aligned processing, local operand movement and verification of the resulting dataflow**.
+`t = i + j + k`
 
-## Related projects
+This is a **logical MAC-slot model**. Real registered RTL may introduce extra latency, and the actual 2024 implementation schedule has not been recovered.
 
-- [Five-Stage RISC CPU and Pipeline Hazards](/projects/risc-cpu-five-stage-pipeline/)
-- [Bit-Shift CNN Accelerator on Zynq FPGA](/projects/bit-shift-cnn-accelerator-zynq/)
+<figure className="project-concept-figure">
+  <a href="/figures/journals/fpga-systolic-04-skew-streams.svg" target="_blank" rel="noopener noreferrer" aria-label="Open input skew schedule">
+    <img src="/figures/journals/fpga-systolic-04-skew-streams.svg" alt="A and B edge injection schedule with deliberate row and column skew at logical steps t zero to three" loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Edge-injection schedule derived for the 2×2 teaching example. A blank slot means no new operand enters at that boundary; it does not mean every PE is idle.</figcaption>
+</figure>
+
+Notice that `A[1,0]` and `B[0,1]` do not enter at `t=0`. They are delayed until `t=1`. Otherwise a PE at the bottom or right may encounter operands with different reduction indices. **Data alignment is part of the computation**, not a cosmetic controller detail.
+
+## Following the wavefront one logical step at a time
+
+The new model produces the complete arithmetic sequence below.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/fpga-systolic-05-wavefront-steps.svg" target="_blank" rel="noopener noreferrer" aria-label="Open four-step wavefront">
+    <img src="/figures/journals/fpga-systolic-05-wavefront-steps.svg" alt="Four logical MAC steps across a 2x2 systolic array, showing active processing elements, multiplication terms and accumulated results" loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Eight MAC events over four logical slots. The displayed intermediate and final values are calculated by the accompanying Python generator, not extracted from a 2024 HDL simulator.</figcaption>
+</figure>
+
+| Logical step | Active products | Intermediate state |
+| --- | --- | --- |
+| `t=0` | `PE00: 1×5` | `C00=5` |
+| `t=1` | `PE00: 2×7`, `PE01: 1×6`, `PE10: 3×5` | `C00=19`, `C01=6`, `C10=15` |
+| `t=2` | `PE01: 2×8`, `PE10: 4×7`, `PE11: 3×6` | `C01=22`, `C10=43`, `C11=18` |
+| `t=3` | `PE11: 4×8` | `C11=50` |
+
+The PE contributions are deliberately staggered. `C00` reaches its final value before `C11` even though all four outputs belong to the same matrix multiplication. A design that blindly exposes all accumulators after the same early slot would confuse **a partially accumulated value** with a completed result.
+
+## The result has to carry a validity condition
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/fpga-systolic-06-valid-timeline.svg" target="_blank" rel="noopener noreferrer" aria-label="Open PE validity timeline">
+    <img src="/figures/journals/fpga-systolic-06-valid-timeline.svg" alt="Per-processing-element activity and final output values over logical slots zero through three" loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Each PE becomes complete after its second reduction term in this K=2 example. The slots are logical, not the measured clock-edge latency of a physical FPGA.</figcaption>
+</figure>
+
+A controller therefore needs a convention for **starting a tile, clearing or initializing accumulators, gating valid operands, and collecting finished outputs**. The appropriate mechanism could use counters, valid propagation or a surrounding FSM. Without the original RTL, I cannot say which precise implementation I used in 2024; what survives in my project record is the Verilog implementation and the focus on Systolic Array matrix multiplication.
+
+This also changes how a testbench should be read. Merely observing an expected number somewhere in the waveform is not enough: the expected number must be associated with the correct element and the correct valid boundary.
+
+## One missing delay can change the multiplication itself
+
+I added a deliberately incorrect injection example to make the failure mode visible. In the working schedule at `t=1`, `PE(0,1)` should combine `A[0,0]=1` with `B[0,1]=6`. If column 1's B stream is not delayed while A still takes a slot to cross from `PE(0,0)`, the same PE can instead combine `A[0,0]` with `B[1,1]=8`.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/fpga-systolic-07-skew-counterexample.svg" target="_blank" rel="noopener noreferrer" aria-label="Open skew counterexample">
+    <img src="/figures/journals/fpga-systolic-07-skew-counterexample.svg" alt="Correct skew pairs A zero zero with B zero one to give six while an illustrative missing skew pairs it with B one one to give eight" loading="lazy" decoding="async" />
+  </a>
+  <figcaption>A constructed counterexample showing why matching reduction indices matter. It is not a defect traced to the 2024 hardware.</figcaption>
+</figure>
+
+The wrong result is not caused by faulty multiplication: `1×8=8` is mathematically correct for the wrong operand pair. It is caused by a **transport schedule that violates the algorithm's indices**. This is why I think of the PE array as both a compute design and a timing/data-delivery design.
+
+## Bringing this back to convolution through IM2COL
+
+My original 2024 project record explicitly connects the Systolic Array to convolution through **IM2COL**, which turns spatial input patches into columns of a matrix. The important distinction is that **the conversion and buffering are additional work**; Systolic Array MAC execution does not make those transformations disappear.
+
+For a transparent illustration, I calculated a new 3×3 image and a 2×2 filter. Each of the four input patches is flattened to a column. The resulting matrix product has a four-element result of `[-4,-4,-4,-4]`.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/fpga-systolic-08-im2col-example.svg" target="_blank" rel="noopener noreferrer" aria-label="Open im2col example">
+    <img src="/figures/journals/fpga-systolic-08-im2col-example.svg" alt="Illustrative 3 by 3 image, 2 by 2 filter and 4 by 4 im2col patch matrix with each convolution output equal to minus four" loading="lazy" decoding="async" />
+  </a>
+  <figcaption>New, exactly checked arithmetic example. This is not the original convolution model, FPGA buffer layout or PS/PL transfer protocol.</figcaption>
+</figure>
+
+That step was the conceptual connection I later carried into the [Bit-Shift CNN Accelerator on Zynq FPGA](/projects/bit-shift-cnn-accelerator-zynq/). The later capstone had its own measured results and a much larger PS/PL integration problem: quantized weights, BRAM paths, accelerator control and CNN support layers. It should not be retroactively treated as the performance result of this earlier exercise.
+
+## What I can support from the original project record
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/fpga-systolic-09-evidence-boundaries.svg" target="_blank" rel="noopener noreferrer" aria-label="Open project evidence boundaries">
+    <img src="/figures/journals/fpga-systolic-09-evidence-boundaries.svg" alt="Three evidence categories: 2024 Verilog FPGA systolic project record, verified current 2x2 arithmetic example and absent original RTL or benchmark data" loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Separates historical project evidence from the executable explanatory model and from unavailable raw implementation artifacts.</figcaption>
+</figure>
+
+My original portfolio names this as **Systolic Array Calculator on FPGA Board** (April–May 2024), with **full development** and **Verilog** specified, and notes the connection to convolution via IM2COL. An older description also mentions favorable performance relative to GPU execution for certain matrix multiplications. However, it does not preserve the tested GPU, matrix shapes, transfer costs, clock rate, throughput logs or reproducible benchmarking protocol. **I cannot turn that statement into a defensible GPU speedup figure.**
+
+Similarly, the project entry does not identify the original number of PEs, accumulator precision, FPGA utilization or cycle-by-cycle RTL waveform. The 2×2 timeline in this article is reproducible mathematical reasoning, not an invented historical trace.
+
+For the explanatory model, the generator computes eight MAC events and asserts the reference result `[[19,22],[43,50]]`, while the IM2COL example is also checked in code. This is enough to verify **the new illustrations**, not enough to certify the unrecovered FPGA implementation.
+
+## What stayed with me
+
+This project taught me to pay attention to the moment when an algorithm becomes a physical schedule. The matrix equation says which values should be multiplied. The PE arrangement determines where that happens. The input skew determines **when** the right values meet, and the output-valid logic determines when someone else may safely use the result.
+
+By the time I moved to a full CNN accelerator, I was thinking less about adding more arithmetic units and more about making sure that the surrounding system could feed them correctly. That change in perspective was more useful to me than any unverified claim of raw speedup.
+
+**Sources and context:** the April–May 2024 personal project/CV entry, *Systolic Array Calculator on FPGA Board*; [Bit-Shift CNN Accelerator on Zynq FPGA](/projects/bit-shift-cnn-accelerator-zynq/); N. P. Jouppi et al., [*In-Datacenter Performance Analysis of a Tensor Processing Unit*](https://research.google/pubs/in-datacenter-performance-analysis-of-a-tensor-processing-unit/) (ISCA 2017, background reading only). The new diagrams and arithmetic checks live alongside this article in the portfolio repository.
+
+*Publication note: the nine new SVGs are verified teaching diagrams. No original RTL, FPGA resource screenshot, testbench waveform or hardware benchmark is represented as having been recovered.*
