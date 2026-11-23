@@ -2,7 +2,7 @@
 title: "Bit-Shift-Based CNN Accelerator on Zynq FPGA"
 description: "A team-built CNN inference system combining power-of-two weight quantization, shift-based processing elements, and a PS/PL architecture."
 date: "2024-12-23"
-updated: "2026-11-20"
+updated: "2026-11-23"
 draft: false
 reviewed: true
 sensitivity: public
@@ -32,6 +32,15 @@ Our team explored an alternative: constrain trained weights to **signed powers o
 
 The overall question was whether a carefully quantized network and a practical FPGA datapath could reduce hardware resource usage **without an unacceptable accuracy trade-off**.
 
+The poster's Custom Net begins with a 28×28 input image and passes through C1 (`4 @ 25×25`), S1 (`4 @ 12×12`), C2 (`8 @ 9×9`), S2 (`8 @ 4×4`), C3 (labelled `16`) and an output with 10 classes. The source makes the changing feature-map dimensions concrete: replacing multipliers is only one part of accelerating a network whose patch shapes and channel counts change between layers.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/cnn-poster-01-custom-net.svg" target="_blank" rel="noopener noreferrer" aria-label="Open poster-based diagram at full size">
+    <img src="/figures/journals/cnn-poster-01-custom-net.svg" alt="Poster-based vector reconstruction of 01 custom net." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>The source figure's feature-map sizes and layer sequence are retained. The grayscale image stacks are a structural vector redraw, not copied poster pixels.</figcaption>
+</figure>
+
 ## 1. Quantize weights for shift-based inference
 
 The original poster describes a training-to-inference path from **FP32 inputs and weights** toward **INT8 inputs and INT4 weights**, using power-of-two quantization for the weight representation.
@@ -46,8 +55,8 @@ The team investigated two related training mechanisms:
 These techniques are not inventions of this project. Our contribution was to use them in the project's quantized model and hardware-aware inference design.
 
 <figure className="project-concept-figure">
-  <a href="/figures/redrawn/cnn-quantization.svg" target="_blank" rel="noopener noreferrer" aria-label="Open original figure full size">
-    <img src="/figures/redrawn/cnn-quantization.svg" alt="Original team-poster diagram of power-of-two quantization, straight-through estimator forward and backward passes." loading="lazy" decoding="async" />
+  <a href="/figures/redrawn/cnn-quantization.svg" target="_blank" rel="noopener noreferrer" aria-label="Open redrawn technical figure at full size">
+    <img src="/figures/redrawn/cnn-quantization.svg" alt="Poster-based redraw of of power-of-two quantization, straight-through estimator forward and backward passes." loading="lazy" decoding="async" />
   </a>
   <figcaption>Figure 1. Redrawn from the original poster: INQ/STE quantization and its forward/backward roles.</figcaption>
 </figure>
@@ -58,12 +67,21 @@ These techniques are not inventions of this project. Our contribution was to use
 The project used a **Zynq processing system (PS) + programmable logic (PL)** design.
 
 <figure className="project-concept-figure">
-  <a href="/figures/redrawn/cnn-pspl.svg" target="_blank" rel="noopener noreferrer" aria-label="Open original figure full size">
-    <img src="/figures/redrawn/cnn-pspl.svg" alt="Original Zynq PS/PL architecture: IM2COL, ReLU, max pooling, AXI4-Lite links, input/output BRAM banks, controller FSM and IS/WS PE arrays." loading="lazy" decoding="async" />
+  <a href="/figures/redrawn/cnn-pspl.svg" target="_blank" rel="noopener noreferrer" aria-label="Open redrawn technical figure at full size">
+    <img src="/figures/redrawn/cnn-pspl.svg" alt="Poster-based redraw of Zynq PS/PL architecture: IM2COL, ReLU, max pooling, AXI4-Lite links, input/output BRAM banks, controller FSM and IS/WS PE arrays." loading="lazy" decoding="async" />
   </a>
   <figcaption>Figure 2. PS/PL block-level architecture redrawn from the final team poster. Components are schematic.</figcaption>
 </figure>
 
+
+The source Full Architecture shows the FP32 training representation at the right, with a leftward power-of-two quantization path toward INT8 inputs and INT4 weights. Below it, PS-side IM2COL, ReLU and pooling connect to PL-side 16 input and 16 output BRAM banks, an FSM/controller and PE arrays. The poster labels the two arrangements 1×16 IS and 4×16 WS. These are actual figure labels, not a recovered cycle-accurate timing trace.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/cnn-poster-02-ps-pl-architecture.svg" target="_blank" rel="noopener noreferrer" aria-label="Open poster-based diagram at full size">
+    <img src="/figures/journals/cnn-poster-02-ps-pl-architecture.svg" alt="Poster-based vector reconstruction of 02 ps pl architecture." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>The PS–PL grouping, bank counts, array labels and training direction were redrawn from the poster. Exact port wiring is simplified.</figcaption>
+</figure>
 
 The system diagram assigns several supporting CNN operations to software on the **PS**, including **IM2COL**, **ReLU**, and **max pooling**. A memory/interconnect path links that software work to the PL accelerator. The poster labels the PS/PL interfaces **AXI4-Lite**.
 
@@ -85,20 +103,29 @@ This division matters because accelerating a CNN involves more than replacing th
 The poster includes an **IM2COL** illustration: convolution input patches and filters are reshaped into a form suitable for regular dot products and parallel matrix-style processing.
 
 <figure className="project-concept-figure">
-  <a href="/figures/redrawn/cnn-dataflow.svg" target="_blank" rel="noopener noreferrer" aria-label="Open original figure full size">
-    <img src="/figures/redrawn/cnn-dataflow.svg" alt="Original systolic-array dataflow diagram showing convolution layers, PE array tiles, datapath outputs and 16 output BRAM banks." loading="lazy" decoding="async" />
+  <a href="/figures/redrawn/cnn-dataflow.svg" target="_blank" rel="noopener noreferrer" aria-label="Open redrawn technical figure at full size">
+    <img src="/figures/redrawn/cnn-dataflow.svg" alt="Poster-based redraw of systolic-array dataflow showing convolution layers, PE array tiles, datapath outputs and 16 output BRAM banks." loading="lazy" decoding="async" />
   </a>
   <figcaption>Figure 3. Convolution dataflow and PE-array mapping, reconstructed from the original poster.</figcaption>
 </figure>
 
+
+The IM2COL panel is particularly useful because its matrix dimensions are explicit: M = output channels, K = kernel width × kernel height × input channels, and N = output width × output height. Packing filters gives an M×K matrix and flattening input patches gives a K×N matrix. The result is M×N; the software must prepare and supply those patches before the PL can benefit from regular parallel operations.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/cnn-poster-05-im2col-mkn.svg" target="_blank" rel="noopener noreferrer" aria-label="Open poster-based diagram at full size">
+    <img src="/figures/journals/cnn-poster-05-im2col-mkn.svg" alt="Poster-based vector reconstruction of 05 im2col mkn." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>The poster's symbolic M×K × K×N = M×N relation is preserved; cell colors only illustrate rearrangement.</figcaption>
+</figure>
 
 It also compares **weight-stationary (WS)** and **input-stationary (IS)** systolic-array structures. Both aim to reduce avoidable data movement by retaining one kind of operand while other values flow through the array.
 
 Within one PE, the documented computation is deliberately simple:
 
 <figure className="project-concept-figure project-source-figure--narrow">
-  <a href="/figures/redrawn/cnn-pe.svg" target="_blank" rel="noopener noreferrer" aria-label="Open original figure full size">
-    <img src="/figures/redrawn/cnn-pe.svg" alt="Original single processing element diagram with shift operation and partial-sum accumulation." loading="lazy" decoding="async" />
+  <a href="/figures/redrawn/cnn-pe.svg" target="_blank" rel="noopener noreferrer" aria-label="Open redrawn technical figure at full size">
+    <img src="/figures/redrawn/cnn-pe.svg" alt="Poster-based redraw of single processing element with shift operation and partial-sum accumulation." loading="lazy" decoding="async" />
   </a>
   <figcaption>Figure 4. Recreated processing-element datapath. Shift/sign processing and accumulation are distinct.</figcaption>
 </figure>
@@ -128,9 +155,18 @@ This was a **team capstone**, not an individual project, but my contribution ext
   <a href="/figures/redrawn/cnn-results.svg" target="_blank" rel="noopener noreferrer" aria-label="Open performance results full size">
     <img src="/figures/redrawn/cnn-results.svg" alt="Vector chart comparing original poster results: FPGA LUT usage, PS-only versus PS+PL latency, and top-1 accuracy." loading="lazy" decoding="async" />
   </a>
-  <figcaption>Figure 5. Original evaluation numbers redrawn with distinct baselines for resources, execution time, and accuracy.</figcaption>
+  <figcaption>Figure 5. Poster evaluation values redrawn with distinct baselines for resources, execution time, and accuracy.</figcaption>
 </figure>
 
+
+The original FPGA Implementation panel shows Vivado placement screenshots and two utilization tables. The screenshots are not pixel-perfect vectors and should not be enlarged as if they were. I transcribed the legible figures and capacities: 53,200 available LUTs, 106,400 FFs and 140 BRAM blocks. The reported 36.5% reduction corresponds to the LUT counts; BRAM remains 34 in both implementations.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/cnn-poster-11-fpga-resources.svg" target="_blank" rel="noopener noreferrer" aria-label="Open poster-based diagram at full size">
+    <img src="/figures/journals/cnn-poster-11-fpga-resources.svg" alt="Poster-based vector reconstruction of 11 fpga resources." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Counts and available capacities are transcribed from the original Vivado resource tables. The placement screenshots were not redrawn as if they were exact data.</figcaption>
+</figure>
 
 The poster provides three distinct comparisons. They should not be treated as interchangeable measurements.
 
@@ -143,6 +179,15 @@ The poster provides three distinct comparisons. They should not be treated as in
 | BRAM | 34 | 34 |
 
 The poster reports a **36.5% area decrease**. The resource table supports this most directly as an approximately **36.5% reduction in LUT usage** (12,603 versus 19,833). It is more precise to call this a reported FPGA area/resource reduction than to assume every FPGA resource or the physical chip area fell by the same amount.
+
+The source chart contains more than the two numbers in the summary: DenseNet, MobileNet, ResNet and LeNet results also appear. They provide poster context, but are not necessarily controlled baselines of the same architecture. The directly named comparison remains Traditional Model 97.3% versus Our Model 96.7%, a 0.6-percentage-point difference.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/cnn-poster-12-top1-accuracy.svg" target="_blank" rel="noopener noreferrer" aria-label="Open poster-based diagram at full size">
+    <img src="/figures/journals/cnn-poster-12-top1-accuracy.svg" alt="Poster-based vector reconstruction of 12 top1 accuracy." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>All nine Top-1 percentages were transcribed from the source chart; only the labelled Traditional/Our pair is used as this project's direct comparison.</figcaption>
+</figure>
 
 ### Model accuracy
 
@@ -168,7 +213,83 @@ The poster identifies a **dual-core ARM Cortex-A9 PS at 667 MHz** for the runtim
 
 It is important not to conflate the comparisons: **FPGA resource usage** compares shift- and multiplier-based hardware designs, while the **runtime table** compares CPU-only execution against PS+PL execution. The latter does not isolate the effect of bit-shift arithmetic alone.
 
-## FPGA Resource Use and Dataflow Trade-offs
+## Revisiting the implementation details in the poster
+
+Returning to the original poster reveals several figures I had previously condensed too much. The following are **native-vector reconstructions informed by the source diagrams and readable labels**, not enlarged screenshots or newly rerun simulations. Exact schematic geometry and unrecorded timing are not presented as measured facts.
+
+### What changed in the weight representation
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/cnn-poster-07-weight-cells.svg" target="_blank" rel="noopener noreferrer" aria-label="Open poster-based diagram at full size">
+    <img src="/figures/journals/cnn-poster-07-weight-cells.svg" alt="Source-based vector illustration: What changed in the weight representation" loading="lazy" decoding="async" />
+  </a>
+  <figcaption>The poster shows a 3×3 before/after weight example. This is an illustration of encoded weights, not a bit-exact specification of fixed-point shifting.</figcaption>
+</figure>
+
+### Why quantization did not stop training
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/cnn-poster-08-ste-training.svg" target="_blank" rel="noopener noreferrer" aria-label="Open poster-based diagram at full size">
+    <img src="/figures/journals/cnn-poster-08-ste-training.svg" alt="Source-based vector illustration: Why quantization did not stop training" loading="lazy" decoding="async" />
+  </a>
+  <figcaption>The STE figure separates forward quantization from a backward surrogate gradient. We applied the published method rather than inventing a new estimator.</figcaption>
+</figure>
+
+### Why I did not fix every weight at once
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/cnn-poster-09-inq-stages.svg" target="_blank" rel="noopener noreferrer" aria-label="Open poster-based diagram at full size">
+    <img src="/figures/journals/cnn-poster-09-inq-stages.svg" alt="Source-based vector illustration: Why I did not fix every weight at once" loading="lazy" decoding="async" />
+  </a>
+  <figcaption>INQ proceeds in stages. The colored example cells are explanatory because the poster does not record a complete per-weight selection order.</figcaption>
+</figure>
+
+### The buffers around the PE grid
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/cnn-poster-03-systolic-buffers.svg" target="_blank" rel="noopener noreferrer" aria-label="Open poster-based diagram at full size">
+    <img src="/figures/journals/cnn-poster-03-systolic-buffers.svg" alt="Source-based vector illustration: The buffers around the PE grid" loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Weight, Activation and Accumulation buffers are preserved as named in the source. The PE grid is an excerpt, not the complete RTL.</figcaption>
+</figure>
+
+### Choosing which operand to keep stationary
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/cnn-poster-04-ws-is-dataflow.svg" target="_blank" rel="noopener noreferrer" aria-label="Open poster-based diagram at full size">
+    <img src="/figures/journals/cnn-poster-04-ws-is-dataflow.svg" alt="Source-based vector illustration: Choosing which operand to keep stationary" loading="lazy" decoding="async" />
+  </a>
+  <figcaption>The poster labels 4×16 WS and 1×16 IS configurations. Only a subset of cells is drawn for legibility; cycle schedules were not recorded.</figcaption>
+</figure>
+
+### Inside one bit-shift PE
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/cnn-poster-06-single-pe.svg" target="_blank" rel="noopener noreferrer" aria-label="Open poster-based diagram at full size">
+    <img src="/figures/journals/cnn-poster-06-single-pe.svg" alt="Source-based vector illustration: Inside one bit-shift PE" loading="lazy" decoding="async" />
+  </a>
+  <figcaption>The source PE contains input, weight, shift operation and partial-sum addition. A shift does not remove accumulation.</figcaption>
+</figure>
+
+### Collecting results from parallel datapaths
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/cnn-poster-10-output-bram-dataflow.svg" target="_blank" rel="noopener noreferrer" aria-label="Open poster-based diagram at full size">
+    <img src="/figures/journals/cnn-poster-10-output-bram-dataflow.svg" alt="Source-based vector illustration: Collecting results from parallel datapaths" loading="lazy" decoding="async" />
+  </a>
+  <figcaption>The poster identifies DP1–DP8 and Output BRAM0–15. No unrecorded clock-level transfer timings were invented.</figcaption>
+</figure>
+
+### Which execution time was actually compared
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/cnn-poster-13-runtime-table.svg" target="_blank" rel="noopener noreferrer" aria-label="Open poster-based diagram at full size">
+    <img src="/figures/journals/cnn-poster-13-runtime-table.svg" alt="Source-based vector illustration: Which execution time was actually compared" loading="lazy" decoding="async" />
+  </a>
+  <figcaption>The poster compares PS-only 15.9 ms with integrated PS+PL 8.83 ms on a dual-core ARM Cortex-A9 @ 667 MHz. This is not a pure shift-versus-multiply runtime test.</figcaption>
+</figure>
+
+## What the hardware trade-off taught me
 
 This project brought together several layers of engineering:
 
@@ -178,7 +299,7 @@ This project brought together several layers of engineering:
 4. **Hardware/software integration:** PS-side transformations, control, and communication remain significant even after convolution work moves to the PL.
 5. **Measurement discipline:** resource utilization, accuracy, and end-to-end latency answer different questions.
 
-The original poster calls the design *energy-efficient*, but it does **not** provide a measured power or energy comparison. That remains a motivation and an area for additional validation, rather than a measured energy-saving result in this write-up.
+The original poster calls the design *energy-efficient*, but it does **not** provide a measured power or energy comparison. The important lesson was that a cheaper PE still needs timely BRAM input, correct PS–PL coordination and accurate quantized weights. That remains a motivation and an area for additional validation, rather than a measured energy-saving result in this write-up.
 
 ## Source and references
 
