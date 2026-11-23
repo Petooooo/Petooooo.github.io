@@ -50,6 +50,16 @@ def codes(s:str)->list[str]:
     return p.values
 
 
+def first_prose_element(html: str) -> str | None:
+    # Inspect the first authored block, ignoring the generated Korean source comment.
+    prose = re.search(r'<div[^>]*class="[^"]*prose-platform[^"]*"[^>]*>', html)
+    if not prose:
+        return None
+    start = html[prose.end():]
+    first = re.match(r'(?:\s|<!--.*?-->)*<([a-z][a-z0-9-]*)\b', start)
+    return first.group(1) if first else None
+
+
 def main():
     source=[
         p for p in sorted(DIST.rglob("index.html"))
@@ -132,11 +142,20 @@ def main():
         # Compare rendered HTML, not only the number of > characters in source files.
         source_html = DIST / "projects" / slug / "index.html"
         if source_html.is_file():
-            en_blockquotes = len(re.findall(r"<blockquote(?:\\s|>)", source_html.read_text(encoding="utf-8")))
-            ko_blockquotes = len(re.findall(r"<blockquote(?:\\s|>)", rendered))
-            if ko_blockquotes < en_blockquotes:
+            english_html = source_html.read_text(encoding="utf-8")
+            en_blockquotes = len(re.findall(r"<blockquote(?:\s|>)", english_html))
+            ko_blockquotes = len(re.findall(r"<blockquote(?:\s|>)", rendered))
+            if ko_blockquotes != en_blockquotes:
                 errors.append(
-                    f"Missing Korean blockquote: {slug}, English={en_blockquotes}, Korean={ko_blockquotes}"
+                    f"Korean/English blockquote count mismatch: {slug}, English={en_blockquotes}, Korean={ko_blockquotes}"
+                )
+            en_first = first_prose_element(english_html)
+            ko_first = first_prose_element(rendered)
+            # Metadata/context quotes in English must also open the Korean article,
+            # not be inserted later as a redundant highlighted paragraph.
+            if "blockquote" in (en_first, ko_first) and en_first != ko_first:
+                errors.append(
+                    f"Korean/English introductory quote position mismatch: {slug}, English={en_first}, Korean={ko_first}"
                 )
         if "hand-edited Korean editorial: "+slug not in rendered:
             errors.append(f"Expected curated Korean article body: {slug}")
