@@ -2,7 +2,7 @@
 title: "RISC TOY: Five-Stage Pipeline, Forwarding and Stall Control"
 description: "Implemented a Verilog five-stage RISC CPU with three forwarding paths, load-use and branch stalls, synchronous register-file timing and RTL tests."
 date: "2024-06-28"
-updated: "2026-11-20"
+updated: "2026-11-24"
 draft: false
 reviewed: true
 reviewStatus: "reviewed"
@@ -34,6 +34,22 @@ The processor used the familiar **Instruction Fetch (IF), Instruction Decode (ID
   <figcaption>Redrawn from the original RISC TOY design report. The diagram shows functional data/control paths rather than an FPGA placement or a cycle-accurate timing waveform.</figcaption>
 </figure>
 
+The report's original architecture drawing spans two pages. I kept that split in the two source-oriented figures below, preserving the white background, blue signal lines, and the placement of IF/ID and EX/MEM/WB components. Unlike the earlier overview diagram, these emphasize the specific signals printed in the report. The small bus/wire positions are simplified for legibility.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/risc-report-01-if-id-original.svg" target="_blank" rel="noopener noreferrer" aria-label="Open report-grounded RISC TOY figure">
+    <img src="/figures/journals/risc-report-01-if-id-original.svg" alt="Source-grounded RISC TOY vector reconstruction 1" loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Original report page 1: IF and ID blocks, PC multiplexer, Instruction Memory, Register File and named buses. Major relationships are redrawn, not every physical wire.</figcaption>
+</figure>
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/risc-report-02-ex-mem-original.svg" target="_blank" rel="noopener noreferrer" aria-label="Open report-grounded RISC TOY figure">
+    <img src="/figures/journals/risc-report-02-ex-mem-original.svg" alt="Source-grounded RISC TOY vector reconstruction 2" loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Original report page 2: ALU, MEM register, Data Memory, WB register and the target/writeback paths. Not a circuit-level replica.</figcaption>
+</figure>
+
 | Stage | Implemented responsibility | Representative signals |
 | --- | --- | --- |
 | IF | Choose sequential `PC + 4` or branch `target`; request the instruction; hold fetch during a stall | `PC`, `IREQ`, `IADDR`, `INST_M` |
@@ -45,6 +61,15 @@ The processor used the familiar **Instruction Fetch (IF), Instruction Decode (ID
 The report's instruction fields explain several otherwise surprising choices. The opcode was read from `INST[31:27]`; source-register fields included `INST[21:17]` and `INST[16:12]`; the destination field was `INST[26:22]`. The execution path carried **17-bit and 22-bit offsets**, along with a shift-mode bit, a five-bit shift amount and a three-bit branch condition. In the implementation, these values were saved by the EX pipeline register instead of being decoded again from an instruction that had already advanced.
 
 The design had separate **instruction-memory and data-memory interfaces**, plus a register file. That matters because instruction fetch, a load/store request and register-file writeback each have their own timing and control signals.
+
+The instruction field layout helps explain why the EX register saved far more than two register operands. Destination, opcode, immediate offsets and shift/branch subfields all needed to remain associated with the instruction that created them.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/risc-report-03-instruction-fields.svg" target="_blank" rel="noopener noreferrer" aria-label="Open report-grounded RISC TOY figure">
+    <img src="/figures/journals/risc-report-03-instruction-fields.svg" alt="Source-grounded RISC TOY vector reconstruction 3" loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Original report pages 1 and 5: opcode, destination, source, offset and shift/branch bit fields with their original labels.</figcaption>
+</figure>
 
 ## Instruction fetch: PC changes were conditional
 
@@ -71,6 +96,15 @@ end
 
 I therefore treated an instruction fetch as an operation with both an address and a valid pipeline state. This was particularly important in the branch and load-use paths, where the next fetched instruction could not always proceed.
 
+The PC, the temporary INST_M buffer and the ID instruction register are separate state boundaries. The reported stall conditions are not simply one universal freeze signal, so the diagram preserves those three locations.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/risc-report-04-fetch-stall-path.svg" target="_blank" rel="noopener noreferrer" aria-label="Open report-grounded RISC TOY figure">
+    <img src="/figures/journals/risc-report-04-fetch-stall-path.svg" alt="Source-grounded RISC TOY vector reconstruction 4" loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Original report pages 2–3: PC state, buffered INST_M and synchronous INST capture must be held or updated by separate conditions.</figcaption>
+</figure>
+
 ## Decode and register-file timing
 
 ID decoded the instruction and selected the register file's two read addresses. The original report includes a special case for **`ST` and `STR`**: for stores, the second value required by the datapath comes from a different instruction field than for ordinary arithmetic instructions.
@@ -89,6 +123,15 @@ else
 This was more than an encoding detail. A store's value can depend on an earlier instruction just as an ALU operand can. Selecting the correct register address is the first step; making sure the **latest value** reaches the store is the forwarding problem that follows.
 
 The register file in the project had **synchronous behavior**. The report describes a clock boundary between address/operand preparation and capture into the EX pipeline register. That delay affected the saved `next_PC_ID` value and the later writeback design. For this implementation, the timing of the register file could not be treated as an ideal combinational read/write abstraction.
+
+For a store, choosing the correct write-data register is just as important as calculating its memory address. The compact source-address decision can therefore affect later forwarding and load-to-store dependencies.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/risc-report-05-store-register-select.svg" target="_blank" rel="noopener noreferrer" aria-label="Open report-grounded RISC TOY figure">
+    <img src="/figures/journals/risc-report-05-store-register-select.svg" alt="Source-grounded RISC TOY vector reconstruction 5" loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Original report page 4: ST and STR select the second read-address field differently from ordinary operations.</figcaption>
+</figure>
 
 ## Execute: one datapath, several instruction families
 
@@ -109,6 +152,15 @@ assign ROR_1 = {valB, valB} >> valC[4:0];
 
 This is a useful example of why instruction decoding, width and signedness all matter. An implementation can appear correct for one operand but fail for another if the intermediate value is not wide enough or the wrong shift interpretation is used.
 
+The Rotate Right implementation also deserved more than a brief code excerpt. It concatenated valB with itself, shifted the extended quantity, and selected the lower 32 bits. The amount could come from shamt or valC[4:0].
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/risc-report-11-rotate-right-datapath.svg" target="_blank" rel="noopener noreferrer" aria-label="Open report-grounded RISC TOY figure">
+    <img src="/figures/journals/risc-report-11-rotate-right-datapath.svg" alt="Source-grounded RISC TOY vector reconstruction 11" loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Original report pages 5–6: 64-bit concatenation of valB followed by right shift and lower 32-bit selection.</figcaption>
+</figure>
+
 ## Data hazards: three concrete forwarding cases
 
 The project report separates **three data-dependency cases**, rather than speaking about forwarding as a single generic feature.
@@ -124,6 +176,15 @@ The project report separates **three data-dependency cases**, rather than speaki
     <img src="/figures/journals/risc-hazard-control-timeline.svg" alt="Three original RISC TOY dependency cases: MEM ALU bypass, WB ALU bypass and load result after a one-cycle stall. Branch and jump opcodes use a two-cycle decode-side stall." loading="lazy" decoding="async" />
   </a>
   <figcaption>The three forwarding cases and two distinct stall controls, summarized directly from the report's RTL and hazard analysis.</figcaption>
+</figure>
+
+The three cases are not interchangeable: the MEM ALU result, the WB ALU result, and the loaded MOUT become valid at different points in the pipeline.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/risc-report-06-forwarding-cases.svg" target="_blank" rel="noopener noreferrer" aria-label="Open report-grounded RISC TOY figure">
+    <img src="/figures/journals/risc-report-06-forwarding-cases.svg" alt="Source-grounded RISC TOY vector reconstruction 6" loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Original report pages 8–9: three distinct cases for MEM-ALU, WB-ALU and stalled load-result forwarding.</figcaption>
 </figure>
 
 For each source operand, I compared the current instruction's register address with the destination of an instruction already in MEM or WB. The original expressions used both the register-file write flag and the data-memory request/write flags to decide whether the value being forwarded was a valid ALU result or a load result.
@@ -144,6 +205,15 @@ assign valB =
 The same pattern was used for `valC`, and the store write-data path `DWDATA` had its own destination comparisons. **The final fallback was the operand already captured from the register file**; forwarding was conditional, not the default.
 
 One subtlety is worth preserving rather than silently “cleaning up” the historical code: the second branch above tests `!DREQ_MEM` even when choosing a WB-stage result. That is how the expression is written in the original report, not a modernized proof that every simultaneous WB/MEM combination is handled correctly. A targeted regression would need to check cases in which the MEM-stage instruction and WB-stage instruction have different memory-control values.
+
+The operand mux forms a priority chain, not an unordered set of choices. I preserved the historical WB guard !DREQ_MEM in this drawing because silently replacing it with a newer condition would erase a useful regression question.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/risc-report-07-forwarding-priority.svg" target="_blank" rel="noopener noreferrer" aria-label="Open report-grounded RISC TOY figure">
+    <img src="/figures/journals/risc-report-07-forwarding-priority.svg" alt="Source-grounded RISC TOY vector reconstruction 7" loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Original report page 9: forwarding selection order, including the unusual WB guard !DREQ_MEM preserved as written.</figcaption>
+</figure>
 
 ## Load-use: a stall before forwarding
 
@@ -171,6 +241,15 @@ Including the store case mattered. The value being written to memory can depend 
 
 The hold also propagated to the IF/ID/EX-side register updates. When `stall_MEM` was active, the relevant sequential blocks retained their values. In the MEM register logic the report also suppressed an unintended register write by changing `WEN_MEM` during the stall path. Those are **state-preservation rules**, not simply a counter that delays a consumer instruction.
 
+The one-cycle load-use stall is more than a wait counter: the earlier pipeline registers have to retain their state while the loaded value becomes eligible for forwarding. Store write-data dependencies were also included in this check.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/risc-report-08-load-use-stall.svg" target="_blank" rel="noopener noreferrer" aria-label="Open report-grounded RISC TOY figure">
+    <img src="/figures/journals/risc-report-08-load-use-stall.svg" alt="Source-grounded RISC TOY vector reconstruction 8" loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Original report pages 9–10: one-cycle stall_MEM holds the earlier state until the memory output can be forwarded.</figcaption>
+</figure>
+
 ## Control hazards: two decode-side stall cycles
 
 The branch/jump path was implemented differently from the load-use case. The report identifies four control-transfer opcodes: **`BR` (15), `BRL` (16), `J` (17) and `JL` (18)**.
@@ -195,6 +274,15 @@ EX evaluated the branch condition and selected `target`. The conditions document
 
 The report describes **three cycles until the intended target instruction is reached**, with a two-cycle decode-side hold as its chosen control strategy. These are not interchangeable claims: the three-cycle description refers to the control-flow delay in the pipeline, while **`stall_ID` takes two explicit stall states**. A new waveform should compare PC, `INST_M`, `INST`, `BRANCH` and `stall_ID` cycle by cycle rather than infer a timing diagram solely from prose.
 
+Branch handling uses a different state machine. INST_M catches the control transfer early, while stall_ID traverses 1, 2 and 0. Two explicit stall states must not be confused with the report’s three-cycle target-arrival description.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/risc-report-09-branch-stall-states.svg" target="_blank" rel="noopener noreferrer" aria-label="Open report-grounded RISC TOY figure">
+    <img src="/figures/journals/risc-report-09-branch-stall-states.svg" alt="Source-grounded RISC TOY vector reconstruction 9" loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Original report pages 10–11: opcode BR/BRL/J/JL detection in INST_M, and the stall_ID 1→2→0 sequence.</figcaption>
+</figure>
+
 ## Writeback: why the register file changed the timing
 
 A less visible problem appeared at the WB boundary. The report notes that the **synchronous register file** did not behave as if a value written in WB were instantly available for a read performed earlier in the same logical instruction progression.
@@ -212,6 +300,15 @@ op_MA      <= op_MEM;
 
 This was a concrete integration problem between a stage-level architecture and actual module timing. Drawing five pipeline boxes did not resolve it; the correct source of the write signal depended on the register file's edge behavior.
 
+The MA signals show an implementation detail that a simple textbook pipeline diagram would miss. The original design specifically adapted writeback to the timing of a synchronous Register File.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/risc-report-10-writeback-ma-timing.svg" target="_blank" rel="noopener noreferrer" aria-label="Open report-grounded RISC TOY figure">
+    <img src="/figures/journals/risc-report-10-writeback-ma-timing.svg" alt="Source-grounded RISC TOY vector reconstruction 10" loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Original report page 8: MA signals transfer MEM-stage outcomes to the synchronous Register File writeback boundary.</figcaption>
+</figure>
+
 ## Verification: instruction sequences and register waveforms
 
 I built a custom **instruction test sequence** with addresses from **PC 0 through PC 380**, initialized registers with known values and mixed arithmetic, logic, shifts, loads, stores and control transfers. The report records both the instruction sequence and register-state expectations.
@@ -226,7 +323,25 @@ The following are **selected checkpoints transcribed from the original test plan
 | `LD R0, R31, 1924` followed by `ST R0, R31, 1928` and `LD R1, R31, 1928` | The report lists `R0 = 154` and `R1 = 154` | Load/store data path and reload |
 | `J` / `JL` / `BR` / `BRL` tests near PC 348 | Compared normal progression with a redirect back to **PC 0** | Branch target, fetch hold and control flow |
 
+The source test table preserves exact expected values, not just a pass/fail label. The selected test checkpoints are redrawn as a vector table without pretending to be a new simulation run.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/risc-report-12-testbench-checkpoints.svg" target="_blank" rel="noopener noreferrer" aria-label="Open report-grounded RISC TOY figure">
+    <img src="/figures/journals/risc-report-12-testbench-checkpoints.svg" alt="Source-grounded RISC TOY vector reconstruction 12" loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Original report pages 11–12: instruction-test expectations, not newly executed simulation results.</figcaption>
+</figure>
+
 The result section also includes a multi-register waveform image: one case proceeds without a taken branch, while the other redirects the PC to zero. This is useful **simulation evidence for the original implementation**. It is not a formal proof of every instruction/flag combination, and the published article does not invent a timing closure, frequency, IPC or FPGA resource-utilization result that the report did not provide.
+
+The source PDF preserves real green-on-black waveform screenshots for normal instruction progression and redirect to PC zero. I did not invent per-signal transition coordinates to imitate those captures; the separate diagram describes the supported evidence boundary.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/risc-report-13-waveform-evidence.svg" target="_blank" rel="noopener noreferrer" aria-label="Open report-grounded RISC TOY figure">
+    <img src="/figures/journals/risc-report-13-waveform-evidence.svg" alt="Source-grounded RISC TOY vector reconstruction 13" loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Original report pages 12–13 contain real waveform screenshots. This SVG describes their scope; no unverified signal transitions have been fabricated.</figcaption>
+</figure>
 
 For a more demanding regression today, I would focus on **simultaneous dependencies**: both source registers matching different pipeline destinations, a load followed by a store using its data, branch detection while another stall is active, and WB bypass when a memory operation occupies MEM. Those are inspection targets suggested by the recorded code, not tests I am claiming were run in 2024.
 
@@ -237,6 +352,8 @@ The implemented processor joined several real pieces of RTL engineering: a stage
 Revisiting the original source made one thing especially clear: the difficulty was not writing Verilog for `ADD` or drawing the IF/ID/EX/MEM/WB pipeline. It was deciding **which version of a value an instruction should see**, then making the pipeline retain or advance exactly the right state when that value was not ready.
 
 The same reasoning about visibility, ownership and timing became useful later in the Systolic Array, CNN accelerator and runtime memory-planning projects. In this CPU project, it was visible at the individual clock boundary.
+
+The new figure inventory is linked to the corresponding pages in the report-review record. The full original PDF and personally identifying student information remain unpublished; original simulator screenshots are not impersonated by vector traces.
 
 ## Related implementation records
 

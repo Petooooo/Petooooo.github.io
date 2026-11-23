@@ -10,6 +10,12 @@
 
 {{figure /figures/journals/risc-five-stage-hazards.svg | 2024년 RISC TOY 설계 보고서를 바탕으로 다시 그린 데이터 경로다. PC·Instruction Memory·Register File·ALU·Data Memory·Writeback을 연결하고, Forwarding과 Stall 제어가 개입하는 위치를 표시했다.}}
 
+원본의 전체 Architecture는 IF·ID와 EX·MEM·WB가 두 장으로 나뉘어 있다. 이전 글의 개념도만으로는 당시 설계가 어떤 신호를 전달했는지 충분히 보이지 않아, **원본처럼 흰 배경과 파란 Signal Line을 사용해** 두 장으로 다시 그렸다. 블록 위치와 중요한 Signal Name은 유지하되, 세부 배선은 읽기 쉽게 단순화했다.
+
+{{figure /figures/journals/risc-report-01-if-id-original.svg | 원본 1쪽 IF·ID 도식의 PC Mux, Instruction Memory, Register File과 신호 관계를 따라 그렸다. 모든 실제 배선을 복제한 것은 아니다.}}
+
+{{figure /figures/journals/risc-report-02-ex-mem-original.svg | 원본 2쪽 ALU·MEM Register·Data Memory·WB와 Target·Writeback 경로를 재구성했다. 실제 Gate-Level Netlist는 아니다.}}
+
 각 단계의 실제 역할은 다음과 같다.
 
 | 단계 | 구현 내용 | 주요 신호 |
@@ -23,6 +29,10 @@
 원본 코드에서 Opcode는 `INST[31:27]`, 한쪽 Source Register는 `INST[21:17]`, 다른 Source Register는 `INST[16:12]`, Destination Register는 `INST[26:22]`에 배치돼 있다. EX 단계에는 **17비트·22비트 Offset**, Shift 방식 선택 비트, 5비트 Shift Amount와 3비트 분기 조건도 함께 전달했다.
 
 따라서 EX가 실행될 때 필요한 값은 단순히 두 Register의 데이터만이 아니었다. **명령어의 일부 필드와 목적지 주소, 메모리 접근·레지스터 기록 여부를 나타내는 제어 신호까지** 그 명령어와 같은 속도로 이동해야 했다.
+
+EX Register가 두 Operand만 저장하지 않은 이유는 Instruction Field를 보면 분명하다. Destination과 Opcode뿐 아니라 Offset, Shift Mode, Branch Condition도 원래 Instruction과 함께 이동해야 했다.
+
+{{figure /figures/journals/risc-report-03-instruction-fields.svg | 원본의 Opcode·Destination·Source Register·Offset·Shift·Branch Condition 비트 범위를 보존한 그림이다.}}
 
 ## IF: PC를 증가시키는 일에도 Stall 조건이 필요했다
 
@@ -51,6 +61,10 @@ end
 
 이때 **PC와 Instruction을 모두 같은 조건에서 멈추는 것**이 중요했다. 한쪽만 진행하면 주소는 다음 명령어를 가리키는데 Decode에는 이전 명령어가 들어가는 식으로 실행 순서가 어긋날 수 있기 때문이다.
 
+PC, 임시 Instruction Buffer인 INST_M, ID의 INST는 같은 Register가 아니다. Stall 조건에 따라 어느 값을 유지할지가 달라지므로 **각각의 상태 경계**를 나누어 그렸다.
+
+{{figure /figures/journals/risc-report-04-fetch-stall-path.svg | 원본 2–3쪽의 PC Hold와 INST_M Buffer, 동기식 INST Capture를 서로 다른 상태로 구분했다.}}
+
 ## ID: Instruction Field와 Register File의 실제 타이밍
 
 ID에서는 Instruction을 해석하고 Register File에서 읽을 두 주소를 결정했다. 이 과정에서도 명령어 종류에 따라 예외가 있었다. **Store 명령어 `ST`와 `STR`의 주소 선택 방식이 달랐다.**
@@ -71,6 +85,10 @@ else
 또 하나의 핵심은 **Register File이 동기식으로 동작했다는 사실**이다. 읽기 주소를 설정하고 데이터를 얻는 과정이 이상적인 조합 논리처럼 즉시 끝나지 않았기 때문에, `valB_M`·`valC_M`을 거쳐 EX Pipe Register로 값을 전달할 때 클럭 경계를 고려해야 했다.
 
 보고서에 적힌 `next_PC_ID` 처리와 나중에 설명할 Writeback 신호 재배치도 이 Register File 타이밍과 연결돼 있다.
+
+Store에서는 주소 계산에 쓰는 값 외에 **실제로 Memory에 기록할 데이터**도 가져와야 한다. 짧은 Decode 분기이지만 뒤의 Forwarding과 Load→Store 의존성 처리로 이어지는 부분이라 따로 그렸다.
+
+{{figure /figures/journals/risc-report-05-store-register-select.svg | 원본 4쪽 Store용 rc_ADDR_M 선택은 일반 Instruction과 사용하는 필드가 다르다.}}
 
 ## EX: 산술 연산부터 Shift·Branch·메모리 접근까지
 
@@ -98,6 +116,10 @@ Shift는 Immediate 값으로 할 수도 있고 다른 Register의 값으로 할 
 
 EX의 결과는 `ALU_OUT_M`에 저장됐고, 동시에 **Register File을 쓸지, Data Memory에 접근할지, Branch로 PC를 바꿀지** 결정하는 제어 신호도 함께 설정했다.
 
+ROR 구현에서는 valB를 두 번 이어 붙여 Shift한 뒤 하위 32-bit를 선택했다. 이 과정은 단순 Logical Shift와 다른 결과를 만들기 때문에 Operand Width와 Shift Amount 선택까지 그림으로 정리했다.
+
+{{figure /figures/journals/risc-report-11-rotate-right-datapath.svg | 원본 ROR의 64-bit Concatenation, Shift Amount 선택, 하위 32-bit 추출 과정을 재구성했다.}}
+
 ## Data Hazard: 원본 코드에서 처리한 세 가지 경우
 
 가장 중요한 구현 중 하나가 **Data Forwarding**이었다. 앞선 명령어의 결과가 Register File에 기록되기 전에 다음 명령어가 그 값을 사용할 수 있기 때문이다.
@@ -111,6 +133,10 @@ EX의 결과는 `ALU_OUT_M`에 저장됐고, 동시에 **Register File을 쓸지
 | Case 3 | Load한 값을 뒤따르는 명령어가 사용 | 먼저 Stall한 후 Data Memory 결과 `MOUT`을 Forwarding |
 
 {{figure /figures/journals/risc-hazard-control-timeline.svg | 실제 보고서의 세 가지 Data Hazard와 `stall_MEM`, `stall_ID` 제어를 따로 정리했다. ALU 결과의 MEM·WB Forwarding과 Load 이후 Forwarding은 데이터가 준비되는 시점이 다르다.}}
+
+세 가지 Case의 차이는 **어느 단계에서 값이 준비되느냐**에 있다. MEM ALU 결과와 WB ALU 결과, 실제 Load Data가 나오는 시점을 별도 경로로 비교했다.
+
+{{figure /figures/journals/risc-report-06-forwarding-cases.svg | 원본 8–9쪽에 기록된 MEM ALU, WB ALU, Load Result의 세 Forwarding 경로를 분리했다.}}
 
 ### Case 1: 바로 앞 ALU 결과를 가져오기
 
@@ -154,6 +180,10 @@ assign valB =
 
 여기서 주의할 점이 하나 있다. **위 코드는 보고서에 남은 실제 식을 그대로 정리한 것**이다. WB 결과를 선택하는 두 번째 분기에서도 `DREQ_MEM`을 검사하고 있는데, 이는 현재 MEM 명령어와 WB 명령어가 서로 다른 메모리 제어 상태를 가질 때 추가 검토가 필요한 부분이다. 과거 코드를 임의로 수정해 완전한 회로였다고 소개하기보다, 실제 구현과 추가로 확인할 조건을 구분해 두었다.
 
+Forwarding에서는 MEM과 WB가 같은 Source Register와 일치할 수 있어 **어떤 값을 먼저 선택할지**가 중요하다. 보고서에 있는 WB 조건의 !DREQ_MEM도 임의로 고치지 않고 남겨서 추후 검증할 부분을 드러냈다.
+
+{{figure /figures/journals/risc-report-07-forwarding-priority.svg | 원본 9쪽 Forwarding 우선순위와 WB 조건의 !DREQ_MEM 표기를 수정하지 않고 보존했다. 실제 오류로 단정하지 않는다.}}
+
 ## Load-use Stall: `stall_MEM`으로 1사이클 유지
 
 Forwarding을 구현해도 **Load 직후 데이터 사용**은 별도의 Stall이 필요했다. 메모리에서 데이터를 읽기 전에 다음 연산이 진행되면 아직 준비되지 않은 값을 사용하기 때문이다.
@@ -176,6 +206,10 @@ end
 `stall_MEM == 1`일 때 IF와 ID, EX 쪽의 관련 레지스터는 현재 값을 유지했다. MEM Pipe Register에서도 상태를 유지하고 불필요한 Register File 쓰기가 발생하지 않도록 `WEN_MEM`을 조정했다. 한 사이클 뒤에 Stall을 해제하면 필요한 Load 결과를 전달받아 연산을 계속 진행할 수 있었다.
 
 또한 조건에는 **`ST`·`STR`에 대한 예외적인 의존성 검사**가 포함됐다. Store가 Load 결과를 메모리에 기록하려는 상황에서는 주소 계산이 끝났더라도 실제 Write Data가 최신 값이어야 하기 때문이다.
+
+Load-use가 발생하면 한 사이클을 기다리는 동안 **IF·ID·EX·MEM의 상태를 보존**해야 한다. 원본 코드가 Store Data Dependency도 검사한 이유를 그림으로 함께 정리했다.
+
+{{figure /figures/journals/risc-report-08-load-use-stall.svg | 원본 9–10쪽의 1-Cycle Load-use Stall, 상태 유지, MOUT Forwarding과 Store Data 의존성을 정리했다.}}
 
 ## Branch·Jump: `stall_ID`를 이용한 2사이클 정지
 
@@ -210,6 +244,10 @@ EX에서는 Branch Condition에 따라 `target`을 계산했다. 원본의 분�
 
 보고서는 분기 대상 Instruction을 가져오는 데 걸리는 지연을 **3사이클**로 설명한다. 반면 `stall_ID`로 명시적으로 유지한 상태는 **두 사이클**이다. 두 숫자는 같은 의미가 아니며, 하나는 분기 대상의 도착 지연이고 다른 하나는 구현한 Stall 단계라는 점을 구분해야 한다.
 
+Branch는 Data Hazard와 달리 잘못된 Instruction의 실행을 막는 문제다. **INST_M에서 일찍 감지하고 stall_ID를 1→2→0으로 바꾸는 구조**를 따로 그렸다. 두 개의 Stall 상태와 Target 도착 지연 3 Cycle은 다른 설명이다.
+
+{{figure /figures/journals/risc-report-09-branch-stall-states.svg | INST_M에서 BR·BRL·J·JL을 확인하고 stall_ID를 1→2→0으로 변화시키는 원본 10–11쪽의 상태 제어다.}}
+
 ## Writeback: 동기식 Register File 때문에 바꾼 데이터 경로
 
 원본 보고서를 다시 살펴보면서 특히 중요하게 느낀 부분은 **WB 단계의 타이밍을 별도로 조정했다는 사실**이다.
@@ -230,6 +268,10 @@ op_MA      <= op_MEM;
 
 모듈이 클럭을 기준으로 언제 입력을 받아들이고 결과를 내놓는지 이해해야 데이터 경로를 제대로 연결할 수 있었다.
 
+MA Writeback 경로는 단순한 5-Stage Pipeline 그림으로는 보이지 않는 실제 통합 문제였다. Synchronous Register File의 타이밍 때문에 만든 신호임을 구분해 두었다.
+
+{{figure /figures/journals/risc-report-10-writeback-ma-timing.svg | 동기식 Register File 때문에 만든 원본 MA Writeback 신호 경로를 보여준다.}}
+
 ## 직접 구성한 Instruction Testbench와 결과
 
 보고서 마지막에는 **PC 0부터 PC 380까지** 이어지는 명령어 테스트와 레지스터별 예상 결과가 기록돼 있다. 초기 Register 값을 준비하고 Immediate 연산, 일반 ALU, Shift·Rotate, Load·Store, Branch·Jump를 함께 넣은 시퀀스였다.
@@ -244,7 +286,15 @@ op_MA      <= op_MEM;
 | `LD R0, R31, 1924` → `ST R0, R31, 1928` → `LD R1, R31, 1928` | `R0 = 154`, `R1 = 154` | Load·Store·다시 읽기 |
 | PC 348 부근의 `J`·`JL`·`BR`·`BRL` 테스트 | 순차 진행과 **PC 0으로 분기**하는 경우 비교 | Control Hazard와 PC 변경 |
 
+원본 테스트 표에서 중요한 것은 실제 명령어와 **기대 Register 값이 함께 남아 있다는 점**이다. 새 SVG에서는 확인 가능한 수치를 벡터 표로 옮겼으며, 새로 시뮬레이션한 결과라고 표시하지 않았다.
+
+{{figure /figures/journals/risc-report-12-testbench-checkpoints.svg | 원본 11–12쪽 Instruction Test의 기대 Register 값을 옮긴 표다. 재실행 결과는 아니다.}}
+
 보고서에는 **분기하지 않고 진행했을 때의 Register 파형과 PC가 0으로 돌아갔을 때의 파형**도 들어 있다. 각 Register의 값이 실행 중 어떻게 변했는지 볼 수 있는 실제 시뮬레이션 자료다.
+
+보고서 12–13쪽에는 **분기 없이 진행하는 경우와 PC를 0으로 보내는 경우**의 실제 파형이 남아 있다. 원본의 낮은 해상도 화면을 억지로 확대하지도, 확인하지 못한 Signal 전이 시점을 임의로 만들지도 않았다.
+
+{{figure /figures/journals/risc-report-13-waveform-evidence.svg | 원본 12–13쪽에 실제 Waveform Screenshot이 있다. 이 그림은 두 시나리오를 설명할 뿐, 관측하지 않은 Signal 전이를 만들지 않았다.}}
 
 명령어 종류와 의존성에 대한 테스트를 만들고 파형으로 확인했다는 점은 구현 결과로 남길 만하다. 다만 이 파형만으로 모든 명령어 조합을 형식적으로 검증했다고 할 수는 없다. 클럭 주파수, IPC, FPGA 리소스 사용량처럼 원본 자료에 없는 수치는 덧붙이지 않았다.
 
@@ -257,6 +307,8 @@ op_MA      <= op_MEM;
 당시에는 명령어 하나가 정상적으로 실행되더라도 다음 명령어와 겹치기 시작하면 예상하지 못한 문제가 생겼다. 그래서 **데이터가 언제 만들어지고, 어느 단계에 남아 있으며, 지금 실행 중인 명령어가 그 값을 읽어도 되는지**를 끝까지 추적해야 했다.
 
 이후 FPGA Systolic Array나 CNN 가속기에서 Processing Element와 버퍼의 데이터 이동 시점을 설계할 때도 같은 고민이 이어졌다. RISC TOY에서는 그 문제가 클럭 하나와 Register 하나의 차이로 드러났다.
+
+그림마다 원본 보고서의 어느 페이지를 근거로 했는지는 별도 검토 문서에 남겼다. 원본 PDF에는 학생 식별 정보가 있어 공개하지 않았고, 시뮬레이터 화면 역시 새로운 SVG 도식과 구분했다.
 
 ## 함께 읽을 프로젝트
 
