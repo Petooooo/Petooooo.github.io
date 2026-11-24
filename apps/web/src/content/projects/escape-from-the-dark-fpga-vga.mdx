@@ -21,7 +21,7 @@ A screen that is only 160 × 120 logical pixels does not have to contain the ent
 
 The objective was to make a world larger than the visible display, with obstacles, enemies, collectible objects, jumping and a camera that followed the player. Rendering that world directly through VGA made the project different from a software game: the display needed a color for the current scan coordinate while the underlying state continued to evolve in hardware.
 
-> The technical account below draws on the 45-page project report dated June 20, 2023, including its Verilog listings, map, control table and result screens. The source-derived vector figures retain the observed layout and palette but are not unmodified screenshots or new hardware measurements.
+> The technical account below draws on the 45-page project report dated June 20, 2023, including its Verilog listings, map, control table and result screens. The game artwork below is reconstructed on the documented logical pixel grid from the original embedded report images; the implementation diagrams explain the RTL. Neither is a new hardware capture.
 
 ## A world beyond the visible screen
 
@@ -29,9 +29,9 @@ The level is 540 × 240 logical pixels, with only a 160 × 120 window visible at
 
 <figure className="project-concept-figure">
   <a href="/figures/journals/escape-01-map-trace.svg" target="_blank" rel="noopener noreferrer" aria-label="Open map trace figure">
-    <img src="/figures/journals/escape-01-map-trace.svg" alt="The report's complete map illustration: platform layout, six warders, four projectiles, five keys, four possible sword spawn sites, and the door. Palette-quantized vector trace of the page 4 illustration, not a coordinate dump." loading="lazy" decoding="async" />
+    <img src="/figures/journals/escape-01-map-trace.svg" alt="Complete 540 × 240 map, rebuilt from the page 4 platform layout, source sprite masks and documented key and sword coordinates. Warder and projectile placements follow the illustration, not a captured reset state." loading="lazy" decoding="async" />
   </a>
-  <figcaption>The report's complete map illustration: platform layout, six warders, four projectiles, five keys, four possible sword spawn sites, and the door. Palette-quantized vector trace of the page 4 illustration, not a coordinate dump.</figcaption>
+  <figcaption>Complete 540 × 240 map, rebuilt from the page 4 platform layout, source sprite masks and documented key and sword coordinates. Warder and projectile placements follow the illustration, not a captured reset state.</figcaption>
 </figure>
 
 The map illustration is particularly useful because it shows how these systems interact. The player starts near the bottom left, while the keys are distributed across different heights and the exit is near the bottom right. It is not enough to move to the right: the player has to cross gaps, climb platforms and return to the exit. The four sword symbols in the overview indicate alternative spawn positions, not four simultaneously collectible weapons.
@@ -47,9 +47,9 @@ The map illustration is particularly useful because it shows how these systems i
 
 <figure className="project-concept-figure">
   <a href="/figures/journals/escape-12-sprite-traces.svg" target="_blank" rel="noopener noreferrer" aria-label="Open original sprite and HUD designs">
-    <img src="/figures/journals/escape-12-sprite-traces.svg" alt="Source-derived vector traces of player poses, warder, projectile, sword, key and HUD" loading="lazy" decoding="async" />
+    <img src="/figures/journals/escape-12-sprite-traces.svg" alt="Logical-grid reconstruction of the player poses, warder, projectile, sword, key and HUD" loading="lazy" decoding="async" />
   </a>
-  <figcaption>The six sprite and HUD illustrations in their original order from pages 2–4, reduced to the report palette and traced as vectors.</figcaption>
+  <figcaption>The six sprite and HUD illustrations from pages 2–4, reconstructed at the original sprite dimensions with square, integer-aligned pixel cells.</figcaption>
 </figure>
 
 The DE2 controls are KEY3 (left), KEY2 (right), KEY1 (jump), KEY0 (attack), SW0 (run/reset) and SW17 (God Mode). The control table on page 5 identifies KEY0; an earlier sword description calls it KEY4, which is inconsistent with the table. The reset block is active-low, and the report describes restarting by moving SW0 to 0 and back to 1. These are the documented interface assignments, not a fresh pin-level test.
@@ -203,26 +203,26 @@ The original result page contains two gameplay views followed by the start, fail
 
 <figure className="project-concept-figure">
   <a href="/figures/journals/escape-09-gameplay-trace.svg" target="_blank" rel="noopener noreferrer" aria-label="Open gameplay trace figure">
-    <img src="/figures/journals/escape-09-gameplay-trace.svg" alt="First gameplay result, page 44: HUD, stippled platforms, cyan player, red warder and magenta projectile. Color-quantized vector trace; the red rings are report annotations." loading="lazy" decoding="async" />
+    <img src="/figures/journals/escape-09-gameplay-trace.svg" alt="First gameplay result (page 44), reconstructed on the 160 × 120 logical grid. Red rings reproduce the report annotations as separate vector ellipses, not pixels emitted by the game." loading="lazy" decoding="async" />
   </a>
-  <figcaption>First gameplay result, page 44: HUD, stippled platforms, cyan player, red warder and magenta projectile. Color-quantized vector trace; the red rings are report annotations.</figcaption>
+  <figcaption>First gameplay result (page 44), reconstructed on the 160 × 120 logical grid. Red rings reproduce the report annotations as separate vector ellipses, not pixels emitted by the game.</figcaption>
 </figure>
 
 <figure className="project-concept-figure">
   <a href="/figures/journals/escape-10-sword-gameplay-trace.svg" target="_blank" rel="noopener noreferrer" aria-label="Open sword gameplay trace figure">
-    <img src="/figures/journals/escape-10-sword-gameplay-trace.svg" alt="Second gameplay result, page 44: two hearts, the equipped sword and restricted visibility. Color-quantized vector trace of the recorded screen." loading="lazy" decoding="async" />
+    <img src="/figures/journals/escape-10-sword-gameplay-trace.svg" alt="Second gameplay result (page 44): two hearts, the equipped sword and restricted visibility, reconstructed on the 160 × 120 grid with the report annotations redrawn separately." loading="lazy" decoding="async" />
   </a>
-  <figcaption>Second gameplay result, page 44: two hearts, the equipped sword and restricted visibility. Color-quantized vector trace of the recorded screen.</figcaption>
+  <figcaption>Second gameplay result (page 44): two hearts, the equipped sword and restricted visibility, reconstructed on the 160 × 120 grid with the report annotations redrawn separately.</figcaption>
 </figure>
 
 <figure className="project-concept-figure">
   <a href="/figures/journals/escape-11-screen-states.svg" target="_blank" rel="noopener noreferrer" aria-label="Open screen states figure">
-    <img src="/figures/journals/escape-11-screen-states.svg" alt="Start, failure and success panels from page 44, traced into reduced palette vectors preserving the source composition and colors." loading="lazy" decoding="async" />
+    <img src="/figures/journals/escape-11-screen-states.svg" alt="Start, failure and success screens: three equally scaled 160 × 120 logical-grid reconstructions of the original pixel artwork." loading="lazy" decoding="async" />
   </a>
-  <figcaption>Start, failure and success panels from page 44, traced into reduced palette vectors preserving the source composition and colors.</figcaption>
+  <figcaption>Start, failure and success screens: three equally scaled 160 × 120 logical-grid reconstructions of the original pixel artwork.</figcaption>
 </figure>
 
-The two gameplay vectors above are reduced, palette-quantized traces of the actual page 44 panels; their native source images were 706 × 460 and 653 × 448 pixels. The complete map on page 4 was 1498 × 605 pixels. The traces preserve relative layout and the primary colors, with small antialiasing and stipple details simplified. The start, failure and success screens are also reduced palette traces of the original 752 × 504, 416 × 271 and 418 × 272 source images. The original team report and raw image files are not redistributed here.
+A game dot is not the same as a pixel in the report image. The original start, failure and success images are 752 × 504, 416 × 271 and 418 × 272 pixels; their different horizontal and vertical enlargement factors obscure the 160 × 120 logical grid. The gameplay panels are 706 × 460 and 653 × 448 pixels, and the map illustration is 1498 × 605. To restore the pixel artwork, I fitted the grid period and origin to the source color transitions and sampled cell centers, using the RGB colors of the documented three-bit output. For the small sprites, the stated dimensions constrain the reconstruction directly. Each recovered cell becomes an integer-aligned SVG region, merging only adjacent cells of the same color. The map uses the observed platform spans and the reconstructed sprite masks rather than resampling tiny copies of each character. The red circles on the result panels are report annotations, redrawn separately so that they do not become part of the game grid. These figures preserve the documented content and sharply defined logical dots, but the screenshots are not ROM dumps: isolated ambiguous cells, the exact map illustration placements and the annotation outlines remain inferred. The original team report and raw images are not redistributed here.
 
 ## What I would change in the RTL today
 

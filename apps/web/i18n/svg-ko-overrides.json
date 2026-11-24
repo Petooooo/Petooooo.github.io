@@ -2604,5 +2604,16 @@
   "life == 0": "life == 0",
   "world = scan + camera offset": "월드 좌표 = 스캔 좌표 + 카메라 Offset",
   "x_sword = x_player ± (9 + sword_distance)": "x_sword = x_player ± (9 + sword_distance)",
-  "≈ 120 px": "≈ 120 px"
+  "≈ 120 px": "≈ 120 px",
+  "Map reconstructed on the 540 × 240 grid": "540 × 240 격자로 복원한 전체 맵",
+  "Gameplay logical-grid reconstruction": "플레이 화면 논리 픽셀 복원",
+  "Sword gameplay logical-grid reconstruction": "검 장착 화면 논리 픽셀 복원",
+  "Recovered 160 × 120 grids · report pixel art": "복원한 160 × 120 격자 · 보고서 픽셀 아트",
+  "Recovered logical cells · square pixels at 7×": "복원한 논리 픽셀 · 정사각형 셀 7배 확대",
+  "Player poses · 12 × 16 each": "캐릭터 자세 · 각각 12 × 16",
+  "10 × 10": "10 × 10",
+  "2 × 2": "2 × 2",
+  "Sword · 14 × 9": "검 · 14 × 9",
+  "Key · 7 × 12": "열쇠 · 7 × 12",
+  "HUD · hearts and keys": "HUD · 하트와 열쇠"
 }
