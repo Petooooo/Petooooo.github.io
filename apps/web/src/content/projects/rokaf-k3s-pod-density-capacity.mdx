@@ -1,0 +1,142 @@
+---
+title: "K3s Node Capacity: Pod Limits, IP Allocation and Recovery Headroom"
+description: "Why I raised the per-node Pod ceiling from 110 to 220, and why scheduling slots, IP allocation and failure recovery remain separate constraints."
+date: "2026-11-24"
+updated: "2026-11-24"
+draft: false
+reviewed: true
+sensitivity: sanitized
+category: "Systems Engineering"
+area: "Infrastructure & Reliability"
+tags: ["K3s", "Kubernetes", "Kubelet", "Flannel", "Capacity Planning"]
+type: "implementation-note"
+role: "Node capacity configuration and density trade-off analysis"
+period: "Nov 2026"
+status: "active"
+techStack: ["K3s", "Kubernetes", "Kubelet", "Flannel"]
+---
+
+> **November 2026 · sanitized operating record.** I encountered persistent Pending Pods near the default per-node Pod limit, and resolved the immediate problem by raising the kubelet ceiling from 110 to 220. The address ranges below are public K3s defaults used for analysis, not an inventory of the operating network.
+
+## The resource that was not measured in CPU cores
+
+While operating a closed-network K3s platform, I reached a point where a node was running around 103 Pods and additional Pods repeatedly remained Pending. The immediate question was why the platform was refusing more work when Pod count, rather than the usual CPU or memory request accounting, appeared to be the limiting resource.
+
+The number 103 alone was not conclusive. At a limit of 110 it leaves seven nominal slots. The observed count may omit assigned Pods that are still starting or terminating; multiple workloads may compete for the remaining slots, and affinity, taints or resource requests may exclude other nodes. I did not preserve the scheduler event sequence or a synchronized resource snapshot for this record. What I did establish operationally was that increasing `maxPods` to 220 resolved the immediate scheduling problem I was seeing.
+
+The interesting part was not the YAML change. It was deciding which constraint I was actually relaxing, and which constraints should remain independent.
+
+## Two admission boundaries, not one
+
+<figure className="project-concept-figure"><a href="/figures/journals/pod-density-01-admission.svg" target="_blank" rel="noopener noreferrer"><img src="/figures/journals/pod-density-01-admission.svg" alt="Scheduler checks node Pod capacity and placement, then kubelet and CNI create a sandbox and allocate an address independently." loading="lazy" decoding="async" /></a><figcaption>Conceptual admission sequence. A successful scheduling decision is not proof that a Pod sandbox can be created.</figcaption></figure>
+
+Kubelet reports the node's Pod capacity through the Kubernetes Node object. The scheduler uses allocatable Pod slots alongside CPU, memory, extended resources and placement constraints. `maxPods` counts Pods rather than containers. If `podsPerCore` is set to a positive value, the capacity can be further limited by the product of that value and the node's CPU core count; zero disables that additional limit. The Node's reported allocatable Pod count is the scheduling budget to inspect, not just the value written into a configuration file. When the count constraint fails, a scheduler event can report `Too many pods`. Once the scheduler binds a Pod, kubelet and the runtime still have to create its sandbox. In a conventional Flannel and host-local IPAM configuration, allocating an address from the node's subnet is a distinct operation. A shortage there can instead appear as `FailedCreatePodSandBox` after binding.
+
+These are different failure domains. Raising the kubelet limit changes the scheduling budget; it does not enlarge the subnet, increase available memory, or make container creation cheaper. Conversely, reserving a larger subnet does not increase allocatable Pod slots.
+
+For a future incident I would preserve the following evidence before changing anything:
+
+```bash
+kubectl get nodes -o custom-columns='NODE:.metadata.name,PODS:.status.allocatable.pods,CIDR:.spec.podCIDR'
+kubectl describe node <node>
+kubectl describe pod <pending-pod> -n <namespace>
+kubectl get events -A --field-selector reason=FailedScheduling
+kubectl get events -A --field-selector reason=FailedCreatePodSandBox
+```
+
+The `Non-terminated Pods` section in `describe node`, the Pod's assigned node, its events and the actual IPAM range together narrow down the failing stage. These commands are a proposed evidence collection procedure, not retained incident output.
+
+## Why I chose 220 rather than a much larger number
+
+I applied a kubelet configuration drop-in with the following effective setting:
+
+```yaml
+apiVersion: kubelet.config.k8s.io/v1beta1
+kind: KubeletConfiguration
+maxPods: 220
+```
+
+K3s documents support for kubelet drop-ins in v1.32 and later; exact availability depends on the K3s patch release. The documented default directory is `<data-dir>/agent/etc/kubelet.conf.d/`. My installation used a local configuration location; a reproduced setup should verify the effective `--config-dir` and conflicting command-line flags rather than assume that any directory with a similar name is read. The change is node-local, not a manual edit to Node status. For a repeatable rollout, I would first identify whether the node runs the `k3s` or `k3s-agent` service, check its effective configuration and flag precedence, and stage the change on one node. On an older release without drop-in support, the supported alternative is a K3s `kubelet-arg` entry such as `max-pods=220`. I would check quorum and workload/storage constraints before any planned restart, then verify that the node is Ready and reports the expected allocatable capacity before moving to another node. This is a proposed rollout sequence, not a recorded fleet-wide procedure.
+
+```bash
+kubectl get node <node> -o jsonpath='{.status.capacity.pods}{"\n"}{.status.allocatable.pods}{"\n"}'
+kubectl get --raw /api/v1/nodes/<node>/proxy/configz
+```
+
+The second command is optional and requires authorization to access the kubelet configuration endpoint through the API server; it should not be treated as a generally available endpoint or used to export internal configuration publicly.
+
+<figure className="project-concept-figure"><a href="/figures/journals/pod-density-02-budget.svg" target="_blank" rel="noopener noreferrer"><img src="/figures/journals/pod-density-02-budget.svg" alt="At an illustrative fixed count of 103 Pods, the old limit leaves 7 slots and the new limit leaves 117; a default-style /24 subnet may have approximately 253 allocatable addresses." loading="lazy" decoding="async" /></a><figcaption>Capacity arithmetic at the reported approximate count, not a measurement of post-change utilization or performance.</figcaption></figure>
+
+| Quantity | Old ceiling | New ceiling |
+| --- | ---: | ---: |
+| Configured Pod slots | 110 | 220 |
+| Reference count | 103 | 103 |
+| Nominal remaining slots | 7 | 117 |
+| Reference utilization | 93.6% | 46.8% |
+
+The ceiling doubled, not the measured workload throughput. In particular, the Kubernetes v1.32 large-cluster guidance uses 110 Pods per node as its documented scalability envelope. A configurable value above that envelope is not the same as a validated production density. I considered 220 an admission ceiling, not an instruction to fill each node with 220 workloads.
+
+## The address space is a second budget
+
+In a default-style IPv4 K3s design with a `/16` cluster Pod CIDR and a `/24` node CIDR, a node has 256 total addresses. An illustrative bridge/IPAM layout excluding network, broadcast and gateway addresses leaves about 253 allocatable Pod addresses; the actual allocator and reserved ranges must be checked. Host-networked Pods consume scheduler slots but generally do not obtain a distinct IP from this pool.
+
+| Configured `maxPods` | Illustrative spare IPs at the ceiling |
+| ---: | ---: |
+| 200 | 53 |
+| 220 | 33 |
+| 240 | 13 |
+| 250 | 3 |
+
+The reserve is not necessary for forwarding speed. It absorbs discrepancies between scheduling counts and live CNI allocations. For example, a sandbox may be removed from the scheduler's view while its network teardown is still completing, or a failed CNI deletion may leave an allocation recorded locally. With a nearly full subnet, a handful of retained allocations could turn a successful scheduling decision into repeated sandbox failures. A growing leak would still require diagnosis, not an endlessly larger CIDR.
+
+There is no universal 33-address rule. It is simply the difference between the chosen ceiling and the illustrative IP budget. Leaving those addresses unallocated does not itself create per-Pod runtime work, but reserves address space that could otherwise be assigned. The difference is not a guaranteed free-IP count: actual address-consuming sandboxes, host-networked Pods and stale allocations change it. I preferred the separation between the two limits rather than forcing them to coincide.
+
+## What a higher density changes during failure
+
+A server may have abundant RAM but still become expensive to operate at high Pod density. Every additional Pod can introduce runtime and kubelet lifecycle work, probes, PID and file-descriptor usage, network interfaces, connections and monitoring targets. The exact load depends on its containers and traffic; doubling the ceiling does not double any of these costs by itself.
+
+The more important question is whether the platform can recover when a node disappears. With homogeneous nodes and perfectly movable workloads, surviving capacity must be at least the workload count on the failed node. For example, four nodes with 180 Pods each and ceilings of 220 have only 120 spare slots on the three survivors; they cannot absorb all 180 displaced Pods. This is a theoretical slot-only example.
+
+<figure className="project-concept-figure"><a href="/figures/journals/pod-density-04-recovery.svg" target="_blank" rel="noopener noreferrer"><img src="/figures/journals/pod-density-04-recovery.svg" alt="Four hypothetical nodes have 180 Pods each and ceilings of 220. After one fails, the three surviving nodes have 120 spare slots for 180 displaced Pods, leaving 60 unplaceable." loading="lazy" decoding="async" /></a><figcaption>Slot-only N-1 example, not a measured cluster or a recovery test.</figcaption></figure>
+
+For N equal-capacity nodes with C schedulable slots per node, a necessary slot-only condition for a single-node failure is total demand at most (N − 1) × C, assuming the workload can be moved freely. At N = 4 and C = 220, that is 660 slots in total, or 165 per node if evenly distributed. The example has demand of 720 slots, leaving a deficit of 60 after the failure. System Pods that must exist on survivors also need to fit inside the budget; workloads tied to particular devices or disks reduce effective recovery capacity further. Real recovery also depends on requests, affinity, GPU availability, local storage, PDBs during voluntary disruptions and volume attachment.
+
+A common `maxPods` setting can simplify configuration, but placement policy must still account for node roles. I would keep general compute, GPU and storage placement explicit with requests, labels, affinity, taints and topology spread rather than use a Pod count cap as a surrogate for resource isolation. Monitoring should include Pod occupancy, available addresses, kubelet work latency, conntrack, memory and disk pressure, along with recovery under realistic workload churn.
+
+## Why I did not change the CIDR to solve this incident
+
+<figure className="project-concept-figure"><a href="/figures/journals/pod-density-03-cidr.svg" target="_blank" rel="noopener noreferrer"><img src="/figures/journals/pod-density-03-cidr.svg" alt="A fixed /16 cluster range can be partitioned into 256 /24, 128 /23, or 64 /22 node subnets; expanding one existing subnet can overlap its neighbors." loading="lazy" decoding="async" /></a><figcaption>Illustrative address allocation geometry, not the production topology.</figcaption></figure>
+
+| Node prefix within a fixed /16 | Total addresses per node | Theoretical node blocks |
+| --- | ---: | ---: |
+| /24 | 256 | 256 |
+| /23 | 512 | 128 |
+| /22 | 1,024 | 64 |
+
+For a small collection of large physical servers, reserving a wider node subnet may be reasonable at initial design time. Prefix width itself does not make a network slower; the costs are fewer node blocks, address reservation and potential overlap. A larger cluster CIDR is a separate design decision. All the address counts above are theoretical IPv4 subnet sizes, not CNI guarantees. For example, expanding the public default Pod range `10.42.0.0/16` to `10.42.0.0/15` would overlap the default Service range `10.43.0.0/16`.
+
+For an existing cluster, setting `node-cidr-mask-size-ipv4=22` is not an in-place resize operation. Existing Node PodCIDRs, CNI allocation state, routes and running sandboxes already have ownership relationships. An old `/24` and a new `/22` may cover the same addresses; a mixed-prefix transition must not assume that deleting and re-registering nodes serially is sufficient to avoid allocator conflicts.
+
+If larger node ranges actually become necessary, I would prefer to validate a planned replacement or maintenance migration with the same K3s/CNI version: inventory and check ranges, back up the control-plane datastore and application data separately, verify storage and quorum constraints, assign non-overlapping ranges, rebuild or migrate nodes under a tested plan, and verify DNS, cross-node Pod traffic, Service access and stateful recovery before increasing the Pod ceiling. I have not performed that CIDR migration in this incident.
+
+## Outcome and the next evidence to collect
+
+The observed outcome was a resolution of the immediate Pending-Pod problem following the change from 110 to 220. The next step in establishing an operating envelope would be to verify the effective configuration and the Node's reported allocatable Pods, observe pending workloads and IP allocation failures, and deliberately evaluate recovery headroom as the workload grows. I have not recorded a 220-Pod load test, throughput improvement, full-fleet rollout or outage-free migration here.
+
+The decision was deliberately small: increase the limit that was getting in the way, preserve the network configuration, and keep the wider architecture available as a future option. The common lesson with my other K3s work is that a platform's apparent capacity is composed of several independent contracts. Changing one of them is useful only if the others can still hold.
+
+## Related engineering records
+
+- [On-Premises K3s Platform: Design and Operations](/projects/independent-on-premises-k3s-platform-engineering/) — the broader platform and operational responsibilities.
+- [K3s Networking: Pod IP Routing and ClusterIP Services](/projects/rokaf-k3s-cni-service-datapath/) — separates address assignment and endpoint routing from virtual Service translation.
+- [Making Internal K3s Service Addresses and TLS Predictable](/projects/rokaf-gitops-domain-tls-standardization/) — a complementary boundary: DNS, VIP and TLS exposure after workloads can run.
+- [GPU placement and capacity](/projects/rokaf-gpu-scheduling-and-capacity/) — capacity planning and failover constraints beyond aggregate resource counts.
+
+## References
+
+- [K3s configuration options](https://docs.k3s.io/installation/configuration)
+- [Kubernetes kubelet configuration files](https://kubernetes.io/docs/tasks/administer-cluster/kubelet-config-file/)
+- [Kubernetes v1.32 large-cluster considerations](https://v1-32.docs.kubernetes.io/docs/setup/best-practices/cluster-large/)
+- [CNI host-local IPAM](https://www.cni.dev/plugins/current/ipam/host-local/)
+- [KubeletConfiguration v1beta1 (Kubernetes v1.32)](https://v1-32.docs.kubernetes.io/docs/reference/config-api/kubelet-config.v1beta1/)
+- [K3s server flags and public network defaults](https://docs.k3s.io/cli/server)

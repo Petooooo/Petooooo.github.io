@@ -863,5 +863,13 @@
   "FreeRTOS on Three STM32 Boards: Building a Mini-Desktop | Jihwan Park": "세 대의 STM32 보드로 만든 FreeRTOS Mini-Desktop | 박지환",
   "How three STM32 boards coordinated ten FreeRTOS tasks through GPIO, synchronized an ASCII desktop over UART, and supported Gomoku, distance-driven Curling and sleep/resume.": "세 대의 STM32 보드에서 10개의 FreeRTOS Task와 보드 간 GPIO 신호를 조율하고, UART로 ASCII 화면을 출력하면서 Gomoku·거리 기반 Curling·Sleep/Resume을 구현한 과정.",
   "Input Capture": "Input Capture",
-  "System architecture, three-board coordination, cursor/window interaction, application state and RTOS synchronization in a team project": "팀 프로젝트에서 전체 시스템 구조, 세 보드 간 동작 조율, 커서·창 상호작용, 애플리케이션 상태 및 RTOS 동기화 구현"
+  "System architecture, three-board coordination, cursor/window interaction, application state and RTOS synchronization in a team project": "팀 프로젝트에서 전체 시스템 구조, 세 보드 간 동작 조율, 커서·창 상호작용, 애플리케이션 상태 및 RTOS 동기화 구현",
+  "Why I raised the per-node Pod ceiling from 110 to 220, and why scheduling slots, IP allocation and failure recovery remain separate constraints.": "노드당 Pod 제한을 110개에서 220개로 높인 이유와 스케줄링 슬롯, IP 할당, 장애 복구 용량을 별도로 관리해야 하는 이유.",
+  "Node capacity configuration and density trade-off analysis": "노드 수용량 설정 및 Pod 밀집도 설계 검토",
+  "Infrastructure & Reliability": "인프라 및 신뢰성",
+  "Capacity Planning": "수용량 설계",
+  "Kubelet": "Kubelet",
+  "Flannel": "Flannel",
+  "K3s Node Capacity: Pod Limits, IP Allocation and Recovery Headroom": "K3s 노드 수용량 설계: Pod 제한, IP 할당과 장애 복구 여유",
+  "K3s Node Capacity: Pod Limits, IP Allocation and Recovery Headroom | Jihwan Park": "K3s 노드 수용량 설계: Pod 제한, IP 할당과 장애 복구 여유 | 박지환"
 }
