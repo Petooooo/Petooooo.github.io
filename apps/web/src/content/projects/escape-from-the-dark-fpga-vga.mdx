@@ -2,7 +2,7 @@
 title: "Escape From the Dark: Verilog VGA Game on FPGA"
 description: "Implemented an FPGA-based VGA game using Verilog and a DE2 board, connecting synchronous game logic with a pixel-timed video output."
 date: "2023-06-23"
-updated: "2026-11-20"
+updated: "2026-11-24"
 draft: false
 reviewed: true
 reviewStatus: "reviewed"
@@ -17,15 +17,78 @@ status: "archived"
 techStack: ["Verilog", "FPGA", "DE2", "VGA"]
 ---
 
-In May–June 2023, I built **Escape From the Dark**, a VGA-output game implemented in **Verilog on a DE2 FPGA board**. It was an early project in which the visible result depended on hardware timing as much as on application logic.
+A screen that is only 160 × 120 logical pixels does not have to contain the entire game. That was the starting point of **Escape From the Dark**, a side-scrolling escape game developed as a two-person project on a DE2 FPGA board in May–June 2023. My contribution covered the overall game design and code-generation logic; the report describes the team's implementation, rather than assigning every RTL block to me individually.
 
-Unlike software that can draw a screen whenever its event loop is ready, a basic FPGA VGA design has to produce video information on a predictable pixel and line schedule.
+The objective was to make a world larger than the visible display, with obstacles, enemies, collectible objects, jumping and a camera that followed the player. Rendering that world directly through VGA made the project different from a software game: the display needed a color for the current scan coordinate while the underlying state continued to evolve in hardware.
 
-*This retrospective was prepared in November 2026 from the earlier project/CV record. The date refers to the original project, not to publication of the article.*
+> The technical account below draws on the 45-page project report dated June 20, 2023, including its Verilog listings, map, control table and result screens. The source-derived vector figures retain the observed layout and palette but are not unmodified screenshots or new hardware measurements.
 
-## Video timing is part of the design
+## A world beyond the visible screen
 
-A VGA controller advances through pixel positions and line intervals with synchronization and blanking periods. Game graphics must be selected according to that scan position and the current game state.
+The level is 540 × 240 logical pixels, with only a 160 × 120 window visible at a time. The character has three lives and must collect five keys before reaching the door. Six warders patrol platforms; four projectiles travel horizontally at two heights. Falling below the level ends the game regardless of the remaining lives. A sword can appear at one of four locations, and the player can attack after collecting it. The God Mode switch was included to make exploration and testing easier.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/escape-01-map-trace.svg" target="_blank" rel="noopener noreferrer" aria-label="Open map trace figure">
+    <img src="/figures/journals/escape-01-map-trace.svg" alt="The report's complete map illustration: platform layout, six warders, four projectiles, five keys, four possible sword spawn sites, and the door. Palette-quantized vector trace of the page 4 illustration, not a coordinate dump." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>The report's complete map illustration: platform layout, six warders, four projectiles, five keys, four possible sword spawn sites, and the door. Palette-quantized vector trace of the page 4 illustration, not a coordinate dump.</figcaption>
+</figure>
+
+The map illustration is particularly useful because it shows how these systems interact. The player starts near the bottom left, while the keys are distributed across different heights and the exit is near the bottom right. It is not enough to move to the right: the player has to cross gaps, climb platforms and return to the exit. The four sword symbols in the overview indicate alternative spawn positions, not four simultaneously collectible weapons.
+
+| Object | Documented size |
+| --- | ---: |
+| Player | 12 × 16 |
+| Warder | 10 × 10 |
+| Projectile | 2 × 2 |
+| Sword | 14 × 9 |
+| Key | 7 × 12 |
+| HUD heart / key | 7 × 7 / 3 × 7 |
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/escape-12-sprite-traces.svg" target="_blank" rel="noopener noreferrer" aria-label="Open original sprite and HUD designs">
+    <img src="/figures/journals/escape-12-sprite-traces.svg" alt="Source-derived vector traces of player poses, warder, projectile, sword, key and HUD" loading="lazy" decoding="async" />
+  </a>
+  <figcaption>The six sprite and HUD illustrations in their original order from pages 2–4, reduced to the report palette and traced as vectors.</figcaption>
+</figure>
+
+The DE2 controls are KEY3 (left), KEY2 (right), KEY1 (jump), KEY0 (attack), SW0 (run/reset) and SW17 (God Mode). The control table on page 5 identifies KEY0; an earlier sword description calls it KEY4, which is inconsistent with the table. The reset block is active-low, and the report describes restarting by moving SW0 to 0 and back to 1. These are the documented interface assignments, not a fresh pin-level test.
+
+## The camera is an offset, not another copy of the map
+
+The player position and collision checks use world coordinates. The display scan counters refer to the visible window. The two coordinate systems meet in the color-generation logic:
+
+```text
+world_x = x_count + x_map
+world_y = y_count + y_map
+
+screen_x = x_player - x_map
+screen_y = y_player - y_map
+```
+
+The last two equations are a conceptual inverse transformation. In the actual comparison predicates, addition was preferable to subtracting an offset from an unsigned object coordinate.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/escape-02-camera.svg" target="_blank" rel="noopener noreferrer" aria-label="Open camera figure">
+    <img src="/figures/journals/escape-02-camera.svg" alt="Camera dead zones and world-to-screen coordinate mapping. The marked player and viewport positions are illustrative; dimensions and thresholds are from the report." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Camera dead zones and world-to-screen coordinate mapping. The marked player and viewport positions are illustrative; dimensions and thresholds are from the report.</figcaption>
+</figure>
+
+The horizontal camera origin is bounded by 0 and 380 (540 − 160), the vertical origin by 0 and 120 (240 − 120). Reset puts the player at (10, 230) and the origin at (0, 120), so the window begins at the bottom of the world. Instead of following every change in position, the camera moves once the player crosses a small central dead zone: x = 76 or 84 and y = 57 or 63 in window-relative coordinates. The 8 × 6 span follows the 160:120 aspect ratio. It also avoids making the background move on every small change around the center.
+
+The horizontal movement block advances the player one pixel, and moves the camera by one pixel if the corresponding boundary is exceeded and the origin has not reached the map edge. The vertical movement block handles the same relationship when rising or falling. These are incremental tracking rules, not an instantaneous recentering algorithm. The comparison uses the registered position before the nonblocking updates take effect.
+
+A more subtle issue appeared while implementing the camera. A predicate expressed in screen coordinates could subtract a camera offset larger than the unsigned object coordinate; the result could wrap and select a completely unrelated dot. The team rewrote subtraction-based rendering conditions into addition-based comparisons. For example, a lower-bound condition can be expressed as follows, provided the operands are widened before adding:
+
+```verilog
+// Equivalent over mathematical integers; illustrative widened form.
+{1'b0, x_count} + {1'b0, x_map} >= {1'b0, object_x}
+```
+
+This is not a verbatim recovered source line. It illustrates the report's actual remedy: move the subtraction to the other side of the comparison. Merely replacing minus with plus is not a general cure for overflow; the addition still needs a sufficient intermediate width. A 540-pixel world requires at least 10 bits for its horizontal coordinate. The report contains some 9-bit reset literals but does not preserve every register declaration, so I cannot confirm the final widths from those literals alone.
+
+## Display generation and game-state transitions
 
 <figure className="project-concept-figure">
   <a href="/figures/journals/fpga-vga-game-pipeline.svg" target="_blank" rel="noopener noreferrer" aria-label="Open fpga vga timing and game-state path figure">
@@ -34,22 +97,144 @@ A VGA controller advances through pixel positions and line intervals with synchr
   <figcaption>Game logic and scan timing cooperate to produce VGA video output.</figcaption>
 </figure>
 
-The main design challenge was separating **the timing that drives the display** from **the state that describes the game**. Updating game state and generating the video signal are related operations, but they should not be confused.
+The VGA controller supplies the current scan position; the pixel-generation logic uses that position together with the game registers to select color. The report's dark-region logic assigns a three-bit color value, `3'b000`, for black. The logical 160 × 120 coordinate grid is not a statement about the electrical VGA timing, the physical monitor resolution or the refresh rate. Those details would need the full VGA timing module.
 
-## Game state in synchronous logic
+The system block maintains `game_screen`, `life`, `key`, temporary immunity and key positions. It represents the start, play, failure and success screens with values 0, 1, 2 and 3. During play, collision with a warder or projectile decrements life, enables temporary immunity and starts a counter; the parity of that counter changes the character color between blue and green. At the threshold of 1100, the immunity is cleared by the condition shown in the report. The code compares the counter with greater-than rather than greater-than-or-equal, and the report calls the interval approximately one second. Without the verified base clock and initialization, that description should not be read as a measured duration.
 
-I implemented the game logic as an RTL design, using clocked state transitions to control what appeared on the VGA output. The board supplied the hardware execution environment; the logic described how state and rendered output changed over time.
+<figure className="project-concept-figure">
+  <a href="/figures/journals/escape-03-game-state.svg" target="_blank" rel="noopener noreferrer" aria-label="Open game state figure">
+    <img src="/figures/journals/escape-03-game-state.svg" alt="Screen states and the key, life and reset conditions from the system logic." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Screen states and the key, life and reset conditions from the system logic.</figcaption>
+</figure>
 
-The design therefore connected three concerns: the current input/game state, the state transition at a clock boundary and the pixel output derived from that state.
+The key pickup conditions are an ordered else-if chain. Collected keys are moved to y = 247 rather than explicitly deleted; the count increases by one. The five key coordinates are (215, 230), (445, 230), (15, 110), (435, 90) and (535, 30). The door is at (530, 230), and the success condition requires five keys and a proximity check. A fall beyond y = 245 sets life to zero. Because life and game screen are registered with nonblocking assignments, a decrement to zero and the subsequent failure transition need not occur on the same system edge. The source also shows separate success and failure conditions; their ordering matters if both evaluate true on one edge.
 
-## Result
+## One pixel per step, different clocks for different motion
 
-The finished 2023 project was a **Verilog FPGA game displayed through VGA on DE2 hardware**. I have retained it as a compact digital-design example because it shows a working end-to-end path from RTL state to a user-visible output.
+A key design choice was to use **one-pixel position increments** while changing the time between them. Large integer coordinate jumps would have made movement visibly discontinuous and could have skipped narrow collision regions. The team divided the base clock using counters for the system, player movement, animation, sword, warders and projectiles.
 
-The remaining historical material does not give a complete input-interface specification or a reproducible FPGA timing report, so I have not invented game rules, control wiring or device utilization figures.
+| State domain | Divider threshold |
+| --- | ---: |
+| System | 30,000 |
+| Horizontal player | 300,000 |
+| Vertical player | 30,000 × y_speed_count |
+| Player motion | 1,000,000 |
+| Sword | 300,000 / sword_speed_count |
+| Warder | 500,000 |
+| Projectile | 200,000 |
 
-## Related projects
+<figure className="project-concept-figure">
+  <a href="/figures/journals/escape-04-clock-rates.svg" target="_blank" rel="noopener noreferrer" aria-label="Open clock rates figure">
+    <img src="/figures/journals/escape-04-clock-rates.svg" alt="Divider thresholds in the archived RTL. Each divided clock toggles after its counter threshold; the values are not measured refresh rates." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Divider thresholds in the archived RTL. Each divided clock toggles after its counter threshold; the values are not measured refresh rates.</figcaption>
+</figure>
 
+The counters toggle their corresponding clock at the threshold, not on every input cycle. For an integer threshold N and a counter starting at zero, the nominal interval between rising edges is 2(N + 1) input cycles; for the variable dividers this is only a local approximation while their thresholds remain constant. The system checks run faster than horizontal movement. Warders move more slowly than the player; projectiles move more quickly. Animation is independent so the sprite does not alternate between standing and running on every movement step.
+
+This separation made speed tuning straightforward in the original design. It also introduces a hardware concern: several internally generated clocks read state written by other blocks. The listings do not establish whether all such transfers were constrained or synchronized. A modern version would keep one clock domain where possible and use periodic clock-enable pulses, with explicit synchronization for asynchronous button inputs. That is a follow-up design choice, not a claim about the 2023 implementation.
+
+## Approximating acceleration without moving more than one pixel
+
+The jump starts only when the character is supported by a block. On a jump request, `jump` becomes 1, `y_speed_count` becomes 1, and the player moves upward by one pixel. While rising in free space the code subtracts one from y on every vertical update, increases the interval multiplier toward 20, then clears the jump flag at the apex. While falling it adds one to y, decreases the multiplier until 5, and holds it there as a terminal-speed approximation.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/escape-05-jump.svg" target="_blank" rel="noopener noreferrer" aria-label="Open jump figure">
+    <img src="/figures/journals/escape-05-jump.svg" alt="The documented one-pixel vertical steps, with interval multiplier increasing on ascent and decreasing on descent." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>The documented one-pixel vertical steps, with interval multiplier increasing on ascent and decreasing on descent.</figcaption>
+</figure>
+
+The rising-edge interval is proportional to the multiplier, so the approximate local step rate is inversely proportional to it. The character moves quickly near the beginning of a jump, slows near its highest point, then accelerates downward. This resembles gravity visually, but it is not numerical integration of constant acceleration. The velocity changes through discrete clock-divider settings. When hitting the underside of a platform, the code moves the player down one pixel and resets the interval; the report explains that the next cycle produces a brief hesitation. There are also guards against y going below zero and wrapping.
+
+Collision detection is based on coordinate comparisons rather than a physics library. The report expands predicates for 42 numbered platform blocks: horizontal boundary checks, vertical contact checks, and the condition that the player is outside every block. The following form summarizes the rectangle-overlap principle for centers a and b, using combined half-extents:
+
+```text
+overlap_x = (ax < bx + hx) AND (bx < ax + hx)
+overlap_y = (ay < by + hy) AND (by < ay + hy)
+overlap   = overlap_x AND overlap_y
+```
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/escape-06-collision.svg" target="_blank" rel="noopener noreferrer" aria-label="Open collision figure">
+    <img src="/figures/journals/escape-06-collision.svg" alt="A rectangle-overlap test, illustrating the inequalities and the one-pixel horizontal correction." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>A rectangle-overlap test, illustrating the inequalities and the one-pixel horizontal correction.</figcaption>
+</figure>
+
+The actual collision margins vary by object type. In the warder damage condition the horizontal combined margin is 6 + 5 and the vertical margin is 8 + 5. The block conditions include equality at specific edges, with one-pixel corrections that push the player out of a platform. The report describes a side-contact effect that lets the character cling briefly to the block. This is an effect of the discrete checks, not a separately modeled friction law. The expanded predicates are also a reason that generating repeated RTL from a level description is useful, although the original generator's input format and complete source are not retained in the report.
+
+## A sword attached to a moving coordinate frame
+
+The sword was a good example of why an algorithm that works for one object is not necessarily appropriate for another. The initial approach reused the vertical player mechanism, but the sword's reference point moved and could change direction. Rather than controlling its absolute displacement alone, the team introduced `sword_distance`, a distance relative to the player.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/escape-07-sword.svg" target="_blank" rel="noopener noreferrer" aria-label="Open sword figure">
+    <img src="/figures/journals/escape-07-sword.svg" alt="Relative sword distance is updated separately from the moving player anchor; a cyclic selector chooses one of four initial positions." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Relative sword distance is updated separately from the moving player anchor; a cyclic selector chooses one of four initial positions.</figcaption>
+</figure>
+
+At the start screen, the spawn selector cycles through (14, 193), (364, 193), (469, 153) and (279, 233); the start event leaves one selected position. This is a deterministic cycling selector with input-dependent timing, not a cryptographically or statistically verified random generator.
+
+Once close to the player, the sword tracks the player's y position and an x offset of ±(9 + sword_distance), with sign selected by facing direction. An attack starts when the relative distance is zero and the button and alignment conditions are met. The speed count moves from 1 toward 3 while the distance increases one pixel at a time. The `attack` flag is then cleared and the distance decreases on the return path. The divider is 300,000 divided by sword_speed_count, so the extension becomes faster as the count increases. This is deliberately the inverse relationship of the vertical player's interval multiplier.
+
+A warder is defeated only when the attack flag is asserted and the sword overlap condition is satisfied; the corresponding warder y coordinate is set to 247. The warders otherwise patrol one pixel at a time and reverse near their platform endpoints. The first right-moving projectile pair starts at x = 0 and 270, shares y = 89, and wraps after reaching 540. The second pair travels in the opposite direction. The projectiles are not removed by sword attacks.
+
+## Rendering darkness with coordinate predicates
+
+The game's name refers to a restriction on visibility rather than to a lighting engine with continuous intensity. The output logic compares the world coordinate of the current scan pixel with the player's position. The report includes outer black-region predicates at approximately ±60 horizontal and ±36 vertical logical pixels. For example, `x_count + x_map >= x_player + 60` makes the corresponding pixel black during normal play.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/escape-08-darkness.svg" target="_blank" rel="noopener noreferrer" aria-label="Open darkness figure">
+    <img src="/figures/journals/escape-08-darkness.svg" alt="The rectangular outer visibility bounds are specified in the RTL; intermediate stippling is illustrative because the full gradient predicate was omitted from the report." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>The rectangular outer visibility bounds are specified in the RTL; intermediate stippling is illustrative because the full gradient predicate was omitted from the report.</figcaption>
+</figure>
+
+The source also describes a gradual transition near the edge, rendered as increasingly sparse visible dots. The complete predicate for that transition was omitted from the report because of its length, so the figure shows the known outer bounds and only illustrates the intermediate stippling. It would be misleading to claim a particular radial falloff or reconstruct a numerical luminance curve from the screenshots alone. God Mode disables the darkness mask and is intended to protect the player from enemies. The archived condition `god || !god_mode` and the prose describing SW17 as enabled-high do not agree on signal polarity; the external behavior is documented, but the final internal signal mapping is not confirmed. The fall check precedes this immunity branch in the shown logic.
+
+The other rendering issue recorded in the report was corrupted colors when nested if statements were used in the output logic. The team flattened the predicates using logical AND and observed correct output. Nested conditionals in Verilog do not inherently introduce an extra clock cycle, and the report supplies no timing slack or synthesized netlist to prove a root cause. A different priority structure, combinational depth or assignment behavior could have contributed. The reliable claim is the observed symptom, the rewrite and the reported improvement.
+
+## What the finished game displayed
+
+The original result page contains two gameplay views followed by the start, failure and success screens. The first shows all three hearts, one key, the player, a warder, a projectile and sparsely lit platforms. The second shows two hearts and the player with a sword. These are recorded examples of the visible behavior rather than measurements of timing or coverage.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/escape-09-gameplay-trace.svg" target="_blank" rel="noopener noreferrer" aria-label="Open gameplay trace figure">
+    <img src="/figures/journals/escape-09-gameplay-trace.svg" alt="First gameplay result, page 44: HUD, stippled platforms, cyan player, red warder and magenta projectile. Color-quantized vector trace; the red rings are report annotations." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>First gameplay result, page 44: HUD, stippled platforms, cyan player, red warder and magenta projectile. Color-quantized vector trace; the red rings are report annotations.</figcaption>
+</figure>
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/escape-10-sword-gameplay-trace.svg" target="_blank" rel="noopener noreferrer" aria-label="Open sword gameplay trace figure">
+    <img src="/figures/journals/escape-10-sword-gameplay-trace.svg" alt="Second gameplay result, page 44: two hearts, the equipped sword and restricted visibility. Color-quantized vector trace of the recorded screen." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Second gameplay result, page 44: two hearts, the equipped sword and restricted visibility. Color-quantized vector trace of the recorded screen.</figcaption>
+</figure>
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/escape-11-screen-states.svg" target="_blank" rel="noopener noreferrer" aria-label="Open screen states figure">
+    <img src="/figures/journals/escape-11-screen-states.svg" alt="Start, failure and success panels from page 44, traced into reduced palette vectors preserving the source composition and colors." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Start, failure and success panels from page 44, traced into reduced palette vectors preserving the source composition and colors.</figcaption>
+</figure>
+
+The two gameplay vectors above are reduced, palette-quantized traces of the actual page 44 panels; their native source images were 706 × 460 and 653 × 448 pixels. The complete map on page 4 was 1498 × 605 pixels. The traces preserve relative layout and the primary colors, with small antialiasing and stipple details simplified. The start, failure and success screens are also reduced palette traces of the original 752 × 504, 416 × 271 and 418 × 272 source images. The original team report and raw image files are not redistributed here.
+
+## What I would change in the RTL today
+
+The report records another problem that is easy to recognize in larger designs: an early approach tried to centralize most assignments in one control always block and make adjustments in other blocks, resulting in multiple writers to the same registers. The team reorganized the logic so related state was owned together and overlap between always blocks was reduced. A cleaner version would make each register's ownership explicit, separate next-state calculation from its update, and test priority rules where simultaneous events can occur.
+
+I would also make the level data a single source of truth for generated geometry and collision predicates, use explicit widened arithmetic, and verify boundary cases such as camera origin 380, falling below the map, hitting a platform at its edge and switching facing direction during a sword attack. Frame-consistent rendering could use a snapshot of game registers at a defined display boundary if tearing proved to be an issue. None of those improvements should be mistaken for features already verified in the archived design.
+
+The project did produce the documented VGA game on DE2 hardware. The report preserves code excerpts and visible outcomes, but not a complete synthesizable source tree, testbench, resource-utilization table, timing-closure report or a measured frame rate. I therefore cannot reproduce the original bitstream or quantify FPGA area and timing performance. What remains useful is the way the game emerged from small arithmetic and state decisions: a moving coordinate frame, bounded integer arithmetic, controlled update intervals and the ownership of state across concurrent hardware processes.
+
+## References and related projects
+
+- *Escape From The Dark*, team game project report, June 20, 2023, pp. 1–5 (game and map), 5–43 (RTL excerpts), 44–45 (results and implementation issues).
 - [FreeRTOS Multi-Board Mini-Desktop](/projects/freertos-multiboard-mini-desktop/)
 - [Five-Stage RISC CPU and Pipeline Hazards](/projects/risc-cpu-five-stage-pipeline/)
 - [Systolic Array on FPGA](/projects/fpga-systolic-array-matrix-multiplication/)
