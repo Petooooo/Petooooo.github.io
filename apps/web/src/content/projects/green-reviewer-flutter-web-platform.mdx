@@ -2,7 +2,7 @@
 title: "Green Reviewer: Flutter Client and Web Backend"
 description: "Built a web/mobile greenwashing-review service with a Flutter/Dart client, Node.js backend, database services and Docker-based deployment workflow."
 date: "2023-12-22"
-updated: "2026-11-20"
+updated: "2026-11-25"
 draft: false
 reviewed: true
 reviewStatus: "reviewed"
@@ -19,52 +19,151 @@ sourceUrl: "https://github.com/Petooooo/green-reviewer"
 techStack: ["Dart", "Flutter", "JavaScript", "Node.js", "Express", "SQL", "Docker"]
 ---
 
-In September–December 2023, I worked on **Green Reviewer**, a web and mobile application that let users examine products through reviews concerned with misleading environmental claims. The original project was motivated by greenwashing: product marketing could communicate an environmental benefit without giving the consumer an equally clear basis for evaluating it.
+Green Reviewer (그린리버) grew out of a simple problem: a product can be marketed as environmentally friendly, yet a shopper may have little information about what makes that claim credible. From September to December 2023, I developed the web application, mobile application and backend for a service that combined product listings with structured user reviews. Instead of treating a review as only a star rating, I wanted to make the nature of a reported environmental concern visible alongside the product information.
 
-I developed the **client, web application and server-side components**, and the original repository still contains the application and server structure. This project is different from my later kernel and infrastructure work, but it remains worth keeping because it records an end-to-end application with a real client/server boundary.
+The original repository retains both the Flutter implementation and the services, together with the original mobile and desktop screenshots. This article follows the actual code at [the retained source revision](https://github.com/Petooooo/green-reviewer/tree/2a3f1328e1beb083aa2de33d0fd4d02bc53c07a6) and distinguishes the 2023 implementation from the improvements I would make today. The screenshots below document the historical interface, not present-day product assessments or a currently running service.
 
-*This retrospective was written in November 2026 from the 2023 project and its publicly available repository. The project date is historical; it is not a claim that this article was published in 2023.*
+<figure className="project-concept-figure green-reviewer-web"><a href="/figures/green-reviewer/web-1.webp" target="_blank" rel="noopener noreferrer" aria-label="Web archive 1 — Catalog browsing with review-derived color indicators."><img src="/figures/green-reviewer/web-1.webp" alt="Web archive 1 — Catalog browsing with review-derived color indicators." width="3680" height="2382" loading="lazy" decoding="async" /></a><figcaption>Web archive 1 — Catalog browsing with review-derived color indicators.</figcaption></figure>
 
-## A service spanning mobile, web and backend
+## Separating interactive requests from catalog ingestion
 
-The client was built with **Flutter and Dart**, while the backend used **Node.js and Express**. The repository separates the client from server-side components and documents a database-facing service as well as a conversion and facade-server arrangement.
+The project was more than a Flutter client. Its backend was organized around three Node.js/Express processes and a MySQL database, with a separate Python path for collecting and importing the product catalog.
 
-<figure className="project-concept-figure">
-  <a href="/figures/journals/green-reviewer-client-backend.svg" target="_blank" rel="noopener noreferrer" aria-label="Open green reviewer client and backend boundaries figure">
-    <img src="/figures/journals/green-reviewer-client-backend.svg" alt="Flutter client and Node Express API services connected to SQL persistence" loading="lazy" decoding="async" />
-  </a>
-  <figcaption>Conceptual client and backend services drawn from the public Green Reviewer repository.</figcaption>
-</figure>
+<figure className="project-concept-figure green-reviewer-web"><a href="/figures/green-reviewer/project-architecture.jpg" target="_blank" rel="noopener noreferrer" aria-label="The original architecture illustration retained in the 2023 repository, including the client, servers, crawler and uploader."><img src="/figures/green-reviewer/project-architecture.jpg" alt="The original architecture illustration retained in the 2023 repository, including the client, servers, crawler and uploader." width="4120" height="2030" loading="lazy" decoding="async" /></a><figcaption>The original architecture illustration retained in the 2023 repository, including the client, servers, crawler and uploader.</figcaption></figure>
 
-The reason for separating these responsibilities was practical: the client handled navigation and displaying product/review information, while the server handled requests, data processing and database access. The same underlying service could support web and mobile clients instead of embedding the database connection in each client.
+<figure className="project-concept-figure"><a href="/figures/journals/green-reviewer-01-architecture.svg" target="_blank" rel="noopener noreferrer" aria-label="Open Green Reviewer 01 architecture diagram"><img src="/figures/journals/green-reviewer-01-architecture.svg" alt="Interactive requests and catalog ingestion take separate paths; review reads bypass ConversionServer." loading="lazy" decoding="async" /></a><figcaption>Interactive requests and catalog ingestion take separate paths; review reads bypass ConversionServer.</figcaption></figure>
 
-## Product information, reviews and user experience
-
-The application focused on exposing environmental claims and review information in a way that users could browse and compare. The project description also included links to products or purchases, connecting review data with the user's next action.
-
-That required a coherent contract between presentation and backend data: a page should not need to know how database records are stored, and a backend response should provide enough structure for both web and mobile screens.
-
-## Running the backend as services
-
-The public repository documents a **Docker Compose** path for the server components and a conventional local Flutter workflow for the client. It also contains configuration templates for database, conversion-server and facade-server connections.
-
-Those files show that the system was structured as multiple cooperating processes, rather than only a visual prototype. I kept configuration placeholders in the public repository and do not reproduce private deployment credentials or historical production endpoints here.
-
-The repository also references AWS as part of the original stack. I describe it as a technology used in the project, not as evidence of a specific uptime guarantee or a currently operating public service.
-
-## What I built and retained
-
-| Layer | Implementation |
+| Component | Responsibility in the retained source |
 | --- | --- |
-| Client | Flutter/Dart interface for web and mobile |
-| Backend | Node.js / Express services and API handling |
-| Data | SQL-backed storage through backend components |
-| Packaging | Docker Compose backend installation path |
-| Repository | Public client/server source and project documentation |
+| Flutter/Dart | Product browsing, search, detail and review screens, checklist charts |
+| FacadeServer | The client-facing HTTP entry point; forwards requests |
+| ConversionServer | Maps search terms to catalog categories, combines detail responses, coordinates review writes and deletes |
+| DatabaseServer | Exposes SQL-backed catalog, image and review operations |
+| MySQL | Product records, detail image URLs, reviews, derived checklist totals |
+| Python crawler and JSON uploader | Offline acquisition and initial import of the catalog |
 
-The useful part of this project is the **complete application boundary**—a user interface, application server, persistence and a deployable server configuration. I did not treat the original public endpoint as a live availability claim in 2026.
+The FacadeServer routes product search, search count, detail and review mutations through ConversionServer. Review content is read directly from DatabaseServer through the facade. That distinction matters: the conversion step is useful where a request needs transformation or several underlying operations, not where the facade can simply return a collection of reviews.
 
-The source remains available at [Green Reviewer on GitHub](https://github.com/Petooooo/green-reviewer). It also provides a concrete starting point for the infrastructure work I later did at a different scale.
+I also separated catalog ingestion from user-facing browsing. The crawler first queried Naver Shopping for a search keyword prefixed with the Korean term for eco-friendly products, then used Selenium to obtain supplemental fields where available. The resulting JSON files were organized by category and product ID. A separate uploader inserted product records and detail image URLs into MySQL, initializing the review count and four checklist totals to zero. The public code and original architecture illustration show this division. They do not establish a scheduled, continuously running ingestion pipeline, and I have not rerun the historical crawler against an external website.
+
+The initial data source was therefore product marketing and shopping metadata, not independently verified environmental certifications. The application used user-contributed flags to organize concerns; it did not certify that a product was environmentally sound or determine that a seller had committed wrongdoing.
+
+## Searching a category-based catalog
+
+The catalog was organized by keywords. A typed search term did not have to match the stored category exactly. ConversionServer obtains the distinct keywords from DatabaseServer, then the Transformer class calculates Levenshtein edit distance from the search word to each candidate.
+
+For strings of lengths m and n, the code initializes the first row and column of a two-dimensional matrix to the number of insertions or deletions required to reach an empty string. For an interior cell it takes the minimum of deletion, insertion and substitution costs.
+
+```text
+D[i,0] = i
+D[0,j] = j
+D[i,j] = min(D[i-1,j] + 1,
+             D[i,j-1] + 1,
+             D[i-1,j-1] + cost)
+cost = 0 when the characters match, otherwise 1
+similarity = 1 - D[m,n] / max(m,n)
+```
+
+<figure className="project-concept-figure"><a href="/figures/journals/green-reviewer-02-search.svg" target="_blank" rel="noopener noreferrer" aria-label="Open Green Reviewer 02 search diagram"><img src="/figures/journals/green-reviewer-02-search.svg" alt="The edit-distance matrix for cup → cups is calculated from the recurrence in Transformer; the words are illustrative." loading="lazy" decoding="async" /></a><figcaption>The edit-distance matrix for cup → cups is calculated from the recurrence in Transformer; the words are illustrative.</figcaption></figure>
+
+The best candidate is selected only when its similarity is strictly greater than the previous maximum, initially zero. Equal scores therefore retain the first encountered candidate. With a hypothetical search word cup and candidate cups, the distance is one and the normalized similarity is 0.75. This is an explanation of the actual recurrence, not a claim that those English words occur in the archived Korean catalog.
+
+The approach has a clear trade-off. It supports small spelling differences without requiring a separate search engine, at O(mn) time and space for each comparison. But a short distance does not imply similar meaning; the code compares JavaScript string units, rather than Korean morphological or semantic features. It has no explicit minimum relevance threshold above zero, and candidate order can affect ties. A production version would distinguish exact matching, aliases and a ranked set of alternatives, then use relevance evaluation before making automatic category selection.
+
+After selecting a category, ConversionServer sends the keyword, page and size to DatabaseServer. The latter queries matching records and slices the returned rows using the index `(page - 1) * size`. The implementation is consequently one-based even though parts of the older API documentation describe zero-based pages. The search count travels through a separate endpoint. I would move pagination into the database with a deterministic ordering and validate page bounds, rather than load all rows and slice them in JavaScript.
+
+<figure className="project-concept-figure green-reviewer-web"><a href="/figures/green-reviewer/web-2.webp" target="_blank" rel="noopener noreferrer" aria-label="Web archive 2 — A second catalog/search view, retaining the same card structure."><img src="/figures/green-reviewer/web-2.webp" alt="Web archive 2 — A second catalog/search view, retaining the same card structure." width="3680" height="2382" loading="lazy" decoding="async" /></a><figcaption>Web archive 2 — A second catalog/search view, retaining the same card structure.</figcaption></figure>
+
+<div className="green-reviewer-mobile-grid">
+<figure className="project-concept-figure green-reviewer-mobile"><a href="/figures/green-reviewer/app-1.webp" target="_blank" rel="noopener noreferrer" aria-label="Mobile archive 1 — Catalog browsing with review-derived color indicators."><img src="/figures/green-reviewer/app-1.webp" alt="Mobile archive 1 — Catalog browsing with review-derived color indicators." width="1235" height="2646" loading="lazy" decoding="async" /></a><figcaption>Mobile archive 1 — Catalog browsing with review-derived color indicators.</figcaption></figure>
+<figure className="project-concept-figure green-reviewer-mobile"><a href="/figures/green-reviewer/app-2.webp" target="_blank" rel="noopener noreferrer" aria-label="Mobile archive 2 — A second catalog/search view, retaining the same card structure."><img src="/figures/green-reviewer/app-2.webp" alt="Mobile archive 2 — A second catalog/search view, retaining the same card structure." width="1235" height="2646" loading="lazy" decoding="async" /></a><figcaption>Mobile archive 2 — A second catalog/search view, retaining the same card structure.</figcaption></figure>
+</div>
+
+## One product ID across the screens
+
+The MySQL initialization SQL defines three tables. The product ID is the shared key: itemTable holds the product metadata, source link and derived review state; detailpicTable stores supplemental image URLs; reviewTable stores review text and four integer checklist values. The latter two tables have foreign keys referring to the product.
+
+<figure className="project-concept-figure"><a href="/figures/journals/green-reviewer-03-data.svg" target="_blank" rel="noopener noreferrer" aria-label="Open Green Reviewer 03 data diagram"><img src="/figures/journals/green-reviewer-03-data.svg" alt="The original MySQL initialization defines three tables linked by the product ID; itemTable also stores the derived checklist totals." loading="lazy" decoding="async" /></a><figcaption>The original MySQL initialization defines three tables linked by the product ID; itemTable also stores the derived checklist totals.</figcaption></figure>
+
+The detail request illustrates why ConversionServer exists. It requests product content and detail images from DatabaseServer, then combines them into one object. The client therefore receives the detail image list together with the basic item information instead of having to assemble the two responses on every platform.
+
+The Flutter application has a shared GlobalStore extending ChangeNotifier, with fields for the selected product, product and review pages, checklist totals and dialog state. It uses Provider and asynchronous HTTP calls, including FutureBuilder for the product detail and review data. The detail screen displays loading/error states and uses the returned original URL for the purchase-page link. The source contains multiple layout branches at a screen width of 800 logical pixels. Rather than maintain entirely different clients, the same Dart code adjusts layout, image sizes, typography and chart dimensions for narrower and wider screens.
+
+<figure className="project-concept-figure green-reviewer-web"><a href="/figures/green-reviewer/web-3.webp" target="_blank" rel="noopener noreferrer" aria-label="Web archive 3 — Product details, merchant information and a link to the original listing."><img src="/figures/green-reviewer/web-3.webp" alt="Web archive 3 — Product details, merchant information and a link to the original listing." width="3680" height="2382" loading="lazy" decoding="async" /></a><figcaption>Web archive 3 — Product details, merchant information and a link to the original listing.</figcaption></figure>
+
+<figure className="project-concept-figure green-reviewer-mobile"><a href="/figures/green-reviewer/app-3.webp" target="_blank" rel="noopener noreferrer" aria-label="Mobile archive 3 — Product details, merchant information and a link to the original listing."><img src="/figures/green-reviewer/app-3.webp" alt="Mobile archive 3 — Product details, merchant information and a link to the original listing." width="1235" height="2646" loading="lazy" decoding="async" /></a><figcaption>Mobile archive 3 — Product details, merchant information and a link to the original listing.</figcaption></figure>
+
+This is a useful separation, but not a perfect client abstraction. The archived database service sometimes sends a JSON-encoded string through a JSON response, while other endpoints return an object or a string directly. The conversion and Flutter code consequently contain nested decoding operations. A single typed response schema and a uniform error envelope would remove that accidental coupling between the services.
+
+## Turning reviews into two different visual signals
+
+The review interface uses four categories chosen from the greenwashing types described in the application's educational text: insufficient evidence, inappropriate certification labels, vague claims and false claims. Each review may select more than one category and also contain free text. The four flags are not a mutually exclusive classification.
+
+The original frontend's `fetchProducts` function derives a color for the catalog card from the review count N and the four accumulated checklist counts S1 through S4:
+
+```text
+N = 0                  → grey (no reviews)
+r = (S1+S2+S3+S4)/(4N)  when N > 0
+
+r < 0.25               → green
+0.25 <= r < 0.60       → yellow
+r >= 0.60              → red
+```
+
+Assuming every stored flag is binary and the totals are consistent with the review rows, r is the fraction of selected positions among all four positions in every review. It is not the fraction of users who report at least one concern and is not an estimated probability of greenwashing. There is no evidence that the two thresholds were calibrated against a labeled validation dataset.
+
+The detail view renders a different quantity. DonutChart passes each nonzero checklist count to fl_chart as a section value, exposes its count on interaction and suppresses the donut when all four counts are zero. The proportions of the sections are normalized by the sum of the selected flags, not by the review count.
+
+<figure className="project-concept-figure"><a href="/figures/journals/green-reviewer-04-score.svg" target="_blank" rel="noopener noreferrer" aria-label="Open Green Reviewer 04 score diagram"><img src="/figures/journals/green-reviewer-04-score.svg" alt="Five hypothetical reviews give a card score of 0.50 and donut shares of 40%, 30%, 20%, 10%. The denominators differ." loading="lazy" decoding="async" /></a><figcaption>Five hypothetical reviews give a card score of 0.50 and donut shares of 40%, 30%, 20%, 10%. The denominators differ.</figcaption></figure>
+
+For a hypothetical five reviews with sums [4, 3, 2, 1], the card score is 10/20 = 0.50, hence yellow. The chart shares are 4/10, 3/10, 2/10 and 1/10. This distinction is important when explaining the interface: a product with a single flagged review can have the same chart proportions as a product with hundreds of reviews. Zero reviews and reviews with zero flags also convey different information, even though the latter produces no donut.
+
+<figure className="project-concept-figure green-reviewer-web"><a href="/figures/green-reviewer/web-4.webp" target="_blank" rel="noopener noreferrer" aria-label="Web archive 4 — Four checklist categories and the review-distribution donut."><img src="/figures/green-reviewer/web-4.webp" alt="Web archive 4 — Four checklist categories and the review-distribution donut." width="3680" height="2382" loading="lazy" decoding="async" /></a><figcaption>Web archive 4 — Four checklist categories and the review-distribution donut.</figcaption></figure>
+
+<figure className="project-concept-figure green-reviewer-mobile"><a href="/figures/green-reviewer/app-4.webp" target="_blank" rel="noopener noreferrer" aria-label="Mobile archive 4 — Four checklist categories and the review-distribution donut."><img src="/figures/green-reviewer/app-4.webp" alt="Mobile archive 4 — Four checklist categories and the review-distribution donut." width="1235" height="2646" loading="lazy" decoding="async" /></a><figcaption>Mobile archive 4 — Four checklist categories and the review-distribution donut.</figcaption></figure>
+
+If I were designing the display again, I would show the total review count, the count of reviews reporting any issue, and category counts separately, along with the original reports. I would also explicitly mark the difference between no evidence and evidence of no reported concerns, and provide a moderation and verification process before presenting any real-world risk assessment. This would make the numbers easier to interpret without treating them as verified environmental evidence.
+
+## Review mutations and the cost of stored aggregates
+
+The review write path retains an implementation decision that is easy to miss by looking only at the UI. Rather than calculate every category total on each product read, the application stores a review count and four aggregate counts directly on itemTable. The JSON uploader initializes these derived values. ConversionServer retrieves the existing totals, adds the new review's four flags, inserts the review row, requests the new row count, then updates the product's stored totals and count.
+
+<figure className="project-concept-figure"><a href="/figures/journals/green-reviewer-05-review-update.svg" target="_blank" rel="noopener noreferrer" aria-label="Open Green Reviewer 05 review update diagram"><img src="/figures/journals/green-reviewer-05-review-update.svg" alt="The original write path makes four separate requests. The concurrent-write example illustrates a possible lost update, not an observed incident." loading="lazy" decoding="async" /></a><figcaption>The original write path makes four separate requests. The concurrent-write example illustrates a possible lost update, not an observed incident.</figcaption></figure>
+
+Deleting a review follows the reverse direction. The conversion layer obtains the old totals and the review's flags, performs the historical deletion check, removes the review row, and writes the decremented aggregate and count. The intent was to make the catalog display inexpensive to read and to avoid recomputing all review totals on every product listing.
+
+The sequence has an important consistency weakness: these operations are separate HTTP requests, not one database transaction. If two writers read the same old sum of three and each adds one, both can write four while the review rows imply five. A failure after inserting a review but before updating the product can similarly leave the cached values stale. Those are code-level possibilities, not recorded incidents. A transaction in DatabaseServer with a row lock or atomic increment/decrement would give the write operation one consistency boundary; alternatively, an aggregate query over the authoritative review rows could avoid maintaining a second source of truth. The same design must address retry idempotency and checking the relationship between a review and its product.
+
+<figure className="project-concept-figure green-reviewer-web"><a href="/figures/green-reviewer/web-5.webp" target="_blank" rel="noopener noreferrer" aria-label="Web archive 5 — Review composition with checklist controls and free text."><img src="/figures/green-reviewer/web-5.webp" alt="Web archive 5 — Review composition with checklist controls and free text." width="3680" height="2382" loading="lazy" decoding="async" /></a><figcaption>Web archive 5 — Review composition with checklist controls and free text.</figcaption></figure>
+
+<figure className="project-concept-figure green-reviewer-web"><a href="/figures/green-reviewer/web-6.webp" target="_blank" rel="noopener noreferrer" aria-label="Web archive 6 — Review deletion confirmation dialog."><img src="/figures/green-reviewer/web-6.webp" alt="Web archive 6 — Review deletion confirmation dialog." width="3680" height="2382" loading="lazy" decoding="async" /></a><figcaption>Web archive 6 — Review deletion confirmation dialog.</figcaption></figure>
+
+<div className="green-reviewer-mobile-grid">
+<figure className="project-concept-figure green-reviewer-mobile"><a href="/figures/green-reviewer/app-5.webp" target="_blank" rel="noopener noreferrer" aria-label="Mobile archive 5 — Review composition with checklist controls and free text."><img src="/figures/green-reviewer/app-5.webp" alt="Mobile archive 5 — Review composition with checklist controls and free text." width="1235" height="2646" loading="lazy" decoding="async" /></a><figcaption>Mobile archive 5 — Review composition with checklist controls and free text.</figcaption></figure>
+<figure className="project-concept-figure green-reviewer-mobile"><a href="/figures/green-reviewer/app-6.webp" target="_blank" rel="noopener noreferrer" aria-label="Mobile archive 6 — Review deletion confirmation dialog."><img src="/figures/green-reviewer/app-6.webp" alt="Mobile archive 6 — Review deletion confirmation dialog." width="1235" height="2646" loading="lazy" decoding="async" /></a><figcaption>Mobile archive 6 — Review deletion confirmation dialog.</figcaption></figure>
+</div>
+
+The screenshots show the original review creation and removal interactions. They are valuable records of the implemented interface, but the historical deletion mechanism and SQL construction do not meet modern production security expectations. I would replace direct string-composed queries with parameterized statements, protect credentials and review ownership with appropriate authentication and password hashing, validate inputs, limit request rates, and expose only the facade. These are retrospective improvements, not changes made to the archived service.
+
+## Packaging the backend and defining its limits
+
+The repository includes a Compose configuration for MySQL 8.1.0 and the three service images at version 1.3. The MySQL initialization directory is mounted into the container. Separate sample environment files document the configuration needed by the services. The client README describes running Flutter in Chrome, and the root README describes a mobile build as well as a historical deployment. AWS and Docker are part of the retained architecture and technology list.
+
+The Compose file provides a concrete local packaging path; it is not proof of a hardened deployment. In the old configuration, database and internal service ports are published, and startup ordering is not a readiness check. If revisiting deployment, I would keep internal endpoints on a private service network, use managed secrets and health checks, configure persistence and migrations deliberately, and make failure handling explicit between services. I have not restarted or tested the original public endpoint, APK or database in this retrospective.
+
+The most useful engineering lesson is that a complete application needs more than separate front and back ends. Catalog ingestion, product identity, API contracts, derived state and the visual meaning of that state must agree. Green Reviewer implemented all of these boundaries in a small application, and the retained code makes their trade-offs visible. Later infrastructure work involved a larger scale, but the distinction between a user-visible result and the underlying state that guarantees it remains the same.
+
+## Source and figure provenance
+
+The public [Green Reviewer repository](https://github.com/Petooooo/green-reviewer/tree/2a3f1328e1beb083aa2de33d0fd4d02bc53c07a6) contains the original implementation. The twelve screenshots in this article correspond to Image/Web/web_1.png through web_6.png and Image/App/app_1.png through app_6.png. They are displayed as lossless WebP copies with the original decoded RGBA pixels and dimensions (3680 × 2382 for web, 1235 × 2646 for mobile). The architecture JPEG (4120 × 2030) is copied unchanged. Each image opens at its native resolution. The [asset manifest](/figures/green-reviewer/source-manifest.json) records the original and displayed file hashes; the upstream [license](/figures/green-reviewer/LICENSE.txt) accompanies the copies. Interface text remains Korean as in the source images. The five analytical SVGs are new explanations based on the retained code, not new captures or measured performance.
+
+- [Original Flutter client](https://github.com/Petooooo/green-reviewer/blob/2a3f1328e1beb083aa2de33d0fd4d02bc53c07a6/Client/green_reviewer/lib/main.dart)
+- [FacadeServer](https://github.com/Petooooo/green-reviewer/blob/2a3f1328e1beb083aa2de33d0fd4d02bc53c07a6/Server/FacadeServer/facadeserver.js)
+- [ConversionServer](https://github.com/Petooooo/green-reviewer/blob/2a3f1328e1beb083aa2de33d0fd4d02bc53c07a6/Server/ConversionServer/conversionserver.js)
+- [DatabaseServer](https://github.com/Petooooo/green-reviewer/blob/2a3f1328e1beb083aa2de33d0fd4d02bc53c07a6/Server/DatabaseServer/databaseserver.js)
+- [MySQL schema](https://github.com/Petooooo/green-reviewer/blob/2a3f1328e1beb083aa2de33d0fd4d02bc53c07a6/Server/Database/init_db/mysql.sql)
+- [Crawler](https://github.com/Petooooo/green-reviewer/blob/2a3f1328e1beb083aa2de33d0fd4d02bc53c07a6/Server/WebCrawler/WebCrawler.py) and [JSON uploader](https://github.com/Petooooo/green-reviewer/blob/2a3f1328e1beb083aa2de33d0fd4d02bc53c07a6/Server/jsonUploader/jsonUploader.py)
+- [Docker Compose configuration](https://github.com/Petooooo/green-reviewer/blob/2a3f1328e1beb083aa2de33d0fd4d02bc53c07a6/Server/docker-compose.yaml)
 
 ## Related projects
 

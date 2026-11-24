@@ -377,6 +377,39 @@ a {
   image-rendering: auto;
 }
 
+/* Native-resolution Green Reviewer screenshots: readable singles or a responsive pair. */
+.prose-platform .project-concept-figure.green-reviewer-web {
+  padding: clamp(0.3rem, 1vw, 0.65rem);
+}
+.prose-platform .project-concept-figure.green-reviewer-web > a {
+  padding: 0;
+}
+.prose-platform .project-concept-figure.green-reviewer-mobile {
+  width: 100%;
+  max-width: 440px;
+  margin-inline: auto;
+  padding: clamp(0.3rem, 1vw, 0.65rem);
+}
+.prose-platform .project-concept-figure.green-reviewer-mobile > a {
+  padding: 0;
+}
+.prose-platform .green-reviewer-mobile-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  gap: clamp(0.65rem, 2vw, 1.25rem);
+  margin-block: 2rem;
+}
+.prose-platform .green-reviewer-mobile-grid .project-concept-figure.green-reviewer-mobile {
+  margin-block: 0;
+  min-width: 0;
+}
+@media (max-width: 700px) {
+  .prose-platform .green-reviewer-mobile-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 .prose-platform .project-concept-figure figcaption {
   margin: 0.85rem 0.3rem 0.1rem;
   color: #aabbd0;

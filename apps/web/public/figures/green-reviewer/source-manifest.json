@@ -1,0 +1,161 @@
+{
+  "source_repository": "https://github.com/Petooooo/green-reviewer",
+  "source_commit": "2a3f1328e1beb083aa2de33d0fd4d02bc53c07a6",
+  "assets": [
+    {
+      "source": "Image/Web/web_1.png",
+      "file": "web-1.webp",
+      "size": [
+        3680,
+        2382
+      ],
+      "source_sha256": "8fd2a72fea9acc894a1fc9e727889caf608402f281bb359703a25c73604b1241",
+      "output_sha256": "0f54818b03561703c931c53fac0ec562006246fd312a832d5b82322f7564d48f",
+      "decoded_rgba_sha256": "feaa8b7294419dac45f1022bf5c1a4c78e9d636c4fbb4ae8f04db93abef2804e",
+      "encoding": "lossless WebP; identical decoded RGBA pixels"
+    },
+    {
+      "source": "Image/Web/web_2.png",
+      "file": "web-2.webp",
+      "size": [
+        3680,
+        2382
+      ],
+      "source_sha256": "b85fdb9e0dfee1df3566b6d123a786f89f94aeece0f7f9d8ab0404ad91d01e62",
+      "output_sha256": "68f6428e0f7b41cc3a49c4699c726081769749d7fbcc1ab116b4ef5babb2212f",
+      "decoded_rgba_sha256": "d68423c0348df616a109c93620ef3c74f55e06ef9e83cdc19b7502e32cea87a3",
+      "encoding": "lossless WebP; identical decoded RGBA pixels"
+    },
+    {
+      "source": "Image/Web/web_3.png",
+      "file": "web-3.webp",
+      "size": [
+        3680,
+        2382
+      ],
+      "source_sha256": "699a97d270a4847235419e2a0f0e42e009a3f38babdcf54054565b3b10e90ca6",
+      "output_sha256": "63e107e8429631ac230485ca46e9de5f40ed2a56bd595bc81ca020e8c31a7b40",
+      "decoded_rgba_sha256": "082865e59031acb801e551cf7a5f5696eee208a4d9e8c72e7c2c6e8f125c333d",
+      "encoding": "lossless WebP; identical decoded RGBA pixels"
+    },
+    {
+      "source": "Image/Web/web_4.png",
+      "file": "web-4.webp",
+      "size": [
+        3680,
+        2382
+      ],
+      "source_sha256": "e663d247c5fd5d585117e237bfb90b44d99dc26b51cb453a5f4520d0dd0f1883",
+      "output_sha256": "fa15e07e80acb2c70fab44e57f9e19af27629d099a0c606d5d2f01dfd9796b40",
+      "decoded_rgba_sha256": "8ddf3d2efb7a7d17f11e3eb40a1d47250fdabb7b3a57e3ac67c9d4a5891ff2bd",
+      "encoding": "lossless WebP; identical decoded RGBA pixels"
+    },
+    {
+      "source": "Image/Web/web_5.png",
+      "file": "web-5.webp",
+      "size": [
+        3680,
+        2382
+      ],
+      "source_sha256": "e8cb38f73be1068ff8647dfc9706b31915ef73d7d2bf1a0d5ccc8b3dbe69cf29",
+      "output_sha256": "05a57cd2ae0664ff387a1e8e050e1db666241eea805c2aff95e2a22570933a24",
+      "decoded_rgba_sha256": "4e7211fc6bba585bdb842a6289928294cb3da19c16bf460e922c5babeedbe5cc",
+      "encoding": "lossless WebP; identical decoded RGBA pixels"
+    },
+    {
+      "source": "Image/Web/web_6.png",
+      "file": "web-6.webp",
+      "size": [
+        3680,
+        2382
+      ],
+      "source_sha256": "dfb85931ae98bb9ac4421867182f578b3a7477eb5e605b31d288e8bdb758120a",
+      "output_sha256": "4d0a230c6abc8efde3f8c7d58786487e64340691b8798348467f0dc090ecf665",
+      "decoded_rgba_sha256": "a156de46c910a2ca4d111b245cf8aa0ae28160a1d9977553a01bdaf63e04ef3e",
+      "encoding": "lossless WebP; identical decoded RGBA pixels"
+    },
+    {
+      "source": "Image/App/app_1.png",
+      "file": "app-1.webp",
+      "size": [
+        1235,
+        2646
+      ],
+      "source_sha256": "ca359d7dc1c80dc234dfb260b9e6b38e9bb222308a1f568dbce878d846e40fd0",
+      "output_sha256": "00c21a26870594507223afdcd65ffe2a759438af91fb233f0e6851beebd41f6b",
+      "decoded_rgba_sha256": "ef2fe49d714ddcae78e802e6847bd62926822cfaa83421e69219339069d6f63c",
+      "encoding": "lossless WebP; identical decoded RGBA pixels"
+    },
+    {
+      "source": "Image/App/app_2.png",
+      "file": "app-2.webp",
+      "size": [
+        1235,
+        2646
+      ],
+      "source_sha256": "7ec6acc639c0a98fe839557c958c965501ffba595de53edb080132c5929bacf8",
+      "output_sha256": "8db986955e9392e4a27c0fcd685b2557cb733e73ec555408376d0bf890ea0eaa",
+      "decoded_rgba_sha256": "1daf3b5bdb8daef0134708312fa847966253efff262dea8efd195e36aa1f9c71",
+      "encoding": "lossless WebP; identical decoded RGBA pixels"
+    },
+    {
+      "source": "Image/App/app_3.png",
+      "file": "app-3.webp",
+      "size": [
+        1235,
+        2646
+      ],
+      "source_sha256": "cbe7e733a2e62f2194e1f8c46660b47cb02c33ddc89a5dd3a61227c02446248a",
+      "output_sha256": "b7422def23a17516d2c8de31d0c0eb18d7ed0a34228905a62fa4b1f63dc007cd",
+      "decoded_rgba_sha256": "718fe55fb164fa0099d9bf52b6084d75ca6e02a267dec9bd15e75ad696631aa4",
+      "encoding": "lossless WebP; identical decoded RGBA pixels"
+    },
+    {
+      "source": "Image/App/app_4.png",
+      "file": "app-4.webp",
+      "size": [
+        1235,
+        2646
+      ],
+      "source_sha256": "fe5dfd1484a2bfe4f1c3cb92430774a22fc6391d60d7cb8a0eab48b645635ea1",
+      "output_sha256": "ca78ea55c40690210cc3e4700329093ac386c17a1267fb84c9bcb9e612bad47c",
+      "decoded_rgba_sha256": "1f5f55774ce6d525cac18aefb7ee5dd08ffa24d69cf2e32596a20287bd5895fa",
+      "encoding": "lossless WebP; identical decoded RGBA pixels"
+    },
+    {
+      "source": "Image/App/app_5.png",
+      "file": "app-5.webp",
+      "size": [
+        1235,
+        2646
+      ],
+      "source_sha256": "0800c748e7ce694d66e46ef5656743691c278d8c5e553cf1c662a428637dc149",
+      "output_sha256": "c7b23e2b3d11c12c8cb3b5465f1ce7d39b30cb60390d14491883626d08c42e9e",
+      "decoded_rgba_sha256": "0631e18a6e816efca96f45f34bde9d1387f85f779f2e69e33144b804c26e74ad",
+      "encoding": "lossless WebP; identical decoded RGBA pixels"
+    },
+    {
+      "source": "Image/App/app_6.png",
+      "file": "app-6.webp",
+      "size": [
+        1235,
+        2646
+      ],
+      "source_sha256": "226bad97504f94f0c112525da83f3f33b6774be3c55edb81a1afdd8c5fdfe7df",
+      "output_sha256": "6af7082e4a10c5a0627d23751d8265130f37e154627e8685e97a1b430750e8ef",
+      "decoded_rgba_sha256": "fc086b297d69a7c789264527c887cde99af6fcc6555e9722a8e58a22162fc4ef",
+      "encoding": "lossless WebP; identical decoded RGBA pixels"
+    },
+    {
+      "source": "Image/project_architecture.jpg",
+      "file": "project-architecture.jpg",
+      "size": [
+        4120,
+        2030
+      ],
+      "source_sha256": "1ff8e3c9f26861b50d0cc8136fd774b46f6d2fb9d8c62ccf052f10a96d130dc0",
+      "output_sha256": "1ff8e3c9f26861b50d0cc8136fd774b46f6d2fb9d8c62ccf052f10a96d130dc0",
+      "encoding": "unchanged JPEG"
+    }
+  ]
+}
