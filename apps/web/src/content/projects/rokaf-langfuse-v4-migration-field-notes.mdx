@@ -2,7 +2,7 @@
 title: "Langfuse v4 Migration: Timeout and Data Validation"
 description: "Langfuse v4 migration through Step 2 timeout, backfill, persistent job state, events_only cutover and verified Steps 1–5."
 date: "2026-11-15"
-updated: "2026-11-19"
+updated: "2026-11-25"
 draft: false
 reviewed: true
 reviewStatus: "reviewed"
@@ -36,6 +36,42 @@ Historical data backfills had their own work to finish, and those writes needed 
   <figcaption>Two different observations of Step 2, followed by later validation and cleanup. The diagram illustrates evidence boundaries, not the private deployment topology or the exact duration of each stage.</figcaption>
 </figure>
 
+## Why the migration rewrites historical data
+
+The public [v3-to-v4 migration guide](https://langfuse.com/self-hosting/upgrade/upgrade-guides/upgrade-v3-to-v4) distinguishes the server upgrade from the five background data migrations. I use the latter numbering in this article. The change is not simply a new schema version: the old model separates trace-level information from observations, while the new event model represents the hierarchy through spans and associated event fields. Historical records must be transformed into a form that the new read path understands.
+
+| Background migration | Data transformation |
+| --- | --- |
+| 1 | Derive root spans from legacy traces. |
+| 2 | Reorder observations in the sorting scratch table. |
+| 3 | Combine observations with trace attributes to produce child events. |
+| 4 | Enrich the events with experiment information from dataset run items. |
+| 5 | Remove the intermediate sorting table after validation. |
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/langfuse-v4-01-data-rewrite.svg" target="_blank" rel="noopener noreferrer" aria-label="Open Langfuse v4 01-data-rewrite diagram">
+    <img src="/figures/journals/langfuse-v4-01-data-rewrite.svg" alt="Publicly documented data transformation, not an internal cluster diagram. Step 2 supplies the reordered input for Step 3; Step 5 is a separately gated cleanup." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Publicly documented data transformation, not an internal cluster diagram. Step 2 supplies the reordered input for Step 3; Step 5 is a separately gated cleanup.</figcaption>
+</figure>
+
+The sorting step is particularly revealing. The downstream join uses trace identity, so rewriting the observation data into an order based on project, trace and observation identity prepares the rows for that join. This spends storage and I/O on an intermediate representation to make the following transformation more tractable. It is a different trade-off from adding another replica: replication protects availability of a representation, but does not change what that representation means to the application. No timing comparison of the join before and after sorting was measured during this investigation.
+
+## Coverage of historical and newly ingested data
+
+The write mode introduces another boundary. A v4 server can still expose the legacy behavior. The public migration guide describes legacy, dual and events-only modes, rather than equating a v4 image with a completed cutover. In dual mode, the relevant new ingestion must already reach the event model before the historical backfill establishes its cutoff. Otherwise, data arriving between that cutoff and the activation of the new write path could be absent from the new representation.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/langfuse-v4-02-coverage.svg" target="_blank" rel="noopener noreferrer" aria-label="Open Langfuse v4 02-coverage diagram">
+    <img src="/figures/journals/langfuse-v4-02-coverage.svg" alt="Illustrative coverage intervals. Overlap can be reconciled by the documented deduplication behavior; a gap is not filled merely by a successful server upgrade." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Illustrative coverage intervals. Overlap can be reconciled by the documented deduplication behavior; a gap is not filled merely by a successful server upgrade.</figcaption>
+</figure>
+
+The important invariant is coverage, not simply whether two deployments ran in the intended calendar order. For the set of records expected in the new read model, the historical transformation and the working new-ingestion path together need to cover that set. Their overlap is an intentional part of the documented resumable migration design. A gap is different: a successful task counter cannot prove that a record outside the covered interval exists in the destination.
+
+This is why a readiness check and an ingestion check answer different questions. A responding application can still be in legacy mode, and the presence of a recent event does not demonstrate historical completeness. The final observed mode for my migration was events_only. The intervals above illustrate the public migration contract rather than reconstructing the exact private ingestion and cutover timeline.
+
 ## Step 2: the caller stopped waiting before the recorded work said it was done
 
 Step 2 involved backfilling and sorting existing Observations into the migration's intermediate `observations_pid_tid_sorting` table. The apparent failure needed more than another look at the UI.
@@ -51,6 +87,12 @@ These values did not prove that every transformed record was already usable by t
 
 I checked the durable state before taking the retry path. With that distinction understood, a subsequent retry resolved the step and I moved forward. That was not permission to blindly rerun every backfill on every timeout; the persisted bookkeeping mattered.
 
+### A completion record and a data commit are different evidence
+
+The progress row is a durable summary of the worker's bookkeeping. A caller-visible timeout can occur before the worker publishes or returns its final response; a storage error can instead stop the underlying work. Neither possibility should be inferred solely from the error text. A useful distinction is between an operation that has a recorded completed phase, one that has failed chunks, and one that has not yet reached a terminal state. In my case the completed phase and nine successful chunks made the first interpretation consistent with the recorded evidence. The subsequent successful retry confirmed that the procedure could advance, but the retained record does not identify the exact component that produced the timeout or show that the retry skipped all previously completed work.
+
+A more general retry design would preserve stable chunk identities and inspect existing completion records before reprocessing. A worker can also fail after writing a chunk but before recording its status; this is why a replay-safe destination and durable progress are both useful. These are engineering implications of the observed mismatch, not claims that I changed Langfuse's worker implementation.
+
 ## Other errors required other evidence
 
 During the broader upgrade, I also had to investigate ClickHouse replicas entering a read-only state. A healthy application Pod did not establish whether the database could write, and Keeper coordination state had to be considered separately.
@@ -63,7 +105,7 @@ It would be convenient to call these all one upgrade problem with one fix. They 
 
 ## What changed before I called the migration complete
 
-After Step 2, I continued through the later migration work. Steps 3–4 covered v4 event-data backfill and validation. I did not use their completion alone as the final proof; I also checked historical data access and new data creation and retrieval in the application.
+After Step 2, I continued through the later migration work. Steps 3–4 covered the observation-to-event transformation and enrichment from dataset run items, followed by validation. I did not use their completion alone as the final proof; I also checked historical data access and new data creation and retrieval in the application.
 
 The recorded final checkpoint on **November 17, 2026** was:
 
@@ -79,6 +121,19 @@ The last cleanup deserves its own sentence. Step 5 removed an intermediate table
 
 This later result changes the conclusion of my early field notes. It is accurate to say I completed the recorded migration procedure and verified the historical and new-data paths in the chosen mode. It would be inaccurate to inflate those checks into an exhaustive audit of every legacy edge case or a fully tested disaster-recovery exercise.
 
+## Validating the result at more than one layer
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/langfuse-v4-03-validation.svg" target="_blank" rel="noopener noreferrer" aria-label="Open Langfuse v4 03-validation diagram">
+    <img src="/figures/journals/langfuse-v4-03-validation.svg" alt="A layered validation model. The recorded successful historical and new-data checks are distinct from the additional checks proposed here for a more exhaustive audit." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>A layered validation model. The recorded successful historical and new-data checks are distinct from the additional checks proposed here for a more exhaustive audit.</figcaption>
+</figure>
+
+For a more rigorous audit, I would choose stable legacy trace identifiers and compare their hierarchy and relevant fields with the resulting event representation, then submit a distinctly identifiable test record and verify its arrival through the new read path. Whole-table counts alone can be misleading because root-span creation and experiment enrichment change the representation. Comparisons should be based on logical identities and expected relationships, not an assumption that the total number of rows in the legacy and new tables must be equal.
+
+There is also a storage boundary: a completed backfill phase does not by itself demonstrate that every replica can serve the expected data. A broader audit would check the replica state and sample logical records independently of the application. The recorded final result is narrower and concrete: historical and new data passed the functional checks, all five background steps completed and the chosen write mode was events_only.
+
 ## Which kind of completion did I actually observe?
 
 I used several sources of truth at different points. Each answered a narrower question than the phrase “migration successful” suggests.
@@ -92,5 +147,7 @@ I used several sources of truth at different points. Each answered a narrower qu
 | Cleanup checkpoint | Whether the temporary migration table was removed | A universal data-integrity guarantee |
 
 The Step 2 request timed out while PostgreSQL recorded nine completed chunks and zero failed chunks. I continued the remaining procedure, verified historical and newly created data in `events_only` mode, and completed Steps 1–5 and temporary-table cleanup by November 17, 2026. The timeout alone had not described the final outcome.
+
+**Public references:** [Langfuse v3-to-v4 migration guide](https://langfuse.com/self-hosting/upgrade/upgrade-guides/upgrade-v3-to-v4) · [Background migrations](https://langfuse.com/self-hosting/upgrade/background-migrations) · [Write-mode interpretation](https://langfuse.com/faq/all/check-if-on-langfuse-v4).
 
 **Related records:** [Database HA and migration states](/projects/rokaf-database-ha-and-langfuse-migrations/) · [ClickHouse replicated-table migration](/projects/rokaf-clickhouse-replication-migration/) · [Stateful storage and recovery](/projects/rokaf-stateful-storage-and-recovery/).
