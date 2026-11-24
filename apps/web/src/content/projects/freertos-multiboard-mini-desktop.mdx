@@ -1,75 +1,240 @@
 ---
-title: "FreeRTOS Mini-Desktop: Tasks and Multi-Board Coordination"
-description: "Built a three-board STM32 FreeRTOS desktop-style system with ten concurrent tasks, UART/GPIO communication, priorities, mutexes and sleep/resume behavior."
+title: "FreeRTOS on Three STM32 Boards: Building a Mini-Desktop"
+description: "How three STM32 boards coordinated ten FreeRTOS tasks through GPIO, synchronized an ASCII desktop over UART, and supported Gomoku, distance-driven Curling and sleep/resume."
 date: "2023-11-30"
-updated: "2026-11-20"
+updated: "2026-11-24"
 draft: false
 reviewed: true
 reviewStatus: "reviewed"
 sensitivity: public
 category: "Embedded Systems"
 area: "Real-Time Operating Systems"
-tags: ["FreeRTOS", "STM32", "C", "UART", "GPIO", "Mutex", "Scheduling"]
+tags: ["FreeRTOS", "STM32", "C", "GPIO", "UART", "Input Capture", "Mutex", "Scheduling"]
 type: "implementation-note"
-role: "Overall system architecture, task coordination and multi-board application design"
+role: "System architecture, three-board coordination, cursor/window interaction, application state and RTOS synchronization in a team project"
 period: "Oct–Nov 2023"
 status: "archived"
-techStack: ["C", "FreeRTOS", "STM32", "UART", "GPIO"]
+techStack: ["C", "FreeRTOS", "STM32", "GPIO", "UART", "TIM3 Input Capture"]
 ---
 
-In October–November 2023, I designed the overall architecture of a **Mini-Desktop system using FreeRTOS and three STM32 boards**. It ran **ten concurrent tasks** and brought cursor/window interaction, multiple applications and sleep/resume behavior into a coordinated embedded environment.
+> **Source revisited: the original *RTOS를 이용한 Mini Desktop 설계* final report (64 content pages, plus one blank page).** This was a collaborative university project completed in 2023. I worked on the overall architecture, embedded logic and RTOS coordination. The original report includes block diagrams, C code, board photographs, GPIO tables, terminal screenshots and a full source appendix. I reconstructed the accompanying SVGs from those materials; **they are neither unmodified screenshots nor newly measured hardware results**.
 
-The project was about giving several pieces of application behavior a common execution model instead of treating every button, display update and communication event as an isolated loop.
+The first challenge was deciding what *desktop* should mean on three STM32 microcontrollers. I wasn't trying to recreate a commercial window manager. I wanted a cursor, overlapping windows and small applications to continue behaving sensibly while input, sensing, screen composition and game updates were happening concurrently.
 
-*This retrospective was prepared in November 2026 from my earlier CV and project discussions. The displayed project date marks completion, not a claim that this page existed in 2023.*
+The report describes three requirements behind that goal: controlling the cursor through push-buttons, running multiple application tasks at the same time, and detecting user inactivity to enter and leave a sleep state. We ended up distributing ten FreeRTOS tasks across three boards.
 
-## Why the system needed tasks
-
-In a single polling loop, an application can easily block unrelated work while waiting for input or communication. The Mini-Desktop had to handle multiple activities, maintain interactive state and exchange information between boards.
-
-I organized the application into FreeRTOS tasks, with **priorities** controlling which work should respond promptly and **mutexes** protecting shared state. The point was not to launch ten identical loops; it was to define responsibilities that could proceed concurrently without corrupting shared application or display data.
+## The whole machine was a conversation between three boards
 
 <figure className="project-concept-figure">
-  <a href="/figures/journals/freertos-multiboard-desktop.svg" target="_blank" rel="noopener noreferrer" aria-label="Open freertos tasks and multi-board communication figure">
-    <img src="/figures/journals/freertos-multiboard-desktop.svg" alt="Three STM32 boards and their FreeRTOS tasks connected over UART, with priorities, mutexes and shared application state" loading="lazy" decoding="async" />
+  <a href="/figures/journals/mini-desktop-01-overall-system.svg" target="_blank" rel="noopener noreferrer" aria-label="Open full-size diagram: Three STM32 boards and their inter-board data paths, redrawn from the original overall block diagram.">
+    <img src="/figures/journals/mini-desktop-01-overall-system.svg" alt="Three STM32 boards and their inter-board data paths, redrawn from the original overall block diagram." loading="lazy" decoding="async" />
   </a>
-  <figcaption>Conceptual division of multi-board communication, FreeRTOS tasks and desktop-style interaction.</figcaption>
+  <figcaption>The original three-board arrangement, with sensor work, switch input and the desktop renderer assigned to separate boards.</figcaption>
 </figure>
 
-## Coordinating three STM32 boards
+The original system diagram groups the hardware into an ultrasonic/presence board, a button/cursor-input board and a desktop display/logic board. **Board 1 runs Tasks 1, 5 and 8; Board 2 runs Tasks 2, 3 and 4; Board 3 runs Tasks 6, 7, 9 and 10.** Those numbers are not merely diagram decorations: they correspond to the task names and C code in the report's appendix.
 
-The system combined local inputs and outputs over **GPIO** with board-to-board communication over **UART**. Those channels had different responsibilities. GPIO communicated directly with hardware state; UART carried information across a board boundary where timing and message arrival were not identical to a local function call.
+I needed to correct one imprecise description from the previous version of this article. **The inter-board control and six-bit sensor data used GPIO signals.** Board 3 then assembled the ASCII desktop and sent it to a PC terminal over **UART2**. Individual board code also contains UART debugging, but that does not make UART the transport between the three boards.
 
-The design therefore had to decide where state was owned and which events required communication. A shared desktop-like interface needs a consistent view of its active window, cursor and application state even when data originates on different boards.
+<figure className="project-concept-figure">
+  <a href="/figures/journals/mini-desktop-02-gpio-versus-uart.svg" target="_blank" rel="noopener noreferrer" aria-label="Open full-size diagram: Comparison of inter-board GPIO links and Board 3 UART2 terminal output.">
+    <img src="/figures/journals/mini-desktop-02-gpio-versus-uart.svg" alt="Comparison of inter-board GPIO links and Board 3 UART2 terminal output." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>GPIO carries control and distance data between boards; UART2 sends the completed character display to the PC terminal.</figcaption>
+</figure>
 
-## Scheduling and protecting shared state
+This distinction changes how I think about the failure modes. A GPIO input is read as a collection of signal levels. The serial display is a stream of characters, where an update in the middle of a frame can corrupt what the user sees. Their timing problems are different, even if both are part of the same interaction.
 
-I worked with **priority-based scheduling** and mutual exclusion. A fast input task must not corrupt state used by another task while a UI or application update is in progress. A mutex can protect that shared state, but holding it for too long can also delay a higher-priority task.
+## Board 1: ultrasonic distance and the decision to sleep
 
-Separating work into tasks helped, but did not remove the need to reason about ordering. The design had to account for which tasks produced events, which consumed them and which state could be modified concurrently.
+Board 1's three tasks were **`ULTRASONIC_Task`**, **`SleepCount_Task`**, and **`SleepButton_Task`**. Their reported creation priorities were 2, 1, and 3 respectively. The manual sleep-button path was deliberately given a high priority so it could react when other sensor or counter logic was running.
 
-This was my first practical exposure to the same kind of question that appears in larger systems: **Who owns mutable state, and what happens when another execution context arrives first?**
+<figure className="project-concept-figure">
+  <a href="/figures/journals/mini-desktop-03-board1-original.svg" target="_blank" rel="noopener noreferrer" aria-label="Open full-size diagram: Block arrangement for ultrasonic sensing, inactivity counting and sleep-button handling on Board 1.">
+    <img src="/figures/journals/mini-desktop-03-board1-original.svg" alt="Block arrangement for ultrasonic sensing, inactivity counting and sleep-button handling on Board 1." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Board 1's three reported tasks: ultrasonic sensing, inactivity counting and manual sleep control.</figcaption>
+</figure>
 
-## Desktop behavior on constrained hardware
+The HC-SR04 ultrasonic sensor used `PA5` for TRIG and `PA6` for ECHO through `TIM3` input capture. Sending a HIGH pulse of at least `10µs` on TRIG initiated a reading. The ECHO HIGH duration represented the outward and return travel of sound. Instead of trying to observe the pulse using a coarse task delay, the design captured rising and falling edges in hardware.
 
-The implemented interface included **cursor/window interaction**, concurrent application behavior, and **sleep/resume** handling. Those requirements are modest on a personal computer but significant on a microcontroller, where task scheduling, input handling and device communication all share a constrained runtime.
+<figure className="project-concept-figure">
+  <a href="/figures/journals/mini-desktop-04-ultrasonic-input-capture.svg" target="_blank" rel="noopener noreferrer" aria-label="Open full-size diagram: Timing sketch of TIM3 Input Capture, HC-SR04 TRIG/ECHO signals and distance calculation.">
+    <img src="/figures/journals/mini-desktop-04-ultrasonic-input-capture.svg" alt="Timing sketch of TIM3 Input Capture, HC-SR04 TRIG/ECHO signals and distance calculation." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>The timer captures ECHO rising and falling edges before converting pulse width into distance; this is a mechanism diagram, not a measured waveform.</figcaption>
+</figure>
 
-I tested the user-visible behavior across task transitions and board communication paths rather than treating the successful startup of FreeRTOS as sufficient evidence that the desktop worked.
+With the report's assumed timer resolution of one microsecond and sound-speed approximation, the derived one-way distance was:
 
-## What I implemented
+`Distance(cm) = Difference(µs) × 0.034 / 2`
 
-| Subsystem | Work performed |
-| --- | --- |
-| Execution model | Ten concurrent FreeRTOS tasks across the three-board system |
-| Communication | GPIO input/output and UART connections between boards |
-| Synchronization | Task priorities, mutexes and shared-state coordination |
-| Interaction | Cursor/window controls and concurrent application behavior |
-| Lifecycle | Sleep/resume behavior and state transitions |
+The report also discusses timer overflow, falling-edge-first capture cases, and switching input-capture polarity for the next event. These are the details that made the sensor logic more than a call to read a peripheral.
 
-The result was a **functioning multi-board RTOS application** with task-level scheduling and synchronization, not a demonstration that FreeRTOS could simply boot. The surviving account does not contain timing measurements or a formal worst-case response-time analysis, so those are not claimed here.
+I also found the alternative design discussion worth retaining. We considered using the RTOS tick for pulse timing, but the report records an unsuccessful attempt to increase the tick resolution enough to make that useful. At a **1ms** interval, a single tick represents roughly **17cm** of one-way ultrasonic travel under the same approximation. That error is too large for the centimeter-scale interaction we wanted, so the project kept TIM3 input capture. This is the report's implementation decision, not a universal claim that every FreeRTOS configuration is limited to the same tick rate.
 
-## Related projects
+### Turning distance into six GPIO bits
 
-- [Five-Stage RISC CPU and Pipeline Hazards](/projects/risc-cpu-five-stage-pipeline/)
-- [PyTokenizer: Lex/Yacc Front End](/projects/python-tokenizer-lex-yacc/)
-- [TensorFlow Lite Micro Memory Planning](/projects/tflite-micro-lifecycle-memory-planning/)
+The sensor measurement was then **clamped at 63cm**, because six output bits encode values from 0 through 63. Board 3 received that value by reading six specified pins: PC9, PC8, PB8, PC6, PB9 and PC5, corresponding to distance bits 5 through 0.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/mini-desktop-05-distance-sixbit-gpio.svg" target="_blank" rel="noopener noreferrer" aria-label="Open full-size diagram: Bit-to-pin mapping for six-bit ultrasonic distance input on Board 3.">
+    <img src="/figures/journals/mini-desktop-05-distance-sixbit-gpio.svg" alt="Bit-to-pin mapping for six-bit ultrasonic distance input on Board 3." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Six GPIO inputs on Board 3 represent a saturated 0–63 cm value; each pin mapping comes from the source appendix.</figcaption>
+</figure>
+
+We also had to treat proximity and inactivity as different triggers. The report used an ultrasonic presence flag, a timer/counter for inactivity, and a button/Move Enable signal to reset the inactive period. It describes an **approximately 15-second no-input rule** for automatic sleep, plus a direct manual sleep-button path.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/mini-desktop-10-sleep-entry-logic.svg" target="_blank" rel="noopener noreferrer" aria-label="Open full-size diagram: Conceptual state-transition diagram for automatic and button-triggered sleep.">
+    <img src="/figures/journals/mini-desktop-10-sleep-entry-logic.svg" alt="Conceptual state-transition diagram for automatic and button-triggered sleep." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>The report describes an inactivity threshold and a separate manual button path; no task-response timing was measured.</figcaption>
+</figure>
+
+A task priority does not by itself guarantee a response-time bound. The report records that the sleep-button task was placed above the other two tasks, and the final system demonstrates the intended screen transition; it does not contain a separate worst-case interrupt-to-display latency measurement.
+
+## Board 2: making five buttons behave like a cursor
+
+Board 2 had a much simpler job electrically, but not necessarily in its scheduling: `CLICK_Task` sampled button B1, `MOVE_Task` interpreted four directional switches, and `NONE_Task` emitted the no-movement state. It drove GPIO outputs including **PC1 (click), PA7/PA6 (direction), and PB6 (Move Enable)** toward the other boards.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/mini-desktop-06-board2-original.svg" target="_blank" rel="noopener noreferrer" aria-label="Open full-size diagram: Board 2 switch inputs, Click/Move/None tasks and direction, enable and click GPIO outputs.">
+    <img src="/figures/journals/mini-desktop-06-board2-original.svg" alt="Board 2 switch inputs, Click/Move/None tasks and direction, enable and click GPIO outputs." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Click, Move and None tasks share the button-to-GPIO interface, while Click remains independent of directional movement.</figcaption>
+</figure>
+
+A useful trick was to encode four directions with two bits. The Board 3 decoder documented these combinations for PC0, PC1 and PC2/Enable:
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/mini-desktop-07-cursor-direction-encoding.svg" target="_blank" rel="noopener noreferrer" aria-label="Open full-size diagram: Cursor direction truth table reconstructed from the Board 3 GPIO decoding logic.">
+    <img src="/figures/journals/mini-desktop-07-cursor-direction-encoding.svg" alt="Cursor direction truth table reconstructed from the Board 3 GPIO decoding logic." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Two direction bits select Up, Left, Down or Right only while Enable is asserted.</figcaption>
+</figure>
+
+When Enable was 0, the two direction bits should not move the cursor. When Enable was 1, the direction bits selected Up, Left, Down or Right. The click signal could remain active while movement continued, allowing a window to be dragged rather than simply selected.
+
+The report documents a real issue here: without protecting the mutually exclusive Move/None output state, both kinds of GPIO updates appeared together. The project used a shared cursor mutex to arbitrate that output path, while `CLICK_Task` was kept independent so a click could accompany movement.
+
+### An inconsistency I would check again
+
+The prose around the Move/None interaction says **Move should outrank None** when directional input is present. However, the original Board 2 `xTaskCreate` appendix assigns **`MOVE_Task` priority 1 and `NONE_Task` priority 2**, with `CLICK_Task` also at 2. I am not going to silently rewrite the historical code or assert which version was eventually flashed.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/mini-desktop-09-task-priority-source.svg" target="_blank" rel="noopener noreferrer" aria-label="Open full-size diagram: Recorded task priorities on the three separate FreeRTOS schedulers; Board 2 code and prose disagree.">
+    <img src="/figures/journals/mini-desktop-09-task-priority-source.svg" alt="Recorded task priorities on the three separate FreeRTOS schedulers; Board 2 code and prose disagree." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>These are priority values in the report's task-creation code, including the unresolved Move/None discrepancy.</figcaption>
+</figure>
+
+The ten-task inventory is still valuable, and so is the disagreement. It is a concrete regression question: read the running binary's actual task priorities and inspect which code path owns the cursor mutex when a button changes. Priority ordering is local to the FreeRTOS scheduler **on each board**, not a global ten-task ordering across three microcontrollers.
+
+## Board 3: four tasks, one terminal desktop
+
+The most visible part of the work lived on Board 3. `PrintNCalculate_Task` controlled cursor coordinates, window positions and the serial screen; `Sleep_Task` switched the display state; `Gomoku_Task` and `Curling_Task` updated their own application arrays.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/mini-desktop-08-board3-original.svg" target="_blank" rel="noopener noreferrer" aria-label="Open full-size diagram: Four Board 3 tasks for ASCII screen composition, sleep coordination, Gomoku and Curling.">
+    <img src="/figures/journals/mini-desktop-08-board3-original.svg" alt="Four Board 3 tasks for ASCII screen composition, sleep coordination, Gomoku and Curling." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Board 3 owns the serial renderer, sleep state and the two game tasks.</figcaption>
+</figure>
+
+This board did not display to an LCD. It built **ASCII text frames** and transmitted them over UART2 to a terminal connected to the computer. The source's terminal screenshots show small buttons for Gomoku and Curling and overlapping windows containing dots, grid lines, stones, scores and targets.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/mini-desktop-13-terminal-ui-gomoku-curling.svg" target="_blank" rel="noopener noreferrer" aria-label="Open full-size diagram: Vector transcription of Gomoku and Curling ASCII windows and their visible interface elements.">
+    <img src="/figures/journals/mini-desktop-13-terminal-ui-gomoku-curling.svg" alt="Vector transcription of Gomoku and Curling ASCII windows and their visible interface elements." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Recreated terminal motifs demonstrate the two game windows, without enlarging or claiming pixel fidelity to original photographs.</figcaption>
+</figure>
+
+That constrained output made two details important. The program needed to decide the frontmost window when two windows overlapped, and it needed a consistent set of characters while constructing and sending the frame. It used state flags such as `gomokuScreen`, `curlingScreen`, `isClick` and `isChange`, and arrays `gomokuArray` and `curlingArray` for the games.
+
+### Only redraw when the screen changes
+
+The renderer composed the background, window layers and cursor according to the current position and active-window state. The report states that coordinate calculations needed a delay around **50ms**, while UART printing needed about **200ms**. It handled this relationship inside the shared PrintNCalculate task with `delayPrint` rather than treating every coordinate update as an immediate full-screen print.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/mini-desktop-12-ascii-compositor.svg" target="_blank" rel="noopener noreferrer" aria-label="Open full-size diagram: Layering order of the ASCII terminal frame and the isChange update condition.">
+    <img src="/figures/journals/mini-desktop-12-ascii-compositor.svg" alt="Layering order of the ASCII terminal frame and the isChange update condition." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Background, windows and cursor share a character-based renderer; reported 50 ms and 200 ms values are not a frame-rate benchmark.</figcaption>
+</figure>
+
+Those are the delays described in the source code discussion, not an independently measured 5fps guarantee or a benchmark of the serial bus. What matters here is the original design decision: input may be handled more frequently than a full ASCII frame can sensibly be printed.
+
+### Why I needed CoordinateMutex
+
+An early failure was especially instructive. If a game task modified the array while PrintNCalculate was partway through printing, the terminal could show a mixture of the old and new screen. This is not a problem that adding a few more tasks would solve.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/mini-desktop-11-coordinate-mutex-tearing.svg" target="_blank" rel="noopener noreferrer" aria-label="Open full-size diagram: Illustration of a torn ASCII frame compared with a frame protected by CoordinateMutex.">
+    <img src="/figures/journals/mini-desktop-11-coordinate-mutex-tearing.svg" alt="Illustration of a torn ASCII frame compared with a frame protected by CoordinateMutex." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>An illustrative mixed-character frame explains the reported shared-array conflict; it is not a copy of the terminal screenshot.</figcaption>
+</figure>
+
+The report shows the project protecting screen-coordinate and game-array updates with `CoordinateMutex`. The intent was to ensure that a frame was consistent while it was assembled and sent. There is a trade-off here: a long serial transmission can also hold the lock longer than an input task would like. The report documents the need for the mutex and the observed mixed-screen behavior, but does not supply lock-hold-time traces. I therefore treat bounded lock duration as an engineering question, not as a measured property of the original build.
+
+## A desktop is more convincing when a window can move
+
+The original results section includes before/after terminal screenshots of a Gomoku window dragged to another part of the screen. Button B1 held the click state, and SW1–SW4 provided the direction. The program updated the window position when the cursor was at the title bar and dragging was active.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/mini-desktop-14-window-drag-before-after.svg" target="_blank" rel="noopener noreferrer" aria-label="Open full-size diagram: Before-and-after conceptual views of a dragged Gomoku terminal window.">
+    <img src="/figures/journals/mini-desktop-14-window-drag-before-after.svg" alt="Before-and-after conceptual views of a dragged Gomoku terminal window." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>The report shows window dragging through held Click and direction input; positions here are illustrative rather than pixel-matched.</figcaption>
+</figure>
+
+These screens are redrawn using vector text and window outlines; they are **not pixel-matched screenshots**. Their purpose is to preserve the interaction visible in the report without scaling up a blurry bitmap and pretending additional detail exists.
+
+The original display also showed Gomoku and Curling open at the same time. Clicking one brought it to the front, while the other continued to retain game state. The project wasn't trying to offer arbitrary PC programs; the important behavior was **multiple independent FreeRTOS application tasks sharing a coherent interface**.
+
+## Gomoku and distance-driven Curling
+
+For Gomoku, a click on an empty grid point placed a stone. The two players alternated O and X markers, and clicking an occupied position did not consume a turn. The task updated the game's shared array, which the renderer later displayed.
+
+Curling used the more unusual hardware link: a game piece or bottle cap moved toward the ultrasonic sensor. Board 1 sent the measured distance as six GPIO bits; Board 3 used the resulting `Distance` to update the displayed Curling ball and score. The report's usage sequence puts the target near **15cm**, describes visible movement within **50cm**, and includes a screen example of Player 1's score changing from **9 to 19 (+10)**.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/mini-desktop-15-curling-distance-game.svg" target="_blank" rel="noopener noreferrer" aria-label="Open full-size diagram: Ultrasonic distance input feeding Curling ball and score state with a documented scoring example.">
+    <img src="/figures/journals/mini-desktop-15-curling-distance-game.svg" alt="Ultrasonic distance input feeding Curling ball and score state with a documented scoring example." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Six distance bits drive the Curling interaction; the 9-to-19 point example comes from the original report.</figcaption>
+</figure>
+
+The six-bit range explains the hard limit, but it does not by itself prove the sensor's physical accuracy or latency. The numeric score change comes from the original report screenshot and narrative; no new gameplay test was executed for this revision.
+
+## Sleep was a shared-state transition, not simply a black screen
+
+Board 3's `Sleep_Task` watched the sleep GPIO signal, changed `screenState` and `isChange`, and used `SleepMutex` to coordinate activity. The source shows that the two games also participate in the sleep synchronization so their work can wait and resume with state preserved.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/mini-desktop-16-sleep-resume-screen.svg" target="_blank" rel="noopener noreferrer" aria-label="Open full-size diagram: Active-to-blank-to-resumed screen state under Sleep_Task and SleepMutex coordination.">
+    <img src="/figures/journals/mini-desktop-16-sleep-resume-screen.svg" alt="Active-to-blank-to-resumed screen state under Sleep_Task and SleepMutex coordination." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>A blank display and mutex-gated game tasks are documented; a complete halt of all ten tasks is not.</figcaption>
+</figure>
+
+It is tempting to describe this as “all ten tasks paused,” but that would be stronger than the evidence supports. The **screen transition and game-task mutex gating** are documented. The boards still have their own schedulers and housekeeping work; the source does not establish a complete hardware-wide suspended state across three chips.
+
+The result screenshots show the terminal turning blank after the sleep button was pressed during an active Curling session. The important idea was keeping the displayed state and application state in agreement rather than treating sleep as merely clearing a character buffer.
+
+## What the final report can actually prove
+
+The original conclusion shows the three intended behaviors: cursor drag, concurrently open Gomoku and Curling windows, and a button-triggered blank sleep screen. The report additionally includes source code for the three boards, GPIO tables, demonstration photos, scheduling discussion and cases where an unprotected output conflicted.
+
+The report documents **ten task creations**, inter-board GPIO connections and a serial desktop. It does not present formal timing guarantees, a worst-case latency study or a power-saving measurement. The source appendix also contains the **Move/None priority discrepancy** noted above. I have preserved that distinction rather than editing the narrative into an unrealistically flawless implementation.
+
+## What I took from building it
+
+Initially, three STM32 boards felt like three mostly separate programs. When I started passing actual user input, game state and screen output through them, the boundaries became much clearer. A one-bit GPIO level meant something different from an assembled UART frame. A mutex had to protect a real shared resource, not merely exist in the code. A high-priority task was useful only when its interactions with the rest of the system were understood.
+
+It was a small Mini-Desktop, but it was my first clear experience of **scheduling, data ownership and synchronization as one system design problem** rather than three unrelated topics. That way of thinking became useful in later embedded and infrastructure work.
+
+**Source:** *RTOS를 이용한 Mini Desktop 설계*, original university project report, 2023, pp. 2–32 and source appendix pp. 33–64. Its original photographs and screenshots are not redistributed here. The source-to-SVG evidence map and generator are included in the portfolio repository. The additional SVGs are reproducible explanatory drawings, not new hardware measurements.

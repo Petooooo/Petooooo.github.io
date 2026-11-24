@@ -858,5 +858,10 @@
   "Systolic Array on FPGA: Designing the Timing of Matrix Multiplication": "FPGA Systolic Array에서 데이터가 만나는 시점을 맞추기",
   "Systolic Array on FPGA: Designing the Timing of Matrix Multiplication | Jihwan Park": "FPGA Systolic Array에서 데이터가 만나는 시점을 맞추기 | 박지환",
   "How I moved matrix multiplication into a Verilog systolic array, and a separately verified 2×2 example explaining PE dataflow, operand skew, accumulation and output timing.": "Verilog로 FPGA Systolic Array 행렬곱 연산기를 구현하며 고민했던 PE 데이터 흐름과 Input Skew, Partial Sum, Output Valid를 별도의 검증용 2×2 예제로 풀어낸 기록.",
-  "Full Verilog design and implementation of FPGA systolic-array matrix multiplier (2024 project record)": "Verilog 기반 FPGA Systolic Array 행렬곱 연산기 전체 개발(2024년 프로젝트 기록)"
+  "Full Verilog design and implementation of FPGA systolic-array matrix multiplier (2024 project record)": "Verilog 기반 FPGA Systolic Array 행렬곱 연산기 전체 개발(2024년 프로젝트 기록)",
+  "FreeRTOS on Three STM32 Boards: Building a Mini-Desktop": "세 대의 STM32 보드로 만든 FreeRTOS Mini-Desktop",
+  "FreeRTOS on Three STM32 Boards: Building a Mini-Desktop | Jihwan Park": "세 대의 STM32 보드로 만든 FreeRTOS Mini-Desktop | 박지환",
+  "How three STM32 boards coordinated ten FreeRTOS tasks through GPIO, synchronized an ASCII desktop over UART, and supported Gomoku, distance-driven Curling and sleep/resume.": "세 대의 STM32 보드에서 10개의 FreeRTOS Task와 보드 간 GPIO 신호를 조율하고, UART로 ASCII 화면을 출력하면서 Gomoku·거리 기반 Curling·Sleep/Resume을 구현한 과정.",
+  "Input Capture": "Input Capture",
+  "System architecture, three-board coordination, cursor/window interaction, application state and RTOS synchronization in a team project": "팀 프로젝트에서 전체 시스템 구조, 세 보드 간 동작 조율, 커서·창 상호작용, 애플리케이션 상태 및 RTOS 동기화 구현"
 }

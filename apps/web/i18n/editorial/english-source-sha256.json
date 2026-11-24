@@ -28,7 +28,7 @@
   "document-translation-pipeline": "19ceed6a4eb7460a0036bdcf35e66d6bb9e47ff6e72e5eac9aef074217624f29",
   "rokaf-central-gpu-platform-kai-jupyterhub": "4dd9ab8d75443ee3e5eb27858a29fd3dc315988f60514018bfda9d42992e3f6e",
   "risc-cpu-five-stage-pipeline": "ae2fc32d143207dc49f328e9ada6249064e76e037254f0ebfa1a9eb752da3da3",
-  "freertos-multiboard-mini-desktop": "fc12493c0467e5524d0be4dea1120f43927ab110917bc5056a6aa574236005c5",
+  "freertos-multiboard-mini-desktop": "ca4a4802a7aa86918668884306365b3470870c2eff9489999668a58ce1da67c9",
   "fpga-systolic-array-matrix-multiplication": "a4a835929aea50b902b754cae72ddfc38d39e8ee0a1bba921bf7cefe34f16f83",
   "python-tokenizer-lex-yacc": "abea04a54cd3012e4aa40b90ae92e33463606d0d520fff0c9af1a915e4a3e836",
   "green-reviewer-flutter-web-platform": "3f5a773c8b1aa7aa0b04f6a6ae1c1a9deb02d180e5c9d672f748cef9343749e0",
