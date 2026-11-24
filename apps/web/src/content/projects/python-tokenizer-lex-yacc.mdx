@@ -2,7 +2,7 @@
 title: "PyTokenizer: Lexical and Syntax Analysis with Lex/Yacc"
 description: "Implemented a Python-oriented tokenizer and syntax-analysis front end using C, Lex and Yacc, separating token recognition from grammar processing."
 date: "2023-11-24"
-updated: "2026-11-20"
+updated: "2026-11-24"
 draft: false
 reviewed: true
 reviewStatus: "reviewed"
@@ -17,44 +17,187 @@ status: "archived"
 techStack: ["C", "Lex", "Yacc"]
 ---
 
-I developed **PyTokenizer**, a small Python-oriented tokenizer and syntax analyzer written in **C using Lex and Yacc**, in October–November 2023. The project was an opportunity to work directly with the first stages of a language-processing tool: recognizing meaningful source units and interpreting how they fit into syntax.
+In October–November 2023, I implemented **PyTokenizer**, a tokenizer and syntax analyzer for Python code, using C, Lex and Yacc. I was responsible for the entire development. The interesting boundary was between the characters that arrive from a source file and the structure the parser needs to recognize. A character sequence can be a valid identifier while the statement that contains it is grammatically invalid.
 
-Unlike a text search or regular-expression replacement script, the program needed to distinguish **the lexical meaning of a character sequence** from **the structural meaning of the tokens it produced**.
+The surviving project description records the language, tools, implementation role and purpose, but the original Lex and Yacc source files and execution logs could not be located in the material available for this retrospective. Rather than invent the old grammar, I use a small reproducible companion model in this retrospective to make the mechanics concrete. The model was written in November 2026 in Python, deliberately implements only one assignment grammar, and is not the original C project. Its results are identified separately below.
 
-*This retrospective was prepared in November 2026 from the earlier portfolio/CV entry. The historical project date is not the date this page was published.*
-
-## Lexical analysis before syntax
-
-Source text arrives as characters, but a parser expects a stream of token classes. In a Python-like language, identifiers, numbers, keywords, operators and punctuation each have different roles.
-
-I used **Lex** for the token-recognition layer. A lexer chooses patterns and emits token types, carrying associated values where necessary. The order and specificity of rules matter when two token patterns could match the same input.
+## From source characters to tokens
 
 <figure className="project-concept-figure">
-  <a href="/figures/journals/pytokenizer-lex-yacc.svg" target="_blank" rel="noopener noreferrer" aria-label="Open lex and yacc source-analysis pipeline figure">
-    <img src="/figures/journals/pytokenizer-lex-yacc.svg" alt="Python source processed by Lex tokenization and then Yacc grammar analysis" loading="lazy" decoding="async" />
+  <a href="/figures/journals/pytokenizer-lex-yacc.svg" target="_blank" rel="noopener noreferrer" aria-label="Open pytokenizer lex yacc figure">
+    <img src="/figures/journals/pytokenizer-lex-yacc.svg" alt="Lex and Yacc separate character recognition from grammar recognition. The diagram describes the documented toolchain, not a recovered module-level design." loading="lazy" decoding="async" />
   </a>
-  <figcaption>Tokenization and syntax processing are separate stages in the parser front end.</figcaption>
+  <figcaption>Lex and Yacc separate character recognition from grammar recognition. The diagram describes the documented toolchain, not a recovered module-level design.</figcaption>
 </figure>
 
-## Grammar processing with Yacc
+Lex-style lexical analysis recognizes patterns in source text and emits the corresponding token classes. Yacc-style parsing consumes those classes and checks the structure prescribed by grammar productions. The lexer can identify the name `total` and the operator `=`; it need not decide what a complete assignment means.
 
-The next stage used **Yacc** to describe syntax relationships between the token types. Where the lexer answers *what is this sequence?*, the parser answers *does this token sequence fit the supported grammar?*
+Consider the following input to the companion model:
 
-Keeping these stages separate made the program easier to reason about: changes in identifier recognition belonged in the lexical layer, while statement or expression structure belonged in the grammar layer.
+```python
+total = 2 + 3 * 4
+```
 
-## Working through ambiguous and invalid input
+The scanner produces the following sequence. The text matched by a rule is its lexeme. The token class tells the parser which terminal is present; the lexeme and source position can accompany that class as semantic information.
 
-A tokenizer and parser must handle more than the examples that were used while designing them. Reserved words versus identifiers, operator boundaries and unexpected input expose whether the lexical and grammatical layers agree.
+<figure className="project-concept-figure">
+  <a href="/figures/journals/pytokenizer-01-token-stream.svg" target="_blank" rel="noopener noreferrer" aria-label="Open pytokenizer 01 token stream figure">
+    <img src="/figures/journals/pytokenizer-01-token-stream.svg" alt="The companion scanner emits seven tokens and an EOF marker for the assignment, with one-based source columns. The lower row illustrates longest-match and rule-order behavior." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>The companion scanner emits seven tokens and an EOF marker for the assignment, with one-based source columns. The lower row illustrates longest-match and rule-order behavior.</figcaption>
+</figure>
 
-I worked through these cases as part of implementing the front end. The surviving CV material records a **Python tokenizer and syntax analyzer**, not a complete implementation of the entire modern Python language specification; I therefore keep the scope to the subset handled by the project.
+| Class | Lexeme | Start column |
+| --- | --- | ---: |
+| NAME | total | 1 |
+| ASSIGN | = | 7 |
+| NUMBER | 2 | 9 |
+| PLUS | + | 11 |
+| NUMBER | 3 | 13 |
+| STAR | * | 15 |
+| NUMBER | 4 | 17 |
+| EOF | — | 18 |
 
-## Result and connection to systems work
+The companion scanner matches ASCII identifiers, decimal digit sequences, a few operators and whitespace. It explicitly chooses the longest match at each position, breaking ties by the order of its rules, as Flex documents. Whitespace is skipped in this single-line grammar. The keyword `if` and comparison operator `==` are recognized to test the lexer boundary, even though neither is admitted by the assignment grammar.
 
-The completed work was a **C/Lex/Yacc front end for Python-oriented source input**, with distinct token and syntax processing. It gave me experience building a program around formal input structure and parser state.
+A schematic Lex fragment for this decision would look like this:
 
-That attention to representation later mattered in other projects: embedded protocols, document processing and the boundaries between structured data and its execution behavior.
+```text
+%%
+"if"                     { return IF; }
+[a-zA-Z_][a-zA-Z_0-9]*   { return NAME; }
+[0-9]+                   { return NUMBER; }
+"=="                     { return EQ; }
+"="                      { return ASSIGN; }
+[ \t]+                   { /* skip */ }
+%%
+```
 
-## Related projects
+This is a small illustrative fragment, not a transcription or a complete buildable scanner. The corresponding token declarations, remaining operators, location tracking and error handling are necessary in a real program. The executed companion implements the matching rule directly using regular expressions. It materializes the token sequence before parsing, unlike an ordinary generated parser that requests tokens on demand.
 
+For `ifx`, the identifier pattern consumes three characters while the keyword pattern consumes two, so NAME wins. For `if`, both matches have length two and the keyword rule wins by order. The scanner recognizes `==` as one EQ rather than two ASSIGN tokens. Reordering a short operator before a longer one does not defeat Flex's longest-match rule; priority matters when the consumed lengths tie.
+
+In a generated C front end, the interface between the stages is normally a call to `yylex()` by `yyparse()`. Terminal identifiers must agree with the parser's declarations, often through a generated header. A scanner can set `yylval` to pass the associated value and, with location support, preserve a line and column. A pointer into the scanner's mutable text buffer should not be retained as a durable identifier value without considering its lifetime. These are design considerations for the toolchain, not claims about the unrecovered 2023 implementation.
+
+## A grammar that expresses precedence structurally
+
+For the example I used the following Yacc-style grammar. The augmented start production used internally by the companion is omitted from this notation.
+
+```text
+stmt   : NAME ASSIGN expr ;
+expr   : expr PLUS term | term ;
+term   : term STAR factor | factor ;
+factor : NUMBER | NAME | LPAREN expr RPAREN ;
+```
+
+There are eight ordinary productions. Expressions can contain terms, and terms can contain factors. Multiplication is reduced inside a term before that term participates in an addition; a parenthesized expression becomes a factor. Left recursion represents left-associative chains such as repeated addition. There is no evaluation of the numeric result in this example.
+
+One could instead write a flat expression grammar and use Yacc precedence declarations. The flat grammar containing both `expr PLUS expr` and `expr STAR expr` admits multiple groupings. In an LR parser the question of shifting a multiplication operator or reducing a preceding addition can create a shift/reduce conflict. Explicit precedence and associativity resolve such a decision; separating expr, term and factor expresses the grouping directly.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/pytokenizer-03-precedence.svg" target="_blank" rel="noopener noreferrer" aria-label="Open pytokenizer 03 precedence figure">
+    <img src="/figures/journals/pytokenizer-03-precedence.svg" alt="The expression subtrees of the two accepted assignments differ at the root. Multiplication binds more tightly unless parentheses change the grouping." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>The expression subtrees of the two accepted assignments differ at the root. Multiplication binds more tightly unless parentheses change the grouping.</figcaption>
+</figure>
+
+The two structural results produced by the companion are:
+
+```text
+total = 2 + 3 * 4
+(assign total (+ 2 (* 3 4)))
+
+total = (2 + 3) * 4
+(assign total (* (+ 2 3) 4))
+```
+
+These are compact representations of the semantic trees returned by the companion, not the complete derivation trees and not numerical evaluation results. The original project description does not establish whether it constructed an AST, executed expressions or only reported syntax acceptance.
+
+## Following the parser state rather than guessing the tree
+
+The companion builds an SLR(1) table from the grammar rather than hardcoding the answer for the example. For each LR(0) item, a dot represents how far the parser has progressed through the right-hand side. Closure adds items for a nonterminal immediately after the dot; GOTO advances the dot over a symbol and computes closure again. Starting from the augmented rule, the reachable item sets form the parser states.
+
+Completed items produce reductions on the FOLLOW set of their left-hand-side nonterminal. Terminal transitions produce shifts; nonterminal transitions populate GOTO. The completed augmented start item accepts on EOF. When constructing the ACTION table, the model fails if two distinct actions attempt to occupy the same cell.
+
+This generated **16 states and zero table conflicts** for the example grammar. It uses SLR, not Yacc's traditional LALR(1) construction, so the state numbers and count do not describe the historic program or a particular Bison-generated table.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/pytokenizer-02-shift-reduce.svg" target="_blank" rel="noopener noreferrer" aria-label="Open pytokenizer 02 shift reduce figure">
+    <img src="/figures/journals/pytokenizer-02-shift-reduce.svg" alt="All 17 actions recorded by the companion SLR parser. State numbers belong to this generated table, not to the original Yacc parser." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>All 17 actions recorded by the companion SLR parser. State numbers belong to this generated table, not to the original Yacc parser.</figcaption>
+</figure>
+
+The 17 recorded actions show the important distinction between consuming input and recognizing structure. The first three actions shift NAME, ASSIGN and NUMBER. With PLUS as the lookahead, the parser reduces NUMBER to factor, factor to term and term to expr without consuming PLUS. It then shifts PLUS and the next NUMBER. At action 11, STAR is the lookahead and the parser shifts it rather than reducing the entire addition. The multiplication is reduced at action 14, followed by addition at action 15 and assignment at action 16. With stmt on the symbol stack and EOF as lookahead, action 17 accepts.
+
+A shift advances the input cursor and pushes a state. A reduction pops the symbols and states corresponding to the production's right-hand side, computes a semantic value if needed, and pushes the left-hand-side nonterminal and its GOTO state. The lookahead remains unconsumed during a reduction. The trace therefore includes more actions than input tokens.
+
+## Python's indentation is not ordinary whitespace
+
+An actual Python front end cannot simply discard every space or newline. The language uses logical lines, indentation levels, and INDENT/DEDENT tokens to express suites of statements without braces. Indentation is a stateful part of lexical analysis.
+
+```python
+if ready:
+    if valid:
+        total = 1
+    total = 2
+total = 3
+```
+
+The indentation stack starts with zero. On a greater indentation level the lexer pushes the new level and emits INDENT; on a smaller level it pops until the matching level is reached, emitting DEDENT for each pop. A decrease to a level not already present is an indentation error. Blank or comment-only logical lines and implicit line joining have additional rules; a complete implementation also needs tab expansion and the distinction between physical and logical lines.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/pytokenizer-04-indentation.svg" target="_blank" rel="noopener noreferrer" aria-label="Open pytokenizer 04 indentation figure">
+    <img src="/figures/journals/pytokenizer-04-indentation.svg" alt="Reference Python tokenizer events on lines 2–5 and the corresponding indentation levels. Block syntax is outside the companion grammar." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Reference Python tokenizer events on lines 2–5 and the corresponding indentation levels. Block syntax is outside the companion grammar.</figcaption>
+</figure>
+
+I used Python's standard-library tokenizer as a separate reference to observe INDENT on lines 2 and 3, then DEDENT on lines 4 and 5. This demonstrates the problem a Python-oriented lexer must solve. The assignment-only SLR model deliberately does not implement it, and the surviving project record does not establish how much of Python's indentation grammar PyTokenizer supported.
+
+## Testing the boundary between two error classes
+
+The useful tests are not only syntactically correct expressions. They also need inputs where tokenization succeeds but grammar recognition fails, and inputs outside the scanner's supported alphabet.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/pytokenizer-05-tests.svg" target="_blank" rel="noopener noreferrer" aria-label="Open pytokenizer 05 tests figure">
+    <img src="/figures/journals/pytokenizer-05-tests.svg" alt="Actual results of ten asserted cases in the companion model: four accepted, five syntax errors and one lexical error. These are not the 2023 project's test results." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Actual results of ten asserted cases in the companion model: four accepted, five syntax errors and one lexical error. These are not the 2023 project's test results.</figcaption>
+</figure>
+
+The executed companion test suite contains ten assertions on input classification:
+
+| Input | Expected and observed |
+| --- | --- |
+| total = 2 + 3 * 4 | Accepted |
+| total = (2 + 3) * 4 | Accepted |
+| ifx = 7 | Accepted |
+| x = y + 2 | Accepted |
+| x = 1 + | Syntax error |
+| x = * 2 | Syntax error |
+| x == 1 | Syntax error |
+| if = 1 | Syntax error |
+| x = (2 + 3 | Syntax error |
+| x = 2 @ 3 | Lexical error in this subset |
+
+In the missing-operand example, the scanner recognizes every character, but the parser encounters EOF in a state that needs an operand. In the comparison example, EQ is a valid lexical class, but the statement grammar expects ASSIGN. In the last example, the scanner rejects @ at its source column. Modern Python has a matrix multiplication operator @, so this last result is explicitly a limitation of the companion alphabet, not a Python syntax judgment.
+
+All ten classifications matched their expected values. The program also asserts the four-token longest-match example, both expression trees, the conflict-free table and the reference indentation events. The current companion is available as [a reproducible script in the portfolio repository](https://github.com/Petooooo/Petooooo.github.io/blob/main/apps/web/scripts/build-pytokenizer-figures.py); running it with Python 3 in that repository prints the full trace and regenerates the five accompanying analytical diagrams. No Lex or Yacc binary is needed for this demonstration.
+
+## What the original project established
+
+The recorded 2023 outcome remains a C/Lex/Yacc tokenizer and syntax analyzer for Python-oriented input. The retrospective cannot establish the exact grammar coverage, number of parser states, error-recovery policy, original output format, performance or CPython compatibility. The companion results belong to 2026 and do not replace historical test evidence.
+
+If I were extending the project now, I would start by making the lexer/parser contract testable: define terminal IDs and semantic value ownership, retain source spans, test keyword and operator boundaries, and compare accepted and rejected inputs against an explicitly documented language subset. Error recovery would be a separate decision from recognizing a grammatical sentence; diagnostics should distinguish an unexpected token from an unsupported character and avoid presenting a partial parse as successful.
+
+The enduring engineering problem is the interface between representations. A parser should not have to reconstruct lexical boundaries from raw source text, and a lexer should not decide arbitrary statement structure by expanding a collection of regular expressions. Keeping those responsibilities distinct makes the supported grammar, failure behavior and later extensions easier to examine.
+
+## References and related work
+
+- Project CV, PyTokenizer entry (October–November 2023): role, language and project description.
+- [Flex manual: How the input is matched](https://westes.github.io/flex/manual/Matching.html)
+- [GNU Bison manual: The parser algorithm](https://www.gnu.org/software/bison/manual/html_node/Algorithm.html)
+- [Python 3.12 language reference: Lexical analysis](https://docs.python.org/3.12/reference/lexical_analysis.html)
 - [FreeRTOS Multi-Board Mini-Desktop](/projects/freertos-multiboard-mini-desktop/)
 - [Five-Stage RISC CPU and Pipeline Hazards](/projects/risc-cpu-five-stage-pipeline/)
