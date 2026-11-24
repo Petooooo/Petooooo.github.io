@@ -140,5 +140,5 @@ g=ROOT/'apps/web/i18n/svg-ko-overrides.json'
 old=json.loads(g.read_text(encoding='utf8'))
 for k,v in LO.items():
     if k not in old: old[k]=v
-g.write_text(json.dumps(dict(sorted(old.items())),ensure_ascii=False,indent=2)+'\n',encoding='utf8')
+g.write_text(json.dumps(old,ensure_ascii=False,indent=2)+'\n',encoding='utf8')
 print(f'Generated {len(list(DIR.glob("escape-*.svg")))} Escape figures; registered {len(LO)} label mappings')
