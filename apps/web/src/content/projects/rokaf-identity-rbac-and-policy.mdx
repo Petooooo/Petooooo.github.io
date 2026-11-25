@@ -2,7 +2,7 @@
 title: "Kubernetes RBAC and Application Authorization"
 description: "Kubernetes ServiceAccounts, CI registry credentials, GitLab OAuth and evaluated object-level authorization models."
 date: "2026-11-15"
-updated: "2026-11-19"
+updated: "2026-11-25"
 draft: false
 reviewed: true
 reviewStatus: "reviewed"
@@ -23,7 +23,7 @@ I ran into a similar distinction with human sign-in. Outline used GitLab for aut
 
 These experiences left me with three separate questions: **Can an automated job operate the cluster? Can a person sign in to the application? Once signed in, can they access this particular object?** A single administrator/user flag could not answer all three.
 
-## The Runner needed an API identity; Kaniko needed registry credentials
+## Runner API identity and registry credentials
 
 With the Kubernetes executor, GitLab Runner asks Kubernetes to schedule Pods for its jobs. The identity making those requests matters. A Kubernetes **ServiceAccount identifies a workload**; the permissions come from the Role or ClusterRole rules and the bindings that associate them with that identity.
 
@@ -40,7 +40,22 @@ The same pipeline log may contain all of those failures, but they are not interc
   <figcaption>One platform, four distinct policy decisions. The final object-relationship row describes a design I explored, not a system-wide OpenFGA deployment or a real internal access-control map.</figcaption>
 </figure>
 
-## A short Role was not necessarily a small privilege
+## Kubernetes request authorization and binding scope
+
+The ServiceAccount identifies a process; it does not itself encode the privileges. The API server authenticates a request and evaluates its authorization attributes: subject, API group, resource, subresource, verb, namespace and sometimes object name. In an RBAC decision, the applicable RoleBindings and ClusterRoleBindings supply grants. A Role describes rules for one namespace. A ClusterRole can describe namespaced or cluster-scoped resources and is reusable; a RoleBinding can reference a ClusterRole but limits the grant to its own namespace. A ClusterRoleBinding instead grants the referenced ClusterRole across the cluster. The subject of a RoleBinding may be a ServiceAccount in another namespace.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/identity-01-rbac-scope.svg" target="_blank" rel="noopener noreferrer" aria-label="Open the RBAC identity and binding-scope diagram">
+    <img src="/figures/journals/identity-01-rbac-scope.svg" alt="Generic binding scope and request attributes. Authorization precedes admission for applicable operations; this is not the deployed policy configuration." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Generic binding scope and request attributes. Authorization precedes admission for applicable operations; this is not the deployed policy configuration.</figcaption>
+</figure>
+
+RBAC rules are additive: there is no negative Role rule that cancels another grant. Removing one binding therefore may not revoke an action that another binding already allows. Authentication failures, an authorization denial and an admission rejection must also be separated. The Kubernetes API can reject an unauthorized request with 403; an admission policy can still reject a write after authorization permits it. A successful access review does not guarantee that a particular object will pass admission, quota, scheduling or runtime checks.
+
+The Runner manager and the build Pod need not use the same ServiceAccount. The former needs permissions appropriate to its executor configuration; the latter may not need Kubernetes API access at all. In Kubernetes v1.32, Pods normally receive a short-lived projected ServiceAccount token, which is rotated by the kubelet. Disabling automatic token mounting for a workload that does not use the API reduces credential exposure. This is an architectural design principle, not a claim about the historical Runner's specific token configuration. The exact historical Runner permission rules were not retained in this record. GitLab's current executor permission table varies with its feature flags and execution mode, so the observer example below is not a complete Runner permission set.
+
+## Least privilege and effective grants
 
 A broad wildcard can make a Kubernetes Role easy to write while allowing much more than the job needs. Viewing Pod health and selected events does not require reading every Secret or opening an interactive `exec` session in every container.
 
@@ -50,17 +65,45 @@ I also did not want a routine build or deploy job to inherit the exceptional aut
 
 `kubectl auth can-i` is useful for checking the effective decision, provided the tested identity, namespace, resource and verb match the actual request. A single successful `can-i` answer does not describe the entire permission set. Checking that a required operation is allowed is only half the test; unrelated and sensitive operations should still be denied.
 
-## The GitLab sign-in failure was not an authorization denial
+### The Pod log is a separate API resource
+
+In November 2026 I considered allowing an existing ServiceAccount to read another Pod's logs. The design question was not whether to give it a general administrative role, but whether the API request for logs was already covered. Kubernetes exposes logs as the `pods/log` subresource. Permission to get a Pod object does not implicitly allow getting its logs. Listing Pod names and reading their metadata are also distinct operations.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/identity-02-log-subresource.svg" target="_blank" rel="noopener noreferrer" aria-label="Open the Pod and log subresource permission matrix">
+    <img src="/figures/journals/identity-02-log-subresource.svg" alt="Expected decisions for a synthetic observer with only pods get/list and pods/log get; other bindings or authorizers could change the effective result." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Expected decisions for a synthetic observer with only pods get/list and pods/log get; other bindings or authorizers could change the effective result.</figcaption>
+</figure>
+
+For a read-only observer, the narrow policy shape is to grant the necessary Pod discovery and log retrieval actions in the namespace containing the target. The identity can originate elsewhere. Reading logs is not permission to open an exec session, modify the Pod or read Secrets through their API. Logs themselves may contain sensitive data, however, and should not be treated as harmless simply because the operation is read-only.
+
+This was a permission-design discussion, not a verified rollout. In a real review I would examine the effective authorization of the actual subject and include negative controls for unrelated resources, verbs and namespaces. A check performed by an administrator without the intended subject's credentials or authorized impersonation would measure the wrong identity.
+
+## GitLab OAuth and backend connectivity
 
 When Outline reported `connect ETIMEDOUT` while reaching a GitLab identity endpoint, I needed to trace the backend request, not grant the user a stronger application role. During related troubleshooting, `EAI_AGAIN` appeared as a separate name-resolution failure. A DNS lookup problem and a connection timeout can both look like “login does not work” to the person in the browser, but they happen at different points.
 
 A browser displaying the GitLab authorization page says little about whether the **Outline server** can reach GitLab's token or user-information endpoints. Nor does a successful OAuth exchange imply that the authenticated person may edit every document.
 
-This made the authentication/authorization distinction practical rather than theoretical. GitLab OAuth2 and OIDC help the application establish an identity and session. The application's own resource model still has to answer whether a user may administer a workspace, invite a member or edit a specific document. Kubernetes RBAC cannot see those domain objects.
+This made the authentication/authorization distinction practical rather than theoretical. GitLab's OAuth2 integration helps the application obtain authorized profile information and establish a session; OIDC is a separate identity-layer option. The application's own resource model still has to answer whether a user may administer a workspace, invite a member or edit a specific document. Kubernetes RBAC cannot see those domain objects.
 
 I kept the observed failures and the unresolved parts of that investigation separate in the [Outline authentication record](/projects/rokaf-internal-app-auth-and-tls/). I do not present the timeout as a denied document policy or claim that every affected login path was subsequently verified.
 
-## A document's owner is not a cluster administrator
+### The identity exchange and resource decision are distinct
+
+OAuth 2.0 delegates access to a protected API; OpenID Connect adds an authentication layer on top. GitLab's OAuth integration can supply the authenticated user's profile through an authorized user-information request. In the authorization-code flow, the browser carries a redirect and an authorization code, while the application backend exchanges the code and may request the profile. The browser succeeding at its part therefore does not establish backend connectivity. The recorded DNS and connection errors are consistent with failures before the application could establish or use a session; they do not establish an object-level denial.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/identity-03-oauth-boundary.svg" target="_blank" rel="noopener noreferrer" aria-label="Open the OAuth backend connectivity diagram">
+    <img src="/figures/journals/identity-03-oauth-boundary.svg" alt="Simplified authorization-code and session flow. The observed errors concern name resolution and connection; the diagram does not identify a specific failed exchange for every incident." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Simplified authorization-code and session flow. The observed errors concern name resolution and connection; the diagram does not identify a specific failed exchange for every incident.</figcaption>
+</figure>
+
+A robust OIDC integration would validate token issuer, audience, signature and expiration and the relevant flow protections. These checks establish a trustworthy identity, not permission to edit a specific document. The application still needs its own enforcement point on the protected request.
+
+## Object-level authorization with Keycloak and OpenFGA
 
 Once several applications were in use, a shared sign-in system alone no longer seemed sufficient. A user might be able to view one workspace without being allowed to manage its members; a team member might inherit edit access to one document but not another; and removing a member should revoke access that was granted only through that team.
 
@@ -72,6 +115,19 @@ This section describes **an explored identity and relationship-authorization mod
 
 A shared policy service would also become a new dependency. What happens when team membership is revoked but cached authorization results remain? What should the application do if an external decision service is unavailable? The convenience of one policy model is not worth silently granting access when the decision cannot be obtained.
 
+### Modeling inherited and direct access
+
+Consider a synthetic policy with a team membership relation and a document viewer relation. A document may grant viewer to an individual or to the userset of members of a team. The effective viewer set is the union of the direct viewers and the members of teams granted viewer. A model of this kind can be expressed using relationship tuples and relation definitions rather than a global administrator/user flag.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/identity-04-relation-graph.svg" target="_blank" rel="noopener noreferrer" aria-label="Open the direct and inherited viewer relationship graph">
+    <img src="/figures/journals/identity-04-relation-graph.svg" alt="Hypothetical direct and inherited viewer relationships. The six before/after decisions are checked using a local set model, not by a deployed OpenFGA service." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Hypothetical direct and inherited viewer relationships. The six before/after decisions are checked using a local set model, not by a deployed OpenFGA service.</figcaption>
+</figure>
+
+If Alice obtains access only from Team A, removing her membership removes that path. Bob's independent direct relation remains valid; Carol has neither path. This is not a guarantee that every revocation takes effect immediately in a distributed implementation: a cached allow, replication lag or another relationship could still affect the next decision. OpenFGA exposes a latency-versus-consistency preference for its query APIs; the application must still specify its own acceptable revocation latency, cache invalidation and failure handling. A relationship engine decides an authorization question, but the application must enforce that decision at the resource boundary rather than only hiding UI controls.
+
 ## Authorization Allow/Deny Tests
 
 It is easy to test only the happy path. If a Runner can create the build Pod it is meant to create, the job appears healthy. But that result says nothing about whether it can also read an unrelated namespace's Secrets. A permission review needs both sides of that boundary.
@@ -79,5 +135,7 @@ It is easy to test only the happy path. If a Runner can create the build Pod it 
 I would apply the same method to document policies. An owner should be able to perform owner-only actions; an editor should not automatically inherit those actions. An unrelated user should not read a private object. Removing a team relationship should change subsequent access decisions as intended, without stale privileges remaining indefinitely.
 
 My operational work covered **Kubernetes and CI authorization boundaries and GitLab OAuth integration**. Keycloak and OpenFGA were evaluated for object-level authorization rather than deployed as a completed, platform-wide policy service. For that design, I would require both allow and deny checks with the requesting identity, target resource and decision point captured together.
+
+**Public references:** [Kubernetes RBAC](https://kubernetes.io/docs/reference/access-authn-authz/rbac/) · [API authorization](https://kubernetes.io/docs/reference/access-authn-authz/authorization/) · [ServiceAccounts](https://v1-32.docs.kubernetes.io/docs/concepts/security/service-accounts/) · [GitLab Runner Kubernetes executor](https://docs.gitlab.com/runner/executors/kubernetes/) · [GitLab OAuth provider](https://docs.gitlab.com/integration/oauth_provider/) · [OpenID Connect](https://openid.net/developers/how-connect-works/) · [OpenFGA user groups](https://openfga.dev/docs/modeling/user-groups) · [OpenFGA query consistency](https://openfga.dev/docs/interacting/consistency).
 
 **Related records:** [Nexus/Kaniko and closed-network CI](/projects/rokaf-private-artifacts-and-ci/) · [Outline and GitLab authentication boundaries](/projects/rokaf-internal-app-auth-and-tls/) · [K3s platform operations](/projects/independent-on-premises-k3s-platform-engineering/).
