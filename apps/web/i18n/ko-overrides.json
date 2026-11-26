@@ -900,5 +900,12 @@
   "JBD2": "JBD2",
   "ext4": "ext4",
   "Writeback": "Writeback",
-  "Block I/O": "Block I/O"
+  "Block I/O": "Block I/O",
+  "Host Memory Accounting and cgroups": "호스트 메모리 Accounting과 cgroups",
+  "Host Memory Accounting and cgroups | Jihwan Park": "호스트 메모리 Accounting과 cgroups | 박지환",
+  "A host-wide memory spike not explained by selected Pod metrics, proportional resident accounting, cgroup charges and evidence-led attribution.": "Pod 메트릭으로 설명되지 않은 호스트 메모리 급증, 비례 상주 메모리 집계, cgroup Charge와 증거 기반 귀속 분석.",
+  "Host memory attribution and Linux memory accounting investigation": "호스트 메모리 귀속 및 Linux 메모리 집계 조사",
+  "Aug 2026": "2026년 8월",
+  "Memory": "메모리",
+  "RSS": "RSS"
 }

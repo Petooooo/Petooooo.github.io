@@ -158,6 +158,8 @@ A second distinction is accounting versus selection. RSS counts resident mapping
 
 Those measurements were avenues for investigation, not a completed attribution. The evidence supports **a host-wide spike, an earlyoom process selection, and a mismatch with the sampled Pod metrics**. It does not identify the actual source of the host's extra memory consumption.
 
+A later August OOM task dump recovered during the editorial review identifies a host management daemon with a very large resident mapping footprint. The [host memory accounting investigation](/projects/linux-host-memory-accounting-cgroups/) examines that additional lead and its units; it does not prove the initiating allocation path or a time-aligned match to this earlier observation.
+
 ## Memory Pressure Evidence Capture
 
 The difficulty in these cases was not finding a single command to reduce memory use. It was having enough evidence from **before** the system became unresponsive or was rebooted.

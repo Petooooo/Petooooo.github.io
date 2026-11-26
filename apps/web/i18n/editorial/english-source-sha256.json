@@ -22,7 +22,7 @@
   "rokaf-service-lb-hostport-conflict": "6b2d5bd5a4daae723e960462086d3927ed7787ed87fbae71724d68c74caa3600",
   "rokaf-stateful-storage-and-recovery": "2f744a7c382887fc03f48774a4276cf5a6e11b9be6e686e6e4e05665854f7eec",
   "tflite-micro-lifecycle-memory-planning": "68bf11bb564ca389d9b3218371567b27c4df14c4410bc39d69a8ca53cf2e1a85",
-  "rokaf-memory-pressure-and-service-recovery": "a6056905e3b987421c8a6e4e881c3201173a864fb831d4cac9b604d50e2f374e",
+  "rokaf-memory-pressure-and-service-recovery": "68d74a67722fc4851d54cf8e2fed0bc3dc15de000c8c1b39d7bfff992e652ea7",
   "rokaf-storage-placement-and-failure-domains": "f59e15f3204afc9d5649190186d2742ad7e3a2d99761dcd5bfa20a0e58c02a47",
   "rokaf-k3s-cni-service-datapath": "e132b7eb612f18a9367e680509a1e16f0b1d123d7709264bf40fd909a1a85a7a",
   "document-translation-pipeline": "19ceed6a4eb7460a0036bdcf35e66d6bb9e47ff6e72e5eac9aef074217624f29",
@@ -37,5 +37,6 @@
   "rokaf-k3s-pod-density-capacity": "7cfbfbad8389c6c1d3e17c9038f1582ee1d8dacbed9e873ffa74df194809cfa9",
   "linux-containerd-overlayfs-snapshot-failures": "9a4599a1514bb5adfac00aa75e7a55408444e0e9a0684513d86ca8771894fa25",
   "linux-vfs-mount-lifecycle": "8e35de21037564069abe399ef224df59e37338cc906cbdba5c2b2e528d72c7a1",
-  "linux-disk-io-journaling-writeback": "2411875549b4d54380d66fee5e769dc524b0b7805f08cb5d3bac3bb8b726598e"
+  "linux-disk-io-journaling-writeback": "2411875549b4d54380d66fee5e769dc524b0b7805f08cb5d3bac3bb8b726598e",
+  "linux-host-memory-accounting-cgroups": "538a7459b9cbc1435b272db4ad50d882e042cd1d504d6e855fb2511167896a9f"
 }

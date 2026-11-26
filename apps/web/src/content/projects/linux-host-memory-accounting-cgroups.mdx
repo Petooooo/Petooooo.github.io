@@ -1,0 +1,126 @@
+---
+title: "Host Memory Accounting and cgroups"
+description: "A host-wide memory spike not explained by selected Pod metrics, proportional resident accounting, cgroup charges and evidence-led attribution."
+date: "2026-11-26"
+updated: "2026-11-26"
+draft: false
+reviewed: true
+reviewStatus: "reviewed"
+sensitivity: sanitized
+category: "Engineering Investigation"
+area: "Linux Memory & Reliability"
+tags: ["Linux", "Memory", "cgroups", "Kubernetes", "Prometheus", "RSS"]
+type: "troubleshooting"
+role: "Host memory attribution and Linux memory accounting investigation"
+period: "Aug 2026"
+status: "building"
+techStack: ["Linux", "cgroups", "K3s", "Prometheus"]
+---
+
+In August 2026, a host memory graph climbed from roughly one fifth of its capacity toward saturation. The Pod memory charts I inspected did not show a corresponding jump. A separate earlyoom record named a selected process with approximately 608 MiB of resident memory. That selection did not account for the host-wide rise. The earlier [memory-pressure investigation](/projects/rokaf-memory-pressure-and-service-recovery/) focuses on pressure and intervention; here I wanted to understand what the measurements actually counted.
+
+A later August 30–31 investigation retained an OOM task-table row for a host management daemon. Its RSS was 54,101,261 pages, swapents was 2,687,499 pages, and pgtables_bytes was 910,581,760 bytes. For a 4 KiB base page those correspond to approximately 206.4 GiB resident, 10.25 GiB in swap entries and 868 MiB of page tables. These quantities have different meanings and the conversion is conditional on the historical page size. An OOM task dump reports eligible tasks and is not a list of the killed processes. The row makes this daemon a substantial memory-consumer candidate, but does not establish that the two August observations were exactly time-aligned, that all the pages were private, or which allocation path caused the increase. I have not retained a complete per-mapping history or verified a permanent fix. The host identity, PID, management endpoint and other operational details are omitted.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/memacct-01-evidence.svg" target="_blank" rel="noopener noreferrer" aria-label="Open memacct 01 evidence diagram">
+    <img src="/figures/journals/memacct-01-evidence.svg" alt="Separate observations from the August investigation. The task dump provides a much stronger consumer lead than a selected victim alone, but no synchronized attribution or historical page-size measurement is implied." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Separate observations from the August investigation. The task dump provides a much stronger consumer lead than a selected victim alone, but no synchronized attribution or historical page-size measurement is implied.</figcaption>
+</figure>
+
+## Resident mappings are not unique physical memory
+
+Virtual size (VSZ or VmSize) describes mapped virtual address space. It includes reservations and mappings that need not be resident. RSS counts pages currently resident in a process's address space, including shared mappings. A shared library page can be counted in more than one process. Summing every RSS can therefore overstate the physical memory represented by those mappings.
+
+PSS distributes each resident page's size across its mapping references: a page mapped once contributes its full size; a page mapped twice contributes half to each mapping. USS is commonly estimated as private clean plus private dirty resident memory in smaps; it is not a complete accounting of the kernel resources that would be freed at process exit. Huge-page fields and special mappings need care. Nor does summing PSS across selected processes count every unreferenced cache page or every kernel allocation.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/memacct-02-shared-pages.svg" target="_blank" rel="noopener noreferrer" aria-label="Open memacct 02 shared pages diagram">
+    <img src="/figures/journals/memacct-02-shared-pages.svg" alt="Illustrative private and shared pages: RSS counts both mappings of a shared region, whereas PSS apportions it. Page sizes and values are synthetic." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Illustrative private and shared pages: RSS counts both mappings of a shared region, whereas PSS apportions it. Page sizes and values are synthetic.</figcaption>
+</figure>
+
+### A measured shared mapping
+
+I wrote a small Linux experiment that creates a 4 MiB anonymous memory-backed file with memfd_create, maps it with MAP_SHARED, touches each page, forks a child and synchronizes after the child touches the same mapping. Both processes remain alive while the parent reads only the matching mapping in each /proc/PID/smaps. A pipe coordinates cleanup. The experiment uses 4 MiB of shared backing data, not an allocation large enough to stress the host.
+
+| Mapping measurement | Parent | Child | Sum |
+| --- | ---: | ---: | ---: |
+| Size (KiB) | 4096 | 4096 | 8192 |
+| RSS (KiB) | 4096 | 4096 | 8192 |
+| PSS (KiB) | 2048 | 2048 | 4096 |
+| Private clean + dirty (KiB) | 0 | 0 | 0 |
+
+The measured shared-dirty amount was 4096 KiB in each mapping. The summed RSS was twice the shared resident data, whereas PSS accounted for it once across these two mappings. These are actual smaps results from the companion script, not values from the incident and not whole-process memory usage. The test does not measure physical PFNs, overall host memory or a cgroup charge.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/memacct-03-experiment.svg" target="_blank" rel="noopener noreferrer" aria-label="Open memacct 03 experiment diagram">
+    <img src="/figures/journals/memacct-03-experiment.svg" alt="Actual mapping-only smaps results for the two-process 4 MiB experiment. PSS sums to 4096 KiB; RSS sums to 8192 KiB." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Actual mapping-only smaps results for the two-process 4 MiB experiment. PSS sums to 4096 KiB; RSS sums to 8192 KiB.</figcaption>
+</figure>
+
+## Host memory counters overlap
+
+I would begin host-level attribution with MemAvailable and changes in AnonPages, Cached, Shmem, Slab, SReclaimable, SUnreclaim, KernelStack, PageTables and SwapFree. MemAvailable estimates what can be used without swapping; it is not a separate disjoint pool of physical pages. Cached includes tmpfs/shared-memory accounting, and Slab includes reclaimable and unreclaimable slab. Page tables and kernel stacks are real memory costs that are not part of a process's ordinary resident mappings.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/memacct-04-host-fields.svg" target="_blank" rel="noopener noreferrer" aria-label="Open memacct 04 host fields diagram">
+    <img src="/figures/journals/memacct-04-host-fields.svg" alt="Selected host counters and subset relationships. This is an accounting map, not an exhaustive partition or a measured memory composition." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Selected host counters and subset relationships. This is an accounting map, not an exhaustive partition or a measured memory composition.</figcaption>
+</figure>
+
+A rising AnonPages would narrow the investigation toward anonymous resident data; increasing unreclaimable slab would point toward a different set of questions. A single sample of either is insufficient to infer a leak. A mapping can contain both file-backed and anonymous data after copy-on-write. Dirty and Writeback describe page state, not additional independent pools; the [disk I/O record](/projects/linux-disk-io-journaling-writeback/) discusses how they can affect reclaim latency.
+
+## cgroup charges are not process PSS
+
+Containers share the host kernel. The memory controller tracks resource use in a hierarchy rather than isolating RAM into separate physical machines. On cgroup v2, memory.current includes the cgroup and its descendants. The memory.stat breakdown includes anonymous, file and kernel memory; fields such as shmem and slab are related subcategories rather than additional independent totals. Kernel accounting details vary across releases. Swap usage is exposed separately by memory.swap.current.
+
+A charge normally remains associated with the cgroup that instantiated the memory until it is released; moving a process does not retroactively transfer all its old allocations. Shared data used by several cgroups need not be charged proportionally to each of them. PSS and memory.current therefore answer different questions. The former apportions mapped resident pages, while the latter reflects controller accounting, including memory not represented by mapped resident pages.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/memacct-05-cgroup-hierarchy.svg" target="_blank" rel="noopener noreferrer" aria-label="Open memacct 05 cgroup hierarchy diagram">
+    <img src="/figures/journals/memacct-05-cgroup-hierarchy.svg" alt="Synthetic hierarchy and charge example. A parent already includes its descendants; one shared region may be charged to a cgroup without being apportioned like PSS." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Synthetic hierarchy and charge example. A parent already includes its descendants; one shared region may be charged to a cgroup without being apportioned like PSS.</figcaption>
+</figure>
+
+I would verify whether the node uses cgroup v1, v2 or a hybrid arrangement before interpreting any files. The original investigation does not retain that configuration, so the examples use v2 explicitly. A Pod can have a parent cgroup with several containers beneath it, while system services and other runtime workloads may live elsewhere. Summing Pod parents and their container descendants counts the same charge twice. Even non-overlapping selected subtrees do not account for the entire host.
+
+The limits and event counters add a different dimension. memory.high can induce throttling and reclaim without necessarily triggering OOM; memory.max is a hard charge boundary with possible cgroup-local OOM. memory.events counts hierarchical events, while memory.events.local confines the count to the cgroup itself. Comparing deltas requires a stable identity and interval; a new cgroup after a restart may have new counters. The earlier earlyoom article covers the separate mechanisms for choosing a victim.
+
+## Working set is an estimate, not a conservation law
+
+The Kubernetes resource metrics pipeline reports memory working set. The estimate depends on the statistics provider and operating system. In the familiar cAdvisor implementation, working set is usage minus inactive file cache, floored at zero (using the relevant inactive-file field for the cgroup version). It still includes some reclaimable memory and is not equivalent to RSS, PSS, or a guarantee of unreclaimability.
+
+For example, a synthetic cgroup with 1024 MiB of usage and 384 MiB of inactive file cache yields a 640 MiB working set in that formula. A change in inactive file cache can affect the reported working set even if raw usage does not change. Conversely, growth outside the selected Pod cgroups is invisible to their series. The historical dashboard's exact query, provider and sample alignment were not retained; this calculation does not claim that the dashboard used this precise formula.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/memacct-06-working-set.svg" target="_blank" rel="noopener noreferrer" aria-label="Open memacct 06 working set diagram">
+    <img src="/figures/journals/memacct-06-working-set.svg" alt="Illustrative working-set calculation and a scope mismatch. The numbers are hypothetical; the actual August dashboard expression is unknown." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Illustrative working-set calculation and a scope mismatch. The numbers are hypothetical; the actual August dashboard expression is unknown.</figcaption>
+</figure>
+
+## Attribution before selecting a remedy
+
+I would collect the following evidence over the same timestamps and boot, using the node and cgroup identities rather than just a process name. These are read-only example commands, not a transcript of the incident.
+
+```bash
+cat /proc/meminfo
+cat /proc/pressure/memory
+ps -eo pid,comm,rss,vsz --sort=-rss
+cat "/proc/$PID/smaps_rollup"
+cat "/proc/$PID/cgroup"
+findmnt -t cgroup,cgroup2
+```
+
+Once a relevant v2 cgroup path is resolved in the host mount namespace, I would inspect memory.current, memory.stat, memory.swap.current, memory.events and memory.events.local if available. The host series should be compared with raw container usage and working set over the same interval, checking for duplicate parent series, label filtering, restarts and missing scrapes. A flat graph can be a consequence of the query scope or stale data. PSI measures stalled execution, not memory ownership. RSS ranking is useful to identify candidates, but smaps is comparatively expensive, so I would sample selected processes rather than continuously scan every mapping under pressure.
+
+The daemon row is a useful lead precisely because the original Pod view was incomplete. The next question is whether anonymous resident pages, shared mappings, kernel charges or some combination account for that row and for the change over time. Restarting a service may restore availability without identifying the allocation path or proving that recurrence is prevented. The distinction I want to retain is between a victim, a large mapped consumer, the cgroup charged for memory, and the root cause of continued growth.
+
+**Related records:** [Memory pressure and earlyoom](/projects/rokaf-memory-pressure-and-service-recovery/) · [Linux VFS and Mount Lifecycle](/projects/linux-vfs-mount-lifecycle/) · [Disk I/O and writeback](/projects/linux-disk-io-journaling-writeback/) · [Observability and failure evidence](/projects/rokaf-observability-and-failure-evidence/).
+
+**References:** [Linux proc filesystem](https://docs.kernel.org/filesystems/proc.html) · [cgroup v2 memory controller and ownership](https://docs.kernel.org/6.6/admin-guide/cgroup-v2.html) · [Linux OOM task dump source](https://github.com/torvalds/linux/blob/master/mm/oom_kill.c) · [Kubernetes resource metrics pipeline](https://kubernetes.io/docs/tasks/debug/debug-cluster/resource-metrics-pipeline/) · [cAdvisor working set implementation discussion](https://github.com/kubernetes/kubernetes/issues/118916) · [PSI](https://docs.kernel.org/accounting/psi.html) · [memfd_create(2)](https://man7.org/linux/man-pages/man2/memfd_create.2.html).
