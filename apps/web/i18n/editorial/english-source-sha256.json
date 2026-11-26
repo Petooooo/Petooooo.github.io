@@ -14,7 +14,7 @@
   "rokaf-langfuse-v4-migration-field-notes": "6ee418b8ea61861aff6205516f034bd4dbcf26bece5d1611ebc5fef0121c0eb0",
   "rokaf-networking-and-tls": "45dfbc695e14fc27c8f56d6affe4de221978e7a5303427a853504ab5e0f99d4d",
   "rokaf-object-storage-migration": "4e3165b7c21b56bfe9a81178f859d24b3eab4a5920ebcd18958a8e8deda23e9c",
-  "rokaf-observability-and-failure-evidence": "20d70c373deed726ad973cb5de1f0d7cfdeaf1eed57d710c54235ce7d433f3d4",
+  "rokaf-observability-and-failure-evidence": "584d4603712f50871a994f624113c451379ba09d40c7b6271a54018914e68eb0",
   "rokaf-offline-gitops-delivery": "1aac9932de7b7696b9f8eda1105d804301dc9bc4f379ac3ccb7d3904ad1e6afc",
   "rokaf-plane-ce-bootstrap-routing": "5949f440f27a6ba18d6d351a44c0ffabeb5f5c0a3e534483701f3dde47889a1d",
   "rokaf-private-artifacts-and-ci": "d02447c9fe3faaa431fafa0907794b6403797de4475ddd5403169a598168abb4",

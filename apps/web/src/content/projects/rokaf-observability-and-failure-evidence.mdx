@@ -83,6 +83,68 @@ I considered verifying filesystem and PVC usage, examining WAL/head/block sizes,
 
 A disciplined recovery sequence would start with independent filesystem and Prometheus log evidence, preserve the useful diagnostic state, restore writable headroom, and only then test direct exporter response, target health, fresh sample ingestion and the Grafana query. **These are acceptance criteria, not experiments I can claim to have fully completed.**
 
+### Inside the TSDB: recent samples and durable blocks
+
+A sample is associated with a series identified by its metric name and complete label set. Prometheus assigns an internal reference to the series. In the normal server-mode, in-order ingestion path, the Head maintains recent series state and chunks; the WAL records series definitions and samples needed to recover recent data. Completed Head chunks can be stored in chunks_head and memory mapped. Historical blocks contain compressed chunks, an index for finding series and their chunks, metadata and, when needed, tombstones. The WAL is not the historical query index or a second copy of every retained block.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/tsdb-01-ingest.svg" target="_blank" rel="noopener noreferrer" aria-label="Open tsdb 01 ingest diagram">
+    <img src="/figures/journals/tsdb-01-ingest.svg" alt="Conceptual server-mode TSDB data path. Head memory, memory-mapped chunks, WAL and immutable block contents have different roles; out-of-order and remote-write paths are omitted." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Conceptual server-mode TSDB data path. Head memory, memory-mapped chunks, WAL and immutable block contents have different roles; out-of-order and remote-write paths are omitted.</figcaption>
+</figure>
+
+A memory-mapped file occupies virtual address space, but only resident pages consume RAM at a given moment. Reading a mapped chunk can populate the page cache, and mapped resident pages may contribute to process RSS. Counting both RSS and the same cached pages as independent physical allocations would be misleading. The [host memory accounting investigation](/projects/linux-host-memory-accounting-cgroups/) explains this distinction. Moving completed chunks out of heap memory does not mean their storage cost disappears.
+
+### WAL replay and the checkpoint boundary
+
+On startup, Prometheus opens existing blocks, reconstructs recent Head state from available on-disk Head chunks and replays applicable checkpoint and WAL records. A checkpoint retains the records needed after older segments are removed; it is not an independent backup of the database. Replay uses the relevant series references and time boundaries so that already compacted data is not simply appended again. Exact initialization and out-of-order handling vary with release.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/tsdb-02-replay.svg" target="_blank" rel="noopener noreferrer" aria-label="Open tsdb 02 replay diagram">
+    <img src="/figures/journals/tsdb-02-replay.svg" alt="Illustrative restart recovery boundary: historical blocks remain readable through their index; checkpoint, retained segments and Head chunks contribute to recovering recent state. The simplified example is not an incident replay trace." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Illustrative restart recovery boundary: historical blocks remain readable through their index; checkpoint, retained segments and Head chunks contribute to recovering recent state. The simplified example is not an incident replay trace.</figcaption>
+</figure>
+
+I tested the distinction with an intentionally small record model. A persistent block contains samples at times 0 and 1. The retained log contains a series definition, samples at times 1, 2 and 3, and a deliberately incomplete final record. Replay skips the compacted time, reconstructs 2 and 3, and reports the incomplete tail. Removing the log leaves only the old block in this model. A missing series definition is rejected. This is an educational record parser, not the Prometheus WAL binary format, real corruption repair or a durability test.
+
+The historical ENOSPC message does not tell me which append failed, how much of the WAL was intact, or whether a later restart successfully replayed the recent data. A restart can encounter the same capacity problem and may need additional space for Head recovery. Deleting the WAL can discard recent data; I would preserve a supported backup or recovery copy before considering that loss.
+
+### Compaction and retention have different jobs
+
+Normally the first persistent blocks cover roughly two-hour ranges. Head compaction writes a block; later compaction merges eligible blocks into larger ones. The output is built while the input blocks are still needed. Only when the new block is usable can the old inputs be retired. WAL checkpointing and truncation have their own lifecycle. Disk usage can peak even when the amount of retained historical time stays constant.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/tsdb-03-compaction.svg" target="_blank" rel="noopener noreferrer" aria-label="Open tsdb 03 compaction diagram">
+    <img src="/figures/journals/tsdb-03-compaction.svg" alt="Simplified compaction overlap: two source blocks coexist with a new block before the sources can be retired. All sizes are hypothetical." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Simplified compaction overlap: two source blocks coexist with a new block before the sources can be retired. All sizes are hypothetical.</figcaption>
+</figure>
+
+In the documented size-retention model, WAL and memory-mapped Head chunks count toward the total size, but only persistent blocks are removed to satisfy the retention target. Time retention also operates on complete blocks. Neither setting is a synchronous filesystem quota or a guarantee against ENOSPC. For a hypothetical 50 GiB filesystem, 32 GiB of existing blocks, 8 GiB of WAL and Head files and 7 GiB of temporary output consume 47 GiB before any unrelated files or filesystem overhead. Another 4 GiB of allocation demand would exceed the budget. This is arithmetic, not a reconstruction of the original volume occupancy.
+
+### Cardinality changes more than the number of samples
+
+A label set is a series identity. For one metric with ten hosts, four operations and five status values, the full cross-product has 200 possible series. Adding a request identifier with one thousand distinct values can raise that bound to 200,000. The combinations need not all occur, and series churn matters as well as the simultaneous active set. More series can mean more Head metadata, index entries, WAL series records and query work. Raising the scrape interval can reduce sample rate without eliminating high-cardinality label identities.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/tsdb-04-budget.svg" target="_blank" rel="noopener noreferrer" aria-label="Open tsdb 04 budget diagram">
+    <img src="/figures/journals/tsdb-04-budget.svg" alt="Hypothetical disk overlap and label cross-product. The figures are capacity examples, not measurements from the historical cluster." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Hypothetical disk overlap and label cross-product. The figures are capacity examples, not measurements from the historical cluster.</figcaption>
+</figure>
+
+The storage documentation gives a rough compressed-block estimate in terms of samples per second, retention duration and bytes per sample. It is not a prediction of WAL peaks, index overhead or the cost of a high-churn workload. I would measure real ingest rate, active and newly created series, block sizes, compaction and checkpoint failures, and free space on the actual data filesystem. I would also distinguish the PVC's requested size from the mounted filesystem's available capacity.
+
+### Recovering the observer without losing the evidence
+
+A storage failure can remove precisely the samples needed to diagnose the original workload. I would first inspect the collector logs and filesystem from outside Prometheus, including available blocks and inodes, the mounted data path and the underlying volume state. After restoring writable headroom and preserving recoverable data, I would check startup readiness and replay completion, then direct exporter response, target discovery, scrape errors, fresh sample timestamps and the exact dashboard query. Supported read-only TSDB status and WAL replay endpoints can help where available; the installed version determines their availability.
+
+The [Disk I/O record](/projects/linux-disk-io-journaling-writeback/) distinguishes accepted writes from durable completion, and the [Longhorn record](/projects/rokaf-stateful-storage-and-recovery/) distinguishes an attached volume from verified data recovery. Those boundaries also apply to monitoring. A healthy query after restart proves only that the queried data is available at that moment. The historical missing interval needs its own check against a known source; it cannot be recovered merely by filling gaps with zero.
+
+**Mechanism references:** [Prometheus storage](https://prometheus.io/docs/prometheus/latest/storage/) · [WAL format](https://github.com/prometheus/prometheus/blob/main/tsdb/docs/format/wal.md) · [Head chunk format](https://github.com/prometheus/prometheus/blob/main/tsdb/docs/format/head_chunks.md) · [Head replay implementation](https://github.com/prometheus/prometheus/blob/main/tsdb/head_wal.go) · [Prometheus HTTP API](https://prometheus.io/docs/prometheus/latest/querying/api/).
+
 ## Incident 2 — the GPU existed, but its exporter was elsewhere
 
 The GPU monitoring problems occurred at a different boundary. A metric cannot originate from a device when its exporter was not placed on the node that exposes it.

@@ -47,6 +47,48 @@ WAL 파일을 곧바로 지우는 일도 조심해야 한다. 아직 블록으�
 
 당시 검토한 방향은 공간 사용량 파악, 보관 정책과 수집 부하 조정, 필요 용량 확보였다. 남아 있는 기록으로는 어느 변경이 최종 반영됐는지, 얼마나 많은 데이터를 복구했는지, 사후 검증을 모두 마쳤는지까지 단정할 수 없다. 따라서 이는 **복구를 판단하기 위한 절차**이지 성공을 확인한 회고는 아니다.
 
+### TSDB에서 최근 샘플과 과거 블록은 어떻게 관리될까
+
+메트릭 이름과 전체 Label Set이 시계열 하나를 식별한다. Prometheus는 시계열에 내부 Reference를 부여한다. 일반적인 Server Mode의 순서대로 들어오는 샘플을 기준으로 보면 Head는 최근 시계열 상태와 Chunk를 관리하고, WAL은 최근 데이터를 복구하는 데 필요한 시계열 정의와 샘플을 기록한다. 완료된 Head Chunk는 chunks_head에 저장해 메모리 매핑으로 읽을 수 있다. 과거 Block에는 압축된 Chunk, 시계열과 Chunk를 찾기 위한 Index, 메타데이터, 필요한 경우 Tombstone이 들어간다. WAL이 모든 과거 데이터의 복사본이거나 조회용 Index인 것은 아니다.
+
+{{figure /figures/journals/tsdb-01-ingest.svg | Server Mode의 TSDB를 단순화한 구조. Head Memory, mmap Chunk, WAL, 영속 Block은 각자 역할이 다르다. Out-of-order와 Remote Write 경로는 생략했다.}}
+
+메모리 매핑된 파일은 가상 주소 공간을 사용하지만 실제 RAM에는 그중 상주하는 페이지만 올라온다. Chunk를 읽는 과정에서 Page Cache가 사용되고 상주한 매핑은 프로세스 RSS에도 포함될 수 있다. 그 페이지를 RSS와 Cache에서 각각 세고 더하면 중복 집계될 수 있다. 앞서 [호스트 메모리 Accounting 글](/projects/linux-host-memory-accounting-cgroups/)에서 다룬 부분이다. Heap에서 데이터를 옮겼다고 저장 공간에 대한 비용이 사라지는 것은 아니다.
+
+### 재시작과 WAL Replay
+
+Prometheus는 기동하면서 기존 Block을 열고 디스크의 Head Chunk, 필요한 Checkpoint와 WAL 기록으로 최근 Head 상태를 복구한다. Checkpoint는 이전 Segment를 제거한 뒤에도 필요한 기록이 남도록 만드는 것이지 DB 전체를 따로 백업하는 것은 아니다. Replay 과정에서는 이미 Block에 반영한 데이터를 그대로 다시 Append하지 않도록 시계열 Reference와 시간 경계를 활용한다. 정확한 초기화와 Out-of-order 처리 방식은 버전에 따라 달라진다.
+
+{{figure /figures/journals/tsdb-02-replay.svg | 재시작 시의 복구 경계. 과거 Block은 자체 Index를 가지고 있고 Checkpoint, 남은 WAL 및 Head Chunk로 최근 상태를 복원한다. 실제 장애 Replay 기록은 아니다.}}
+
+작은 기록 모델로 이 차이를 확인할 수 있다. 영속 Block에는 시각 0과 1의 샘플이 있고 WAL에는 시계열 정의, 시각 1·2·3의 샘플과 끝부분이 불완전한 기록을 둔다. Replay는 이미 Block에 반영한 시각을 건너뛰고 2와 3을 복원하며 불완전한 마지막 기록을 보고한다. WAL을 제거하면 이 모델에서는 과거 Block만 남는다. 시계열 정의가 없는 샘플은 거부한다. Prometheus의 실제 Binary WAL이나 손상 복구 코드, 전원 장애 실험을 재현하는 것은 아니다.
+
+당시 ENOSPC 로그만으로 어느 Append에서 실패했고 얼마만큼의 WAL이 유효했는지, 이후 재시작에서 최근 데이터를 복원했는지까지 알 수 없다. 재시작 과정에서도 공간이 필요할 수 있으므로 WAL을 먼저 삭제하기보다 복구 가능한 데이터를 보존하고 쓰기 여유를 확보하는 쪽을 우선 고려해야 한다.
+
+### Compaction과 Retention의 역할
+
+일반적으로 처음 만들어지는 영속 Block은 약 2시간 범위의 데이터를 담는다. Head Compaction에서 Block을 만들고 이후에는 여러 Block을 더 큰 Block으로 병합한다. 새 결과를 만드는 중에는 원본도 남아 있어야 한다. 새로운 Block을 사용할 수 있게 된 후 기존 Block을 정리하며, WAL Checkpoint와 Truncation은 별도의 생명주기를 가진다. 보관 기간이 그대로여도 디스크 사용량이 일시적으로 증가할 수 있다.
+
+{{figure /figures/journals/tsdb-03-compaction.svg | 두 입력 Block을 병합하는 동안 새 출력 Block과 원본이 함께 존재할 수 있다. 용량은 모두 설명용 가상 값이다.}}
+
+공식 문서의 용량 기준 Retention에서는 WAL과 mmap Head Chunk도 사용량에 포함하지만, 설정된 용량에 맞추기 위해 지우는 대상은 영속 Block이다. 시간 기준 정책 역시 완전한 Block 단위로 정리한다. Retention은 즉시 적용되는 파일시스템 Quota가 아니며 공간 부족을 막아주는 보장도 아니다. 가령 50 GiB 파일시스템에 기존 Block 32 GiB, WAL과 Head 파일 8 GiB, 임시 출력 7 GiB가 있다면 다른 파일과 파일시스템 오버헤드를 빼고도 47 GiB를 사용한다. 여기에 4 GiB의 추가 할당 요청이 들어오면 남은 공간을 넘는다. 실제 운영 Volume에서 측정한 수치는 아니다.
+
+### Cardinality는 샘플 수만의 문제가 아니다
+
+하나의 메트릭에 Host 10개, Operation 4개, Status 5개가 있다면 가능한 Label 조합은 최대 200개다. 값이 1000종류인 Request ID 라벨을 추가하면 가능한 조합은 20만 개까지 늘어난다. 모든 조합이 발생하는 것은 아니며 현재 활성 시계열뿐 아니라 새로운 시계열이 계속 만들어지고 사라지는 Churn도 중요하다. 시계열이 늘어나면 Head 메타데이터, Index 항목, WAL의 시계열 정의 및 조회 비용도 커질 수 있다. Scrape 간격을 늘려 샘플 생성 속도를 줄여도 고유 Label Set 수까지 반드시 감소하는 것은 아니다.
+
+{{figure /figures/journals/tsdb-04-budget.svg | 디스크 사용량의 중첩과 Label 조합 수의 가상 계산. 당시 클러스터의 측정값은 아니다.}}
+
+공식 문서에서 제시하는 초당 샘플 수와 보관 시간, 샘플당 압축 크기를 이용한 용량 추정은 과거 Block에 대한 근사치다. WAL의 최대 사용량이나 Index 오버헤드, Churn이 높은 워크로드까지 예측하지는 않는다. 실제 Ingest Rate, 활성 시계열과 새 시계열 수, Block 크기, Compaction 및 Checkpoint 실패와 데이터 파일시스템의 여유 공간을 함께 확인할 것이다. PVC에 요청한 용량과 실제 Mount된 파일시스템의 가용량도 구분해야 한다.
+
+### 모니터링 장애를 복구하면서 증거 보존하기
+
+저장 공간이 부족해지면 원래 장애를 분석하는 데 필요한 샘플까지 잃을 수 있다. 우선 Prometheus 바깥에서 Collector 로그와 파일시스템을 확인한다. 가용 블록과 Inode, 실제 Mount 경로, 하위 Volume의 상태도 살펴볼 필요가 있다. 복구 가능한 데이터를 보존하고 쓰기 여유를 확보한 뒤 기동 및 Replay 완료, Exporter의 직접 응답, Target 발견과 Scrape 오류, 최신 샘플의 시각, 실제 Dashboard Query를 확인한다. 지원하는 버전에서는 TSDB 상태와 WAL Replay 진행 상태를 제공하는 읽기 전용 API도 활용할 수 있다.
+
+[Disk I/O 글](/projects/linux-disk-io-journaling-writeback/)에서 구분한 쓰기 요청과 영속성, [Longhorn 글](/projects/rokaf-stateful-storage-and-recovery/)에서 구분한 Attach와 데이터 복구는 모니터링에서도 똑같이 중요하다. 재시작 뒤 현재 조회가 된다는 사실은 그 시점에 조회한 데이터가 정상이라는 증거일 뿐이다. 과거 누락 구간의 복원 여부는 따로 확인해야 하며 빈 구간을 0으로 채운다고 원래 샘플이 복구되지는 않는다.
+
+- [Prometheus Storage](https://prometheus.io/docs/prometheus/latest/storage/) · [WAL 형식](https://github.com/prometheus/prometheus/blob/main/tsdb/docs/format/wal.md) · [Head Chunk 형식](https://github.com/prometheus/prometheus/blob/main/tsdb/docs/format/head_chunks.md) · [Head Replay 구현](https://github.com/prometheus/prometheus/blob/main/tsdb/head_wal.go) · [HTTP API](https://prometheus.io/docs/prometheus/latest/querying/api/)
+
 ## DCGM Exporter 배치와 GPU 메트릭 누락
 
 DCGM Exporter 문제는 Prometheus 저장 공간 문제와 달리 수집의 출발점에서 생겼다.
