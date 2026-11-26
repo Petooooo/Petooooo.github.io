@@ -18,6 +18,14 @@ Pod IP는 실제 워크로드의 네트워크 Endpoint를 가리킨다. K3s에�
 
 당시에는 이 두 결과를 같은 조건에서 나란히 기록하지 못했다. 따라서 위의 분기는 증명된 사건 경과가 아니라 다음 조사를 위한 비교 방법이다.
 
+### Network Namespace와 첫 번째 라우팅 지점
+
+일반적인 Linux Pod는 인터페이스와 Route, Socket 상태를 가진 별도의 Network Namespace에서 실행된다. veth Pair는 한쪽 인터페이스로 보낸 Ethernet Frame을 반대쪽에 전달한다. Bridge 기반 CNI라면 Host 쪽 veth를 Bridge에 연결한다. 같은 서브넷에 있는 Pod끼리는 Layer 2에서 전달할 수 있고 서브넷 밖으로 가는 트래픽은 Pod의 기본 Gateway를 거쳐 Host의 IP Routing으로 이어진다. Host Network를 사용하는 Pod나 다른 CNI에서는 경로가 달라질 수 있다.
+
+{{figure /figures/journals/datapath-01-namespace.svg | Bridge 기반 Pod 연결의 가상 구조. 로컬 Layer 2 전달과 Routing 경로는 같은 필터 Hook을 모두 거친다고 볼 수 없다.}}
+
+Pod별 Namespace가 있다고 해서 각 Pod마다 물리 NIC를 갖는 것은 아니다. Bridge를 지나는 모든 Frame이 Host에서 IP Routing되는 것도 아니다. Bridge Netfilter가 활성화되면 브리지 트래픽에도 IP 계층 필터가 적용될 수 있으므로 커널 설정과 규칙의 종류를 확인해야 한다. Pod 인터페이스, Host veth, Tunnel Device 중 어디에서 패킷을 관측했는지도 중요하다.
+
 ## Flannel 인터페이스와 노드 간 전달 경로
 
 Flannel 인터페이스가 `UP`인 것은 분명히 확인한 사실이다. 하지만 해당 노드에 인터페이스가 있다는 것과 다른 노드의 Pod까지 실제 패킷이 도달한다는 것은 다르다.
@@ -25,6 +33,16 @@ Flannel 인터페이스가 `UP`인 것은 분명히 확인한 사실이다. 하�
 K3s에 포함된 Flannel은 반드시 별도 Kubernetes Deployment나 DaemonSet Pod로 보이는 형태가 아니다. `flannel`이라는 이름의 Pod를 찾지 못했다고 Flannel이 설치되지 않았다고 단정하면 조사 방향을 잘못 잡게 된다. K3s Agent의 네트워크 구성과 실제 인터페이스, Route, 패킷 흐름을 함께 봐야 했다.
 
 같은 노드끼리 통신이 성공하더라도 다른 노드로 가는 터널 패킷이 중간에서 차단될 수 있다. 요청은 도착했지만 응답이 다른 경로로 돌아가 실패할 수도 있다. 호스트 방화벽이나 Network Policy에서 패킷이 걸리는 단계도 따로 있다.
+
+### VXLAN과 노드 간 캡슐화
+
+Flannel의 일반적인 VXLAN 구성에서는 다른 노드의 Pod 서브넷으로 가는 Route가 Tunnel Device 쪽을 가리킨다. 공개 구현을 살펴보면 원격 노드별로 Route와 Neighbor, FDB 항목을 관리한다. Neighbor는 원격 Tunnel Endpoint의 링크 계층 식별자를 찾는 데 쓰이고, FDB는 그 식별자를 원격 Underlay 주소와 연결한다. 이 세 가지 관계가 맞아야 하며 인터페이스가 UP이라는 사실만으로는 확인할 수 없다.
+
+VXLAN은 내부 Ethernet Frame을 외부 UDP/IP 패킷에 담는다. 내부 IP의 목적지는 여전히 상대 Pod이고 외부 IP는 수신 노드의 Tunnel Endpoint를 가리킨다. 수신 측에서 외부 헤더를 제거한 뒤 내부 Frame을 백엔드 방향으로 전달한다. 일반적인 IPv4 Underlay에서 내부 Ethernet과 외부 IPv4, UDP, VXLAN 헤더로 인해 내부 IP 패킷에 50바이트가 추가된다. VLAN 등의 부가 헤더가 없고 Underlay IP MTU가 1500바이트라고 가정하면 내부 IP MTU는 1450바이트가 된다. 당시 실제 Backend와 MTU를 확인한 결과는 아니다.
+
+{{figure /figures/journals/datapath-02-vxlan.svg | 내부 주소와 외부 주소를 분리한 가상의 VXLAN 패킷. 헤더 크기는 추가 VLAN이 없는 IPv4 Underlay를 가정했다.}}
+
+2025년 11월 24일 기록에는 Flannel 인터페이스 이름과 Route 상태가 남아 있었지만 Backend나 Tunnel의 전체 구성은 확인되지 않았다. Pod 대역의 주소로 연결하다 TCP Timeout이 발생한 별도 기록도 있었다. 이는 또 다른 요청이 실패했다는 증거이지 해당 주소가 일반적인 Pod였거나 VXLAN이 실패 원인이었다는 증거는 아니다.
 
 그렇기 때문에 당시 확인한 사실을 다음처럼 제한해서 해석했다.
 
@@ -37,6 +55,20 @@ K3s에 포함된 Flannel은 반드시 별도 Kubernetes Deployment나 DaemonSet 
 | 일부 Pod에서 DNS 실패 | 해당 Pod가 이름 해석에 실패했음 | CoreDNS 프로세스 자체가 고장 났는지 |
 
 실제로는 일부 Pod만 영향을 받았기 때문에 정상 Pod와 실패 Pod의 **출발 노드와 통신 경로**를 나란히 기록해야 했다. 하지만 당시 관측 범위에는 그 비교가 충분히 남아 있지 않다.
+
+### 주소와 포트를 따라가는 Service 요청
+
+가상의 UDP Client를 192.0.2.10:40000, DNS Service를 198.51.100.53:53, 선택된 Endpoint를 203.0.113.20:8053으로 두자. 모두 설명용 주소와 포트이며 운영망의 설정이 아니다. 일반적인 Routing 기반 iptables Service에서는 DNAT로 목적지를 Endpoint로 변경한 뒤 전달 경로를 결정한다. Hairpin이나 외부 출발지 등 Masquerade가 필요한 조건이 없다고 가정하면 Client의 출발 주소는 그대로다. Endpoint는 Service 주소가 아니라 자신의 주소와 Target Port로 요청을 받는다.
+
+응답의 출발지는 Endpoint의 주소와 포트다. 응답이 기존 NAT Binding을 만든 Conntrack 문맥을 통과하면 역방향 DNAT로 출발지가 다시 Service 주소와 포트로 변환된다. Client에서는 처음 요청했던 상대가 응답한 것으로 보인다. 그래서 요청만 도착했거나 Backend에서 응답을 보냈다는 사실만으로 Client까지 정상 응답이 돌아갔다고 할 수 없다.
+
+{{figure /figures/journals/datapath-03-tuples.svg | 가상의 DNS 요청 및 응답에서 주소와 포트가 바뀌는 네 단계. 이 예제에서는 Client 출발 주소를 유지하고 응답의 출발지를 Service로 복원한다.}}
+
+Conntrack은 연결의 Original 및 Reply Tuple을 관리한다. Stateful NAT에서는 첫 패킷이 규칙에 매칭돼 Binding을 만들면 이후 패킷은 그 Binding을 사용한다. UDP에는 TCP와 같은 Handshake가 없지만 커널은 요청과 응답의 흐름을 추적할 수 있다. 다른 DNS 질의는 새로운 Tuple을 쓸 수도 있다. NAT 규칙의 카운터가 해당 연결의 모든 패킷 수를 의미하는 것은 아니다.
+
+{{figure /figures/journals/datapath-04-conntrack.svg | DNAT의 Original·Reply Tuple과 선택적인 SNAT 예시. 실제 Conntrack Table에서 추출한 값은 아니다.}}
+
+SNAT이 필요한 정책을 적용한다면 Endpoint에는 바뀐 출발 주소가 보인다. 응답에서는 역변환으로 Client의 목적지를 복원하고 DNAT의 역변환으로 Service 출발 주소도 복원해야 한다. 그림 생성 코드는 두 경우의 왕복 변환과 관계없는 응답의 거부를 검증한다. 실제 kube-proxy나 커널 NAT를 실행한 실험은 아니다.
 
 ## ClusterIP에 Ping을 보냈던 검사
 
@@ -66,6 +98,16 @@ Docker의 iptables Backend는 `DOCKER-USER` 등 별도 체인과 Masquerade·포
 
 {{figure /figures/journals/netfilter-host-runtime-ownership.svg | 호스트를 통과하는 패킷의 Netfilter Hook과 Docker·K3s 네트워크 구성 요소의 규칙 작성 범위를 비교했다. 별도의 K3s 기동 사건에서 확인된 xtables 잠금 경합과 이후 Bootstrap 완료도 따로 표시했다. 실제 규칙이나 내부 배치도는 아니다.}}
 
+### Netfilter Hook과 Route 결정
+
+일반적인 IPv4 전달 패킷은 PREROUTING을 지나 Route를 결정하고 FORWARD, POSTROUTING을 통과한다. 보통 Conntrack이 Destination NAT보다 먼저 상태를 연결한다. DNAT 후 목적지가 로컬이라면 INPUT으로 향한다. Host가 직접 생성한 패킷은 OUTPUT에서 처리되며 목적지가 변경되면 경로를 다시 결정할 수 있다. 전달 경로의 Source NAT는 일반적으로 FORWARD 필터 이후 POSTROUTING에서 수행된다. 이는 논리적 Hook의 설명이며 실제 Chain 구성과 Priority가 항상 같다는 뜻은 아니다.
+
+{{figure /figures/journals/datapath-05-hooks.svg | IPv4 전달 패킷, 로컬 입력, Host에서 생성한 출력 패킷의 Hook 경로. Bridge와 XDP 등은 생략했다.}}
+
+FORWARD에서는 원래 Service IP가 아니라 변환된 Backend 주소를 기준으로 필터링할 수 있다. Conntrack에서는 Original Tuple을 살펴보고 Backend 인터페이스에서는 전달 과정 이후의 패킷을 관측한다. Service 규칙이 Endpoint를 제대로 선택했더라도 그 뒤에서 Drop될 수 있다. 반대로 이미 만들어진 NAT Binding을 사용하는 패킷이라면 NAT 규칙의 카운터가 매번 증가하지 않을 수 있다.
+
+관련 Namespace에서 Conntrack의 현재 항목 수와 최대 한도, 삽입 실패나 Drop 통계, 해당 Flow의 상태를 비교할 것이다. 단순히 항목 수가 높다는 것만으로 Table 고갈을 확정할 수는 없다. 실제 실패한 질의와 Tuple, 시각, 인터페이스가 맞아야 한다. 당시에는 이 카운터를 함께 측정한 기록이 없다.
+
 특히 `DOCKER-USER`는 Docker가 iptables Backend를 사용할 때의 체인이다. Docker의 nftables Backend는 같은 체인을 새로 만들지 않고 자체 Base Chain과 Priority를 사용한다. 두 환경에서 규칙을 확인하는 방법이 같다고 가정할 수 없다. 그렇다고 기존 로그가 실제로 iptables/nftables의 불일치를 증명하는 것은 아니다.
 
 Service의 `KUBE-SVC-*` 규칙이 존재해도 패킷이 거기를 통과했다고 볼 수 없다. `conntrack` 고갈 역시 생각해 볼 수 있는 원인이었지만, 당시 사용량·한도·Drop 카운터를 같은 시각에 측정하지 못했다. 이 문제들의 실제 원인은 아직 확인되지 않았다.
@@ -84,6 +126,16 @@ failed to apply partial iptables-restore
 이 iptables 초기화 문제를 해결하기 위해 K3s 기동 상태와 규칙 적용 과정을 조사했다. `/run/xtables.lock` 파일을 지우고 K3s를 재시작하는 시도도 있었지만, 파일이 다시 생기고 처음에는 규칙 복원이 계속 실패했다. 이후 규칙이 재생성됐고 **`bootstrap done` 로그가 확인됐다.** **iptables 규칙 적용 오류를 넘어서 K3s가 정상적인 Bootstrap 단계까지 진행하도록 복구한 것**이다. 다만 원래 Lock을 점유한 프로세스와 복구를 결정적으로 만든 조치는 남은 기록만으로 특정할 수 없다.
 
 iptables는 정상 동작 중에도 `/run/xtables.lock`을 사용해 규칙 변경을 조정한다. 그러므로 잠금 파일이 있다는 이유만으로 삭제하는 것은 올바른 복구 방법이 아니다. 잠금 파일 경로를 없앤다고 그 잠금을 잡고 있던 프로세스까지 종료되지도 않는다. `iptables-restore`에는 잠금 획득을 기다리는 `-w` 옵션이 있지만, K3s에 실제 적용하고 검증한 설정 변경은 아니다.
+
+### Lock 파일의 이름을 지운다고 잠금이 풀리는 것은 아니다
+
+xtables 매뉴얼은 배타적 Lock 파일을 설명한다. 공개 iptables 소스에서는 열린 FD에 flock을 사용한다. 앞서 [VFS 글](/projects/linux-vfs-mount-lifecycle/)에서 확인했듯 파일 이름과 열린 파일 객체는 다르다. Lock을 가진 프로세스가 살아 있는 동안 파일 이름을 지워도 기존 FD가 Inode와 잠금을 유지할 수 있다. 같은 이름을 다시 만들면 다른 Inode와 별개의 잠금 영역이 생길 수 있다. 결국 서로 다른 파일을 잠근 두 Writer가 각각 배타적 권한을 얻었다고 판단하는 문제가 생긴다.
+
+이 동작을 확인하기 위해 실제 xtables Lock 대신 임시 디렉터리의 일반 파일을 사용했다. 같은 Inode를 두 번 독립적으로 열어 배타적 Lock을 요청하자 두 번째 요청은 경합으로 실패했다. 이름을 삭제하고 동일한 이름의 새 파일을 만들자 기존 Lock을 유지한 채 새 Inode에 Lock을 잡을 수 있었다. 새 Inode의 또 다른 독립적인 Lock 요청은 실패했다. 기존 Lock을 해제하면 원래 Inode를 참조하던 FD가 그 Lock을 얻을 수 있었으며 새 Inode의 잠금과는 별개였다.
+
+{{figure /figures/journals/datapath-06-lock.svg | 임시 파일을 이용한 실제 flock 실험. 이름을 지워도 원래 잠금이 해제되지 않고, 다시 만든 파일은 다른 Inode를 가리킬 수 있다. 실제 방화벽과 운영 Lock 파일에는 접근하지 않았다.}}
+
+이 실험은 잠금 파일 삭제가 일반적인 복구 방법으로 적절하지 않은 이유를 보여준다. 당시 복구를 입증한 것은 규칙 재생성과 Bootstrap 완료 기록이었다. 다음 장애에서는 실제 잠금 주체와 실행 인자를 확인하고 지원되는 대기·조정 방법을 사용한 뒤 규칙 적용과 통신 성공을 각각 검증할 것이다.
 
 이때 복구한 것은 **K3s가 iptables 규칙을 적용하는 기동 과정**이었다. 앞서 살펴본 Pod의 DNS·ClusterIP 접속 장애는 규칙이 적용된 뒤 실제 패킷이 통과하는 문제다. 두 사건의 시간대와 패킷 기록이 연결되지 않으므로 같은 원인이라고 쓰지는 않는다.
 
@@ -147,3 +199,5 @@ sudo nft list ruleset
 - [Docker — nftables Backend](https://docs.docker.com/engine/network/firewall-nftables/)
 - [iptables — Lock file](https://man7.org/linux/man-pages/man8/iptables.8.html)
 - [iptables-restore — 잠금 대기 옵션](https://man7.org/linux/man-pages/man8/iptables-restore.8.html)
+
+- [Linux network namespaces](https://man7.org/linux/man-pages/man7/network_namespaces.7.html) · [Flannel VXLAN implementation](https://github.com/flannel-io/flannel/blob/master/pkg/backend/vxlan/vxlan.go) · [Netfilter hooks](https://wiki.nftables.org/wiki-nftables/index.php/Netfilter_hooks) · [Stateful NAT](https://wiki.nftables.org/wiki-nftables/index.php/Performing_Network_Address_Translation_%28NAT%29) · [Conntrack sysctl](https://docs.kernel.org/6.2/networking/nf_conntrack-sysctl.html) · [iptables locking implementation](https://android.googlesource.com/platform/external/iptables/+/refs/tags/android-12.1.0_r25/iptables/xshared.c) · [flock(2)](https://man7.org/linux/man-pages/man2/flock.2.html).

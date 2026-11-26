@@ -2,7 +2,7 @@
 title: "K3s Networking: Pod IP Routing and ClusterIP Services"
 description: "K3s iptables bootstrap recovery and a separate Pod-to-ClusterIP DNS investigation, separating observed rule-application success from unresolved packet-path causes."
 date: "2026-11-17"
-updated: "2026-11-20"
+updated: "2026-11-26"
 draft: false
 reviewed: true
 reviewStatus: "reviewed"
@@ -42,6 +42,19 @@ The first useful comparison would have been to send the **same application reque
 
 This is a proposed controlled comparison. I did not preserve a paired result from the original outage that conclusively selected one of those branches.
 
+### Namespace boundaries and the first routed hop
+
+A typical Linux Pod has its own network namespace, including interface, routing and socket state. A veth pair connects two network contexts: transmitting through one end delivers the Ethernet frame to the other. With a bridge-based CNI configuration, the host-side veth is attached to a bridge. Same-subnet Pod traffic can be switched at layer 2; traffic outside that subnet can go through the Pod's default gateway and the host's layer-3 forwarding path. Host-network Pods and other CNI implementations differ.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/datapath-01-namespace.svg" target="_blank" rel="noopener noreferrer" aria-label="Open datapath 01 namespace diagram">
+    <img src="/figures/journals/datapath-01-namespace.svg" alt="Illustrative bridge-based Pod wiring. A local layer-2 delivery path and a routed path need not visit the same filtering hooks." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Illustrative bridge-based Pod wiring. A local layer-2 delivery path and a routed path need not visit the same filtering hooks.</figcaption>
+</figure>
+
+Network namespaces do not mean that every Pod has its own independent physical NIC. Nor does a bridge imply that every Ethernet frame is routed by the host. With bridge netfilter enabled, bridged traffic can also encounter IP-layer filtering; the relevant kernel settings and chain family matter. A capture on a Pod interface, host veth or tunnel device answers different questions.
+
 ## Flannel UP did not prove the overlay worked
 
 I did inspect a Flannel interface in the UP state. That confirmed that the local interface existed and was not administratively down. It did not establish that a packet could travel between every pair of nodes.
@@ -49,6 +62,21 @@ I did inspect a Flannel interface in the UP state. That confirmed that the local
 With K3s, Flannel is part of the integrated networking setup; it does not necessarily appear as a separately deployed `flannel` Pod with a standalone image. A search for such a Pod returning nothing is therefore not proof that Flannel was absent. The relevant host interface, K3s agent state, routes and forwarding traffic deserve inspection.
 
 A same-node Pod-to-Pod request can work even if a cross-node encapsulated packet is being dropped. A cross-node request may traverse an overlay, host routing and filtering rules. Even if it reaches the destination, its reply can take a different path or fail to match expected connection state.
+
+### VXLAN, routing and encapsulation
+
+For the usual Flannel VXLAN example, the source host's route for a remote Pod subnet points toward a tunnel device. Flannel's VXLAN implementation installs route, neighbor and forwarding-database state for remote nodes. The neighbor entry resolves the remote tunnel endpoint's link-layer identity, and the FDB maps that identity to a remote underlay address. These entries cooperate; an UP flag alone checks none of the remote mappings.
+
+A VXLAN tunnel carries an inner Ethernet frame inside an outer UDP/IP packet. The inner IP destination remains the remote Pod, while the outer IP destination is the receiving node's tunnel endpoint. At the receiving end the outer headers are removed, then the inner frame proceeds toward the backend. Encapsulation adds overhead: for an IPv4 underlay, the conventional Ethernet plus IPv4, UDP and VXLAN headers consume 50 bytes of additional space relative to the inner IP packet, excluding optional tags and other overhead. An illustrative 1500-byte underlay IP MTU therefore permits a 1450-byte inner IP packet. The actual MTU and backend must be inspected rather than inferred from this arithmetic.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/datapath-02-vxlan.svg" target="_blank" rel="noopener noreferrer" aria-label="Open datapath 02 vxlan diagram">
+    <img src="/figures/journals/datapath-02-vxlan.svg" alt="Synthetic cross-node VXLAN example with separate inner and outer addresses. Header sizes assume a plain IPv4 underlay and no VLAN tags. The original backend and MTU are not verified." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Synthetic cross-node VXLAN example with separate inner and outer addresses. Header sizes assume a plain IPv4 underlay and no VLAN tags. The original backend and MTU are not verified.</figcaption>
+</figure>
+
+The original November 24, 2025 messages included the name of the Flannel interface and the reported route state, but not a complete backend or tunnel inventory. They also contained a separate TCP connection timeout to an address in the Pod range. I retained that as evidence of another failed request, not proof that the VXLAN path was at fault or that the destination was an ordinary Pod.
 
 I separated the readings I actually had from the tests I still needed:
 
@@ -61,6 +89,30 @@ I separated the readings I actually had from the tests I still needed:
 | DNS request failed from some Pods | Those clients did not complete name resolution | The CoreDNS process itself failed |
 
 The last row was particularly important. An application reporting a DNS timeout identifies a failed operation, not automatically a malfunctioning resolver. I needed to learn whether it could contact the DNS Service, whether that Service forwarded the packet, and whether CoreDNS answered.
+
+### Follow the address tuple rather than the Service name
+
+Consider a fictional UDP client at 192.0.2.10:40000, a DNS Service at 198.51.100.53:53 and a chosen endpoint at 203.0.113.20:8053. These are documentation-only addresses and illustrative ports, not the cluster's configuration. In the ordinary routed iptables Service example, DNAT rewrites the destination to the endpoint before the forwarding route is selected. Assume no hairpin, external source or other masquerade condition; the client source is preserved. The endpoint sees a request to its own address and target port, not to the virtual Service address.
+
+The return packet originates at the endpoint's address and port. It must traverse the translation context where the connection-tracking NAT binding was created. Reverse DNAT then changes the source back to the Service address and port. The client receives the reply from the peer it originally addressed. This is why capturing only the request or only a backend's local response is insufficient to establish that the client received a correct reply.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/datapath-03-tuples.svg" target="_blank" rel="noopener noreferrer" aria-label="Open datapath 03 tuples diagram">
+    <img src="/figures/journals/datapath-03-tuples.svg" alt="Four stages of a synthetic DNS exchange. The client source is preserved in this example; the reply source is restored to the Service tuple." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Four stages of a synthetic DNS exchange. The client source is preserved in this example; the reply source is restored to the Service tuple.</figcaption>
+</figure>
+
+Connection tracking associates packets with an original-direction and a reply-direction tuple. For stateful NAT, a matching first packet establishes the binding and later packets use it. UDP has no TCP-style handshake, but the kernel can still track its traffic and whether a reply has been observed. A new DNS query can use a different tuple; a counter on a NAT rule is not a count of every packet in a tracked flow.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/datapath-04-conntrack.svg" target="_blank" rel="noopener noreferrer" aria-label="Open datapath 04 conntrack diagram">
+    <img src="/figures/journals/datapath-04-conntrack.svg" alt="Original and reply tuples with destination translation and an optional source translation example. Both are deterministic models, not extracted conntrack entries." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Original and reply tuples with destination translation and an optional source translation example. Both are deterministic models, not extracted conntrack entries.</figcaption>
+</figure>
+
+The optional SNAT case is distinct: if a policy requires source masquerading, the backend receives the translated source tuple. The reply must undo that change to recover the client destination, as well as undo DNAT to restore the Service source. The companion generator checks both round trips and rejects an unrelated reply. It is a tuple transformation model, not a live kube-proxy or kernel NAT experiment.
 
 ## An ICMP echo was not the DNS request I needed
 
@@ -95,6 +147,21 @@ Docker's iptables backend may install `DOCKER-USER`, other Docker-specific chain
   <figcaption>Possible host rule ownership in an iptables-based datapath. The diagram does not reproduce the live ruleset or establish which component held the xtables lock.</figcaption>
 </figure>
 
+### Hook selection and the routing decision
+
+The usual IPv4 forwarded path starts with PREROUTING, then a route decision, FORWARD and POSTROUTING. Connection tracking normally attaches state before destination NAT. If the post-DNAT destination is local, the packet instead follows INPUT; a host-originated request starts through OUTPUT, with a route reconsideration if its destination changes. On a typical forwarded path, source NAT is applied at POSTROUTING after the forwarding filter. These are logical hooks, not a promise that every configuration uses identical chains or priorities.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/datapath-05-hooks.svg" target="_blank" rel="noopener noreferrer" aria-label="Open datapath 05 hooks diagram">
+    <img src="/figures/journals/datapath-05-hooks.svg" alt="Logical IPv4 hook paths for a forwarded packet, local input and host-originated output. Bridge, XDP and other paths are outside this simplified diagram." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Logical IPv4 hook paths for a forwarded packet, local input and host-originated output. Bridge, XDP and other paths are outside this simplified diagram.</figcaption>
+</figure>
+
+This distinction explains the value of different counters. FORWARD filtering can see the translated backend destination, not necessarily the original virtual IP. Connection tracking exposes the original tuple, while a capture on the backend interface observes the packet after forwarding decisions. A Service rule may select a backend correctly and yet its packet can be dropped later. Conversely, a missing NAT-rule counter increment can reflect a previously established NAT binding rather than a missing Service rule.
+
+I would check conntrack count and max in the relevant namespace, together with insertion-failure or drop statistics and matching flow state. A high count alone is not proof of table exhaustion. The captured original and reply tuples, timestamps and interfaces must match the actual failed query. There is no preserved measurement of these counters in the original incident.
+
 The rules themselves also change meaning across backends. In Docker's **iptables** backend, `DOCKER-USER` is an early user-policy point in the forwarding chain. Docker's **nftables** backend does not create the same `DOCKER-USER` chain; nftables base chains and priorities matter instead. I did not record enough version-specific host output to say an iptables/nftables frontend mismatch caused this incident.
 
 For the DNS failure, the inspection I actually had showed Service NAT entries, not the complete effective ordering of translation, policy filters and return-state handling. A `KUBE-SVC-*`-style entry being present would not show whether the affected packet matched it. Nor did I have a measured `conntrack` table limit, an exhaustion counter or a packet trace proving a connection-tracking failure.
@@ -113,6 +180,21 @@ The accompanying failure indicated that `iptables-restore` could not acquire the
 I investigated the lock contention while restoring the K3s network rule initialization. During that work I removed `/run/xtables.lock` and restarted K3s; the lock file appeared again, and the first restore attempts still failed. I continued the recovery until the rules were regenerated and K3s logged **`bootstrap done`**. **The iptables bootstrap interruption was cleared and K3s completed its rule-initialization phase.** The surviving record does not identify which process originally held the lock or prove that deleting the file was the step that fixed it.
 
 The lock file's mere existence is normal: `iptables` uses it to coordinate exclusive access. Removing its pathname is not a general repair procedure and does not establish that the underlying lock holder has stopped. The `iptables-restore` utility supports waiting for the exclusive lock with `-w`, but I did not verify that changing K3s's invocation to use this option was an implemented remediation.
+
+### Why removing a lock pathname is not unlocking
+
+The xtables manual describes an exclusive lock file. Public iptables source uses flock on an open descriptor for the lock. The pathname and open file description are different kernel objects, as in the [VFS investigation](/projects/linux-vfs-mount-lifecycle/). If an existing lock file is unlinked while a writer still holds it, that descriptor can keep the old inode and its lock alive. Recreating the same name can produce a different inode and a separate lock domain. Two writers could then believe they have exclusive access, despite using the same pathname at different times.
+
+I tested this mechanism using an ordinary file in a temporary directory, not the real xtables lock. Two independent opens of the original inode competed for an exclusive lock: the second received a nonblocking contention error. After unlinking the disposable name and creating a new file under that name, the new inode could be locked while the original lock remained held. A further independent open of the new inode was blocked. Releasing the original lock allowed the waiting original-inode descriptor to lock it, without changing the new inode's lock.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/datapath-06-lock.svg" target="_blank" rel="noopener noreferrer" aria-label="Open datapath 06 lock diagram">
+    <img src="/figures/journals/datapath-06-lock.svg" alt="Executed temporary-file flock experiment: unlinking a name does not release the original lock, and a recreated name can refer to a different inode. No firewall rule or production lock was touched." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Executed temporary-file flock experiment: unlinking a name does not release the original lock, and a recreated name can refer to a different inode. No firewall rule or production lock was touched.</figcaption>
+</figure>
+
+The experiment demonstrates why deleting the lock file was not a sound general recovery procedure. The historical success was the regenerated rules and bootstrap completion, not proof that unlinking made competing writers safe. In another incident I would identify the actual lock holder and effective invocation, use supported waiting or coordination where appropriate, and verify rule application separately from traffic delivery.
 
 This was an actual **rule-bootstrap recovery**, not just an architectural hypothesis: K3s progressed from a failed iptables-restore attempt to regenerated rules and a completed bootstrap. It remains distinct from the intermittent **Pod-to-ClusterIP DNS failure**, for which the available packet-path evidence did not determine a single root cause.
 
@@ -173,3 +255,5 @@ This incident is also distinct from [the ServiceLB host-port conflict](/projects
 If the incident recurred, I would first capture a real query from an affected Pod, compare it with a direct endpoint request, and then examine the effective proxy and host filtering path on the source node. I would repeat the same request from an unaffected location and keep the return traffic in the trace. Until those observations exist, the cause remains open.
 
 **Related records and documentation:** [CoreDNS and MetalLB VIP reachability](/projects/rokaf-dns-vip-open-investigations/) · [K3s networking and TLS](/projects/rokaf-networking-and-tls/) · [Kubernetes — Virtual IPs and Service Proxies](https://kubernetes.io/docs/reference/networking/virtual-ips/) · [Kubernetes — Debug Services](https://kubernetes.io/docs/tasks/debug/debug-application/debug-service/) · [K3s — Basic Network Options](https://docs.k3s.io/networking/basic-network-options/) · [Docker — Firewall rules](https://docs.docker.com/engine/network/firewall-iptables/) · [Docker — nftables backend](https://docs.docker.com/engine/network/firewall-nftables/) · [iptables — Lock file](https://man7.org/linux/man-pages/man8/iptables.8.html) · [iptables-restore — Wait for lock](https://man7.org/linux/man-pages/man8/iptables-restore.8.html).
+
+**Mechanism references:** [Linux network namespaces](https://man7.org/linux/man-pages/man7/network_namespaces.7.html) · [Flannel VXLAN implementation](https://github.com/flannel-io/flannel/blob/master/pkg/backend/vxlan/vxlan.go) · [Netfilter hooks](https://wiki.nftables.org/wiki-nftables/index.php/Netfilter_hooks) · [Stateful NAT](https://wiki.nftables.org/wiki-nftables/index.php/Performing_Network_Address_Translation_%28NAT%29) · [Conntrack sysctl](https://docs.kernel.org/6.2/networking/nf_conntrack-sysctl.html) · [iptables locking implementation](https://android.googlesource.com/platform/external/iptables/+/refs/tags/android-12.1.0_r25/iptables/xshared.c) · [flock(2)](https://man7.org/linux/man-pages/man2/flock.2.html).

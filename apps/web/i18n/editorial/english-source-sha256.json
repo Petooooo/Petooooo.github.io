@@ -24,7 +24,7 @@
   "tflite-micro-lifecycle-memory-planning": "68bf11bb564ca389d9b3218371567b27c4df14c4410bc39d69a8ca53cf2e1a85",
   "rokaf-memory-pressure-and-service-recovery": "68d74a67722fc4851d54cf8e2fed0bc3dc15de000c8c1b39d7bfff992e652ea7",
   "rokaf-storage-placement-and-failure-domains": "f59e15f3204afc9d5649190186d2742ad7e3a2d99761dcd5bfa20a0e58c02a47",
-  "rokaf-k3s-cni-service-datapath": "e132b7eb612f18a9367e680509a1e16f0b1d123d7709264bf40fd909a1a85a7a",
+  "rokaf-k3s-cni-service-datapath": "36201f3339367019902eeda792769320ce3dcb7455d5040179349e61e6e383db",
   "document-translation-pipeline": "19ceed6a4eb7460a0036bdcf35e66d6bb9e47ff6e72e5eac9aef074217624f29",
   "rokaf-central-gpu-platform-kai-jupyterhub": "4dd9ab8d75443ee3e5eb27858a29fd3dc315988f60514018bfda9d42992e3f6e",
   "risc-cpu-five-stage-pipeline": "ae2fc32d143207dc49f328e9ada6249064e76e037254f0ebfa1a9eb752da3da3",
