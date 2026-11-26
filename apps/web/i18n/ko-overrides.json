@@ -891,5 +891,14 @@
   "Mount": "Mount",
   "CSI": "CSI",
   "Longhorn": "Longhorn",
-  "Kubernetes": "Kubernetes"
+  "Kubernetes": "Kubernetes",
+  "Linux Disk I/O, Journaling and Writeback": "Linux 디스크 I/O, Journaling과 Writeback",
+  "Linux Disk I/O, Journaling and Writeback | Jihwan Park": "Linux 디스크 I/O, Journaling과 Writeback | 박지환",
+  "A high JBD2 write-rate observation, buffered writes, ext4 journal transactions, persistence boundaries and block I/O attribution.": "JBD2 쓰기량 관측을 통해 살펴본 Buffered Write, ext4 Journal Transaction, 영속성 경계와 Block I/O 귀속.",
+  "Linux disk I/O investigation and filesystem write-path analysis": "Linux 디스크 I/O 조사 및 파일시스템 쓰기 경로 분석",
+  "Feb 2026": "2026년 2월",
+  "JBD2": "JBD2",
+  "ext4": "ext4",
+  "Writeback": "Writeback",
+  "Block I/O": "Block I/O"
 }

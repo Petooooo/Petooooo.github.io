@@ -1,0 +1,142 @@
+---
+title: "Linux Disk I/O, Journaling and Writeback"
+description: "A high JBD2 write-rate observation, buffered writes, ext4 journal transactions, persistence boundaries and block I/O attribution."
+date: "2026-11-26"
+updated: "2026-11-26"
+draft: false
+reviewed: true
+reviewStatus: "reviewed"
+sensitivity: sanitized
+category: "Engineering Investigation"
+area: "Linux Storage & Runtime"
+tags: ["Linux", "ext4", "JBD2", "Writeback", "Block I/O", "K3s"]
+type: "troubleshooting"
+role: "Linux disk I/O investigation and filesystem write-path analysis"
+period: "Feb 2026"
+status: "building"
+techStack: ["Linux", "ext4", "JBD2", "Block I/O", "K3s"]
+---
+
+On February 24, 2026, while investigating disk activity on a Linux node running K3s, I sampled per-task I/O with `pidstat -d 1`. One of the notable values belonged not to a container process but to a JBD2 kernel thread.
+
+```text
+Task       kB_wr/s
+jbd2/...   26122.88
+```
+
+This is a transcription of the reported value with the internal device identifier removed, not a complete terminal capture. The sysstat manual uses KiB even though the column is labelled kB; under that convention the sample is about 25.51 MiB/s. I also inspected the container runtime storage with directory-size queries. The OverlayFS snapshots directory was reported at approximately 19 GB. The runtime CLI was available, while the CRI inspection tool was unreliable in that environment.
+
+Those observations are not a matched time series. One describes an accounted write rate and the other a directory's accumulated size. Neither establishes which workload initiated the writes, whether the underlying device was saturated, or that the snapshots directory caused the journal activity. I did not retain a synchronized device-latency trace, effective ext4 mount options, or a final attribution result.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/disk-io-01-observation.svg" target="_blank" rel="noopener noreferrer" aria-label="Open disk io 01 observation diagram">
+    <img src="/figures/journals/disk-io-01-observation.svg" alt="The retained write-rate sample and directory-size observation are different quantities. No interpolated timeline or causal link is claimed." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>The retained write-rate sample and directory-size observation are different quantities. No interpolated timeline or causal link is claimed.</figcaption>
+</figure>
+
+The question I wanted to answer was how a userspace write could appear as activity in a different kernel context, and how to distinguish space usage, write throughput, and durable completion.
+
+## Buffered writes and the page cache
+
+An ordinary buffered write begins at a file descriptor. The VFS resolves the open file object and calls into the filesystem; data is copied into the relevant cached pages and marked dirty. The details depend on the filesystem, mapping and write flags. A successful write returns the number of bytes accepted, which may be smaller than requested. It does not by itself certify that the corresponding bytes have reached persistent media. Direct I/O, synchronous flags and memory-mapped writes have different paths or completion rules.
+
+The page cache is not just a read cache. It also lets the kernel combine modifications before submitting storage requests. Ext4 can delay block allocation until writeback, which allows a larger contiguous allocation than immediately allocating every small write. Dirty data nevertheless consumes memory and represents work that must eventually be submitted. Background writeback can be triggered by age and dirty thresholds; when dirtying exceeds writeback capacity, the writing task can itself be throttled. Returning from write is therefore not equivalent to eliminating I/O cost.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/disk-io-02-buffered-path.svg" target="_blank" rel="noopener noreferrer" aria-label="Open disk io 02 buffered path diagram">
+    <img src="/figures/journals/disk-io-02-buffered-path.svg" alt="Simplified buffered write path, with file data and journaled metadata distinguished. The branches converge at storage but do not imply a fixed execution order for all modes." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Simplified buffered write path, with file data and journaled metadata distinguished. The branches converge at storage but do not imply a fixed execution order for all modes.</figcaption>
+</figure>
+
+A useful model separates three states: a clean cached page, a page whose contents have been modified, and a page undergoing writeback. A page can be dirtied again while I/O is outstanding. Writeback completion does not automatically mean the current contents are clean if a newer modification occurred. Page states and the backing filesystem's error handling determine what remains to be written.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/disk-io-03-page-states.svg" target="_blank" rel="noopener noreferrer" aria-label="Open disk io 03 page states diagram">
+    <img src="/figures/journals/disk-io-03-page-states.svg" alt="Conceptual dirty-page lifecycle, including a new write during writeback. The states simplify flags that may coexist in the actual kernel." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Conceptual dirty-page lifecycle, including a new write during writeback. The states simplify flags that may coexist in the actual kernel.</figcaption>
+</figure>
+
+This is also a connection to the [memory-pressure investigation](/projects/rokaf-memory-pressure-and-service-recovery/): dirty pages may require I/O before reclaim can proceed, so storage latency and memory pressure can amplify each other. I would inspect Dirty and Writeback in meminfo, writeback activity and memory or I/O PSI together rather than assign all slow responses to disk throughput.
+
+## ext4 journal transactions
+
+Ext4 uses JBD2 to coordinate journal transactions. The journal is a recovery log for filesystem changes; it is not an application log, and it is not the final home location of every recorded block. In the conventional full transaction format, descriptor blocks identify journaled blocks, followed by their contents and, where needed, revocation records. A valid committed transaction has a commit record and the integrity checks required by the format. Checkpointing subsequently writes journaled changes to their final locations and allows the journal space to be reused when safe.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/disk-io-04-journal-transaction.svg" target="_blank" rel="noopener noreferrer" aria-label="Open disk io 04 journal transaction diagram">
+    <img src="/figures/journals/disk-io-04-journal-transaction.svg" alt="Conceptual full JBD2 transaction and later checkpoint. Recovery can replay a valid committed transaction that has not yet been checkpointed. Fast commits and other format details are omitted." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Conceptual full JBD2 transaction and later checkpoint. Recovery can replay a valid committed transaction that has not yet been checkpointed. Fast commits and other format details are omitted.</figcaption>
+</figure>
+
+The distinction between commit and checkpoint matters when a machine fails. An incomplete transaction cannot simply be replayed as though it had committed. A valid committed transaction that has not reached all its home locations can be replayed. This is about filesystem consistency; it does not make a collection of unrelated application writes atomic.
+
+The ext4 data mode changes the relationship between ordinary file data and journaled metadata:
+
+| Mode | File data | Metadata |
+| --- | --- | --- |
+| data=ordered | Associated dirty data is ordered before the relevant metadata commit | Journaled |
+| data=writeback | No equivalent ordering guarantee before metadata commit | Journaled |
+| data=journal | File data also passes through the journal | Journaled |
+
+The common default is ordered mode, but the mount configuration at the time of the incident is not preserved. I therefore use ordered mode as an explanatory example, not as a measured configuration. Full data journaling can introduce extra writes, while writeback mode relaxes data ordering. None of these choices removes the need for application-level persistence protocols.
+
+A JBD2 thread can perform journal work on behalf of multiple filesystem operations, including allocation, directory changes and metadata updates. Its accounted write rate can be high even when it is not the originating application. Not all metadata writes are necessarily attributed to that thread, and not all filesystem writeback is journal traffic. The name of the thread is a useful clue to the subsystem, not an exhaustive breakdown of physical disk activity.
+
+## Durability: write, fsync and directory entries
+
+There are at least three distinct success conditions: bytes were accepted by a write call, the expected file contents are visible to another reader, and those contents have been synchronized according to the filesystem and device persistence contract. A second read can come entirely from the page cache. Closing a normal descriptor is not a substitute for checking fsync.
+
+For file replacement, a common protocol is to create a temporary file in the same directory, write the intended contents, synchronize that file, rename it over the target, and synchronize the containing directory. The final directory sync is important because fsync on a file does not necessarily persist the new directory entry. Atomic rename in the live namespace is not the same as durability after a power failure. Failures must be checked at each step, and the persistence assumptions include correct filesystem and device flush behavior.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/disk-io-05-durability.svg" target="_blank" rel="noopener noreferrer" aria-label="Open disk io 05 durability diagram">
+    <img src="/figures/journals/disk-io-05-durability.svg" alt="File synchronization and directory synchronization cover distinct persistence boundaries. The sequence models a same-directory replacement, not a guarantee against every hardware failure." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>File synchronization and directory synchronization cover distinct persistence boundaries. The sequence models a same-directory replacement, not a guarantee against every hardware failure.</figcaption>
+</figure>
+
+I exercised that sequence in a disposable directory using ordinary Linux system calls. The test writes 4096 bytes, checks the readback before fsync, synchronizes the file, renames it over an old version, synchronizes the directory and verifies the final bytes. A readback before fsync succeeds; that fact is evidence of visibility only. I also checked the old open descriptor across rename, which continued to refer to the old contents. This connects the write protocol to the [VFS reference-lifetime example](/projects/linux-vfs-mount-lifecycle/). The experiment verifies successful calls and byte equality, not a crash-recovery test, disk-speed comparison or historical journal trace.
+
+## Block I/O and the meaning of the counters
+
+Filesystem I/O becomes block requests. In a multi-queue block layer, software submission and hardware dispatch queues help schedule and dispatch requests to the device. Requests may be merged or split. A logical block device can map requests onto other devices, for example an MD RAID array. Depending on redundancy and request alignment, member devices may perform more or different I/O than the logical array sees. Device caches and SSD internals add further boundaries.
+
+A write rate alone cannot describe whether the storage is overloaded. Throughput measures transferred bytes per unit time; IOPS counts completed requests per unit time at a particular layer. Average request size relates the two only when measured over the same operations and interval. Await includes queueing and service time in the device statistics, while average queue size describes outstanding work. Parallel devices and stacked block layers make a utilization percentage an imperfect saturation indicator.
+
+For illustration, 6400 requests/s of 4 KiB and 100 requests/s of 256 KiB both correspond to 25 MiB/s. They have very different request counts, and potentially different latency and device costs. The generator checks that arithmetic; these are synthetic values, not measurements from the node.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/disk-io-06-accounting.svg" target="_blank" rel="noopener noreferrer" aria-label="Open disk io 06 accounting diagram">
+    <img src="/figures/journals/disk-io-06-accounting.svg" alt="Task accounting, filesystem work and device counters are different observation scopes. Equal illustrative throughput can arise from very different request sizes and counts." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Task accounting, filesystem work and device counters are different observation scopes. Equal illustrative throughput can arise from very different request sizes and counts.</figcaption>
+</figure>
+
+The February observation therefore left several questions open. Did a high rate of file creation, deletion or allocation generate metadata work? Was application data being written into container writable layers, logs or persistent volumes? Were writeback or device queues actually delaying the workload? Directory size could help locate a capacity problem, but a large read-only image cache can generate almost no writes.
+
+## Attribution before intervention
+
+I would preserve the first observation with a timestamp and collect matching intervals at several layers. On a node where the tools are available, the following are read-only examples, not a record of commands successfully executed in the original incident.
+
+```bash
+pidstat -d 1 5
+iostat -xz 1 5
+grep -E '^(Dirty|Writeback):' /proc/meminfo
+cat /proc/pressure/io
+findmnt -T "$TARGET"
+df -hT "$TARGET"
+```
+
+For a known application PID, I would compare changes in /proc/PID/io with its cgroup I/O accounting where supported. The wchar and write_bytes fields answer different questions; the latter records bytes the task has caused or will cause to be written at the storage layer, not a verified durability counter. Cancelled writes, shared filesystem work and kernel workers complicate attribution. I would not add logical-device and member-device counters together as though they were independent application traffic.
+
+A directory-size inventory is still useful when checking capacity. Repeating it at a controlled interval may identify growing paths, but apparent size, allocated blocks, shared data and unlinked open files can differ. Broad recursive scans can themselves create load. In a container runtime, I would inspect supported metadata rather than delete snapshot directories, as explained in the [OverlayFS investigation](/projects/linux-containerd-overlayfs-snapshot-failures/).
+
+The goal is a defensible chain from an originating operation to filesystem work and device behavior, supported by matching measurements. The retained sample did not establish that chain. Lowering the JBD2 activity alone would not be a valid success metric if it merely delayed required writes or compromised recovery guarantees.
+
+**Related records:** [Linux memory pressure](/projects/rokaf-memory-pressure-and-service-recovery/) · [Linux VFS and mount lifecycle](/projects/linux-vfs-mount-lifecycle/) · [OverlayFS snapshot failures](/projects/linux-containerd-overlayfs-snapshot-failures/) · [Control-plane and disk incidents](/projects/rokaf-control-plane-incident-log/) · [Observability and failure evidence](/projects/rokaf-observability-and-failure-evidence/).
+
+**References:** [Linux ext4 journal](https://docs.kernel.org/filesystems/ext4/journal.html) · [ext4 mount options](https://docs.kernel.org/admin-guide/ext4.html) · [Linux VM sysctls](https://docs.kernel.org/admin-guide/sysctl/vm.html) · [write(2)](https://man7.org/linux/man-pages/man2/write.2.html) · [fsync(2)](https://man7.org/linux/man-pages/man2/fsync.2.html) · [proc_pid_io(5)](https://man7.org/linux/man-pages/man5/proc_pid_io.5.html) · [blk-mq](https://docs.kernel.org/block/blk-mq.html) · [pidstat(1)](https://man7.org/linux/man-pages/man1/pidstat.1.html) · [iostat(1)](https://man7.org/linux/man-pages/man1/iostat.1.html).
