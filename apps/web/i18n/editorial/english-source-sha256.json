@@ -38,5 +38,6 @@
   "linux-containerd-overlayfs-snapshot-failures": "9a4599a1514bb5adfac00aa75e7a55408444e0e9a0684513d86ca8771894fa25",
   "linux-vfs-mount-lifecycle": "8e35de21037564069abe399ef224df59e37338cc906cbdba5c2b2e528d72c7a1",
   "linux-disk-io-journaling-writeback": "2411875549b4d54380d66fee5e769dc524b0b7805f08cb5d3bac3bb8b726598e",
-  "linux-host-memory-accounting-cgroups": "538a7459b9cbc1435b272db4ad50d882e042cd1d504d6e855fb2511167896a9f"
+  "linux-host-memory-accounting-cgroups": "538a7459b9cbc1435b272db4ad50d882e042cd1d504d6e855fb2511167896a9f",
+  "linux-container-runtime-storage-migration": "1ac26b46d87c770df6f83feb1b75748bcd737346ba0f18a85b14ccdb609e205a"
 }

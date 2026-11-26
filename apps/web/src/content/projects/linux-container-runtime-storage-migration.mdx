@@ -1,0 +1,136 @@
+---
+title: "Container Runtime Storage Migration in K3s"
+description: "Moving runtime storage without losing snapshot references, distinguishing K3s data-dir, containerd root and state, mount identity and recovery validation."
+date: "2026-11-26"
+updated: "2026-11-26"
+draft: false
+reviewed: true
+reviewStatus: "reviewed"
+sensitivity: sanitized
+category: "Engineering Investigation"
+area: "Linux Storage & Runtime"
+tags: ["Linux", "K3s", "Containerd", "OverlayFS", "Filesystem", "Storage"]
+type: "troubleshooting"
+role: "K3s runtime storage placement and migration boundary investigation"
+period: "2025–2026"
+status: "building"
+techStack: ["Linux", "K3s", "containerd", "OverlayFS", "systemd"]
+---
+
+When I was placing K3s workloads on nodes with separate system and data disks, I wanted image layers and runtime storage to live on the data filesystem rather than compete with the operating system for space. The question sounded like a directory configuration problem. It turned out to involve several independent owners of storage and a set of references that had to remain consistent.
+
+On November 27, 2025, I tried a containerd-specific root option on K3s and received:
+
+```text
+flag provided but not defined: -containerd-root-dir
+```
+
+An earlier November 22 configuration record already showed a K3s node using a nondefault data directory under /data. Later operational records also used a data directory under /data. These establish use of a custom K3s data path, not the completeness of an offline copy from the original disk. A December 1 troubleshooting record discussed a missing containerd temporary-mount path; the full original runtime output and final repair are not retained. On January 4, another attempt to pass a containerd option to the K3s agent was rejected. On January 18 I reported that a separate Docker overlay relocation was working, while kubelet volume paths were still visible under /var/lib/kubelet/pods.
+
+The distinction matters: Docker's successful relocation does not establish that embedded containerd, kubelet or persistent volumes were also moved. I have no complete migration transcript, before-and-after inventory or integrity verification of all historical nodes. The diagrams and controlled examples below explain the mechanism and the checks I would use, rather than inventing a successful cutover.
+
+## The runtime has more than one storage root
+
+Containerd separates persistent root data from transient runtime state. Its root contains plugin-owned persistent storage, including content blobs, snapshot directories and metadata databases. The state directory contains runtime-related objects such as sockets, process state and mount-related files. The usual standalone defaults are /var/lib/containerd and /run/containerd; an embedded runtime can use different locations.
+
+The image content store and the snapshotter are not interchangeable. As discussed in the [OverlayFS snapshot investigation](/projects/linux-containerd-overlayfs-snapshot-failures/), an image digest identifies content, while a committed snapshot represents applied layer changes and can be a parent of a writable snapshot. A copied content store alone does not preserve the snapshot metadata graph. Likewise, a directory containing snapshot data without matching metadata does not constitute a usable runtime inventory.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/runtime-01-storage-domains.svg" target="_blank" rel="noopener noreferrer" aria-label="Open runtime 01 storage domains diagram">
+    <img src="/figures/journals/runtime-01-storage-domains.svg" alt="Persistent containerd content and snapshot metadata, transient state, kubelet paths and volume storage are separate ownership domains. Locations are illustrative defaults, not a node inventory." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Persistent containerd content and snapshot metadata, transient state, kubelet paths and volume storage are separate ownership domains. Locations are illustrative defaults, not a node inventory.</figcaption>
+</figure>
+
+Kubelet owns additional state and Pod volume mount paths. A CSI-managed volume has a separate controller and node lifecycle; a local-path or hostPath volume can live on a specific host filesystem. Neither becomes part of the containerd snapshot chain merely because a Pod uses it. Docker has its own storage configuration and, depending on its version and image-store mode, may also use containerd-managed storage. One must inspect the effective Docker configuration rather than assume its data-root covers everything.
+
+## What K3s data-dir actually changes
+
+The rejected flag was a useful indication that I was configuring the wrong interface. The containerd daemon accepts root and state settings, but that does not make every containerd command-line option a valid K3s command-line option.
+
+K3s exposes data-dir as a supported configuration setting. In the public agent configuration code, the embedded containerd root is derived by joining the configured data directory with agent/containerd, and the generated configuration is placed under agent/etc/containerd/config.toml. For example:
+
+```yaml
+data-dir: /data/k3s
+```
+
+This is a supported configuration example, not a recommendation to replace a running node's data directory without preparation. The resulting embedded root is normally /data/k3s/agent/containerd. If the node is a server, its data directory can also contain control-plane state, credentials and a local datastore. Changing that directory has a much wider impact than moving an image cache.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/runtime-02-config.svg" target="_blank" rel="noopener noreferrer" aria-label="Open runtime 02 config diagram">
+    <img src="/figures/journals/runtime-02-config.svg" alt="K3s derives embedded runtime paths from its data directory. The example separates generated configuration, persistent root, runtime state and independently configured kubelet storage." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>K3s derives embedded runtime paths from its data directory. The example separates generated configuration, persistent root, runtime state and independently configured kubelet storage.</figcaption>
+</figure>
+
+The containerd configuration is generated by K3s. Its template mechanism is version-sensitive: K3s introduced containerd 2.0 in the February 2025 releases including v1.32.2+k3s1, with a version-3 template option. Earlier templates and later releases differ in how root, state and address are supplied. I would inspect the installed release, actual generated configuration and effective command line together. Editing a generated configuration file by itself can be overwritten at the next start. An external CRI endpoint is another architecture entirely, not just a different directory.
+
+The correct question is therefore not only where the files are, but which configuration produces that path, which service owns it, and whether the path actually resolves to the intended filesystem.
+
+## Paths, links and mount identity
+
+There are several ways to make an application reach storage elsewhere. Changing the supported configuration makes the new path explicit. A symbolic link stores a pathname that is resolved by the VFS during lookup. A bind mount attaches an existing filesystem subtree at another location in a mount namespace. Both can give an application access to the same files, but they do not have identical semantics.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/runtime-03-paths.svg" target="_blank" rel="noopener noreferrer" aria-label="Open runtime 03 paths diagram">
+    <img src="/figures/journals/runtime-03-paths.svg" alt="Three ways to reach data storage: explicit configuration, symbolic-link resolution and bind attachment. Bind mounting creates another mount relationship rather than copying data." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Three ways to reach data storage: explicit configuration, symbolic-link resolution and bind attachment. Bind mounting creates another mount relationship rather than copying data.</figcaption>
+</figure>
+
+A symbolic link can become dangling when the target is missing. If its target directory exists on the root filesystem but the data disk is not mounted, it can instead silently lead to the wrong filesystem. A bind mount can also attach the wrong underlying directory if the expected source filesystem has not been mounted first. Binding an existing directory over another hides its previous contents until the attachment is removed. Ordinary pathname existence checks do not detect either situation.
+
+In a small disposable-directory experiment, I created a file and a symbolic link to its directory, compared the resolved file identity, then renamed the directory and recreated the old target name with different content. The link became dangling after the rename and later resolved to the replacement. An already-open descriptor continued to read the original file. The script also created a hard link and checked its inode identity and link count. These are actual Linux file-operation results; I did not create a real bind mount, change a runtime directory or move any production storage.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/runtime-04-path-experiment.svg" target="_blank" rel="noopener noreferrer" aria-label="Open runtime 04 path experiment diagram">
+    <img src="/figures/journals/runtime-04-path-experiment.svg" alt="Executed path-resolution experiment: the link first resolves, then becomes dangling, then resolves to a replacement directory. An open descriptor retains the original file." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Executed path-resolution experiment: the link first resolves, then becomes dangling, then resolves to a replacement directory. An open descriptor retains the original file.</figcaption>
+</figure>
+
+This is the same distinction between a path and an object that appeared in the [VFS and mount lifecycle record](/projects/linux-vfs-mount-lifecycle/). It is also why a missing snapshot directory or a failed temporary mount after a configuration change deserves an inspection of the runtime's mount view before any repair.
+
+## Copying files is not the same as migrating a live runtime
+
+A move within one mounted filesystem can often use rename; a move across mount boundaries can fail with EXDEV and require a copy followed by removal. A cross-filesystem copy is not an atomic rename. Copying a directory while a runtime is changing its metadata, snapshots or active mounts can capture a combination of states that never existed at one instant.
+
+For a real relocation I would first establish the node role and the data that cannot be recreated. A server's datastore requires a supported backup and quorum-aware maintenance plan; draining workloads does not by itself protect control-plane availability. For an agent, local volumes and unique writable-layer data still need independent review. In a disconnected network I would also verify that the registry or image archives needed for reconstruction are accessible.
+
+I would then quiesce the actual writers and verify that runtime tasks, shims and relevant mounts are no longer active where the chosen migration procedure requires it. Stopping a systemd service alone is not proof that all containers or mount references are gone. Copying into a fresh destination must preserve required permissions, numeric ownership, hard-link relationships, extended attributes, special files and, where applicable, ACLs and sparse-file properties. OverlayFS metadata such as whiteouts and opaque-directory attributes must survive. An archive-mode rsync invocation alone does not preserve all of those properties; the additional flags, privilege and filesystem support must be evaluated. A dry run can show intended changes but is not a consistency or integrity test.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/runtime-05-cutover.svg" target="_blank" rel="noopener noreferrer" aria-label="Open runtime 05 cutover diagram">
+    <img src="/figures/journals/runtime-05-cutover.svg" alt="Proposed migration gates, from role-aware inventory and quiescence to copy, mount validation, startup and application checks. The historical record does not prove completion of this sequence." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Proposed migration gates, from role-aware inventory and quiescence to copy, mount validation, startup and application checks. The historical record does not prove completion of this sequence.</figcaption>
+</figure>
+
+The persistent metadata and snapshot content need to be treated as one consistent set. I would retain the old quiesced data until validation succeeds. If the new runtime begins accepting writes, switching back to the old directory can discard newer state; rollback is therefore a decision about which copy is authoritative, not simply reversing a symbolic link.
+
+## The data disk must be present before the service starts
+
+A mountpoint directory can exist even while its intended filesystem is absent. If a service starts at that moment, it can create a new runtime tree on the root filesystem. After the data disk is mounted, those files become hidden and a different tree appears at the same pathname. This can produce misleading free-space readings and apparently missing images or metadata.
+
+For a systemd-managed installation, RequiresMountsFor can express a dependency on the mount units needed to access a path. The dependency must match the actual data mount and the correct server or agent service. It is not a replacement for checking the intended device and mount identity: if no suitable mount unit exists, a path might simply be served by the root filesystem.
+
+A proposed read-only preflight would use findmnt to identify the filesystem serving the configured root, inspect the exact intended mountpoint and compare the source or UUID with an approved inventory. A service-level assertion or explicit device check can prevent an unintended fallback where supported. I would also verify the runtime process's mount namespace if it differs from the host's. The examples are not commands executed on the original cluster:
+
+```bash
+findmnt -T "$RUNTIME_ROOT"
+findmnt --mountpoint "$DATA_MOUNT"
+df -hT "$RUNTIME_ROOT"
+stat -c '%d %i %n' "$RUNTIME_ROOT"
+```
+
+A matching path string is weak evidence. The actual filesystem, runtime metadata and application data must agree.
+
+## What would count as a completed migration?
+
+The first validation is that the configured root resolves to the intended mount, not just that a service starts. The next is a read-only image and snapshot inventory consistent with the source. A controlled workload should then be able to create a writable snapshot, start and read expected data. Persistent volume attachment and application-level checks are separate gates. Capacity and durability should also be checked after a controlled restart, where authorized.
+
+A useful comparison is the [disk I/O investigation](/projects/linux-disk-io-journaling-writeback/): successfully copying bytes is not the same as proving their persistence, and a reduction in root-disk occupancy is not proof of application integrity. The objective is to move the storage boundary without losing the identities, references or state that the runtime needs to continue operating.
+
+**Related records:** [OverlayFS snapshot failures](/projects/linux-containerd-overlayfs-snapshot-failures/) · [VFS and mount lifecycle](/projects/linux-vfs-mount-lifecycle/) · [Disk I/O and writeback](/projects/linux-disk-io-journaling-writeback/) · [Control-plane incidents](/projects/rokaf-control-plane-incident-log/) · [Storage placement and failure domains](/projects/rokaf-storage-placement-and-failure-domains/).
+
+**References:** [K3s agent options](https://docs.k3s.io/cli/agent) · [K3s agent configuration source](https://github.com/k3s-io/k3s/blob/main/pkg/agent/config/config.go) · [K3s containerd templates](https://docs.k3s.io/advanced) · [Containerd operations guide](https://github.com/containerd/containerd/blob/main/docs/ops.md) · [rename(2)](https://man7.org/linux/man-pages/man2/rename.2.html) · [mount(8)](https://man7.org/linux/man-pages/man8/mount.8.html) · [rsync manual](https://rsync.samba.org/ftp/rsync/rsync.1) · [systemd unit dependencies](https://www.freedesktop.org/software/systemd/man/257/systemd.unit.html).

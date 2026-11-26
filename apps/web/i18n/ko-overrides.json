@@ -907,5 +907,10 @@
   "Host memory attribution and Linux memory accounting investigation": "호스트 메모리 귀속 및 Linux 메모리 집계 조사",
   "Aug 2026": "2026년 8월",
   "Memory": "메모리",
-  "RSS": "RSS"
+  "RSS": "RSS",
+  "Container Runtime Storage Migration in K3s": "K3s Container Runtime 저장 공간 이전",
+  "Container Runtime Storage Migration in K3s | Jihwan Park": "K3s Container Runtime 저장 공간 이전 | 박지환",
+  "Moving runtime storage without losing snapshot references, distinguishing K3s data-dir, containerd root and state, mount identity and recovery validation.": "K3s data-dir와 containerd Root 및 State, Mount 식별, Snapshot 참조를 보존하는 저장 공간 이전과 복구 검증.",
+  "K3s runtime storage placement and migration boundary investigation": "K3s 런타임 저장 공간 배치 및 이전 경계 조사",
+  "Storage": "스토리지"
 }
