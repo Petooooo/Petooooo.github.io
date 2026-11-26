@@ -871,5 +871,16 @@
   "Kubelet": "Kubelet",
   "Flannel": "Flannel",
   "K3s Node Capacity: Pod Limits, IP Allocation and Recovery Headroom": "K3s 노드 수용량 설계: Pod 제한, IP 할당과 장애 복구 여유",
-  "K3s Node Capacity: Pod Limits, IP Allocation and Recovery Headroom | Jihwan Park": "K3s 노드 수용량 설계: Pod 제한, IP 할당과 장애 복구 여유 | 박지환"
+  "K3s Node Capacity: Pod Limits, IP Allocation and Recovery Headroom | Jihwan Park": "K3s 노드 수용량 설계: Pod 제한, IP 할당과 장애 복구 여유 | 박지환",
+  "Containerd and OverlayFS Snapshot Failures": "Containerd와 OverlayFS Snapshot 장애",
+  "Containerd and OverlayFS Snapshot Failures | Jihwan Park": "Containerd와 OverlayFS Snapshot 장애 | 박지환",
+  "Missing parent snapshot directories during container creation, OCI content and snapshot identity, OverlayFS copy-up, and evidence-led recovery boundaries.": "컨테이너 생성 중 부모 Snapshot 경로 누락, OCI 콘텐츠와 Snapshot 식별자, OverlayFS Copy-up 및 복구 판단 기준.",
+  "Container runtime failure investigation and filesystem dependency analysis": "컨테이너 런타임 장애 조사 및 파일시스템 의존성 분석",
+  "Linux Storage & Runtime": "Linux 스토리지 및 런타임",
+  "Mar 2026": "2026년 3월",
+  "Containerd": "Containerd",
+  "containerd": "containerd",
+  "OverlayFS": "OverlayFS",
+  "OCI": "OCI",
+  "Filesystem": "파일시스템"
 }

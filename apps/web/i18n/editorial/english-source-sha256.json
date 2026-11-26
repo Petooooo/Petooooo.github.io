@@ -34,5 +34,6 @@
   "green-reviewer-flutter-web-platform": "259e865c42f4e935b4d679a74b0c6fcf1b034505ff315dc8d5a01264b90b5921",
   "escape-from-the-dark-fpga-vga": "34923a66fc833951c58e5c763580d28fcd4a318613cb0ca7ed63378563654f2f",
   "rokaf-gitops-domain-tls-standardization": "4b0c37f6e75337c1f0c88c084ca39db612b3c28cf7b51a5753df36cf72d27ca3",
-  "rokaf-k3s-pod-density-capacity": "7cfbfbad8389c6c1d3e17c9038f1582ee1d8dacbed9e873ffa74df194809cfa9"
+  "rokaf-k3s-pod-density-capacity": "7cfbfbad8389c6c1d3e17c9038f1582ee1d8dacbed9e873ffa74df194809cfa9",
+  "linux-containerd-overlayfs-snapshot-failures": "9a4599a1514bb5adfac00aa75e7a55408444e0e9a0684513d86ca8771894fa25"
 }

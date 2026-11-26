@@ -1,0 +1,130 @@
+---
+title: "Containerd and OverlayFS Snapshot Failures"
+description: "Missing parent snapshot directories during container creation, OCI content and snapshot identity, OverlayFS copy-up, and evidence-led recovery boundaries."
+date: "2026-11-26"
+updated: "2026-11-26"
+draft: false
+reviewed: true
+reviewStatus: "reviewed"
+sensitivity: sanitized
+category: "Engineering Investigation"
+area: "Linux Storage & Runtime"
+tags: ["Linux", "Containerd", "OverlayFS", "OCI", "K3s", "Filesystem"]
+type: "troubleshooting"
+role: "Container runtime failure investigation and filesystem dependency analysis"
+period: "Mar 2026"
+status: "building"
+techStack: ["Linux", "containerd", "OverlayFS", "OCI", "K3s"]
+---
+
+On March 19, 2026, while investigating a K3s storage incident, I found that both an ingester and a querier in the logging stack were stuck in `CreateContainerError`. The failure message did not describe an application crash. It came from containerd before the application could run.
+
+```text
+failed to create containerd container:
+  failed to stat parent:
+    stat .../snapshots/<id>/fs: no such file or directory
+```
+
+The excerpt retains the error semantics but omits the private path and snapshot identifier. The interesting question was why a container runtime could know which parent snapshot to use yet be unable to find its filesystem directory. It is a different problem from a registry being unreachable or a process exiting after startup.
+
+A subsequent message reported a digest followed by `committed`. That is evidence of a reported commit operation, not a complete record of what command produced it or whether both affected workloads recovered. I do not have the exact installed containerd version or a final health check for this incident. Earlier Longhorn attach and mount errors were part of the surrounding investigation, but they do not establish the cause of the missing snapshot.
+
+## OCI content is not an unpacked root filesystem
+
+A registry distributes content-addressed objects. An OCI image manifest references a configuration object and an ordered sequence of layer descriptors. The content store can retain the compressed layer blobs without containing any mounted root filesystem. The configuration records the ordered uncompressed layer digests (DiffIDs). A digest of compressed bytes, a DiffID of an uncompressed changeset and the identity of a chain of applied changesets describe different things.
+
+Containerd's unpack operation applies the layers in order using a snapshotter and a diff applier. A base layer can be applied to an active snapshot with no parent and committed. The next layer is applied to an active snapshot whose parent is that committed base. Committing each step creates a reusable, logically immutable filesystem state. The last committed snapshot becomes the parent for a container's writable active snapshot. Sharing that parent avoids reconstructing the entire image for every container.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/overlay-01-content-flow.svg" target="_blank" rel="noopener noreferrer" aria-label="Open overlay 01 content flow diagram">
+    <img src="/figures/journals/overlay-01-content-flow.svg" alt="The manifest and layer blobs occupy the content store; unpack creates committed filesystem snapshots. A running container needs a separate active snapshot." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>The manifest and layer blobs occupy the content store; unpack creates committed filesystem snapshots. A running container needs a separate active snapshot.</figcaption>
+</figure>
+
+The OCI ChainID recurrence is a useful way to reason about the distinction. Let D0 and D1 denote the DiffIDs of two uncompressed layer archives. The first ChainID is D0; the next is the digest of the literal string consisting of D0, a space and D1 (including each digest's algorithm prefix). Applying the same layers in a different order generally gives a different chain identity. A snapshotter's internal directory number is yet another identity. It is not a registry digest and should not be reconstructed by guessing a number from the image name.
+
+For the companion example I generated two small, deterministic tar archives, compressed one, computed the relevant SHA-256 digests and applied the recurrence. The generator verifies that the compressed and uncompressed digests differ, that the chain is order-dependent and that recomputation is deterministic. This is a local calculation of identity, not an actual image pull or unpack benchmark.
+
+## OverlayFS presents one namespace over several directories
+
+The conventional writable OverlayFS mount has ordered lower directories, an upper directory and a work directory. The merged mount is the filesystem view seen by the container. For a matching regular filename the upper entry normally takes precedence; directories can merge names from upper and lower layers. Lower layers nearer the top take precedence over older lower layers.
+
+The work directory is private scratch space used by OverlayFS and must start empty and reside on the same filesystem as the upper directory. It is not a third visible data layer. The exact mount options depend on the snapshotter and kernel; some snapshot configurations can use a bind mount rather than an overlay mount.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/overlay-02-layer-layout.svg" target="_blank" rel="noopener noreferrer" aria-label="Open overlay 02 layer layout diagram">
+    <img src="/figures/journals/overlay-02-layer-layout.svg" alt="A writable overlay with two shared read-only lower layers. Workdir is auxiliary to upperdir, not a source of visible files." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>A writable overlay with two shared read-only lower layers. Workdir is auxiliary to upperdir, not a source of visible files.</figcaption>
+</figure>
+
+This explains why the writable layer can be relatively small even when the image itself is large. Two containers can start with the same committed lower chain and have different upper directories. The benefit is shared storage and cheap initial filesystem preparation; the cost is that the common lower directories remain dependencies for both.
+
+## Copy-up, deletion and write amplification
+
+Suppose a lower layer contains a file named config.txt. Reading it does not require copying the entire file to the writable upper layer. In the ordinary data-copy-up path, opening it for writing causes the kernel to create an upper copy, with the necessary metadata and file data, before modifying it there. Metadata-only operations and options such as metacopy can change the details; the example assumes conventional full data copy-up.
+
+If a file from a lower layer is deleted through the merged view, the lower image must remain intact for other users. OverlayFS records a whiteout in the upper layer to hide the lower name. An opaque upper directory can also suppress the lower directory's contents. OCI layer archives have their own whiteout encoding (such as .wh.filename); the archive format is not identical to the kernel's on-disk representation.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/overlay-03-copy-up-whiteout.svg" target="_blank" rel="noopener noreferrer" aria-label="Open overlay 03 copy up whiteout diagram">
+    <img src="/figures/journals/overlay-03-copy-up-whiteout.svg" alt="Three successive views of a synthetic file: read from lower, modify an upper copy, then hide the lower file with a whiteout. The original lower bytes never change." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Three successive views of a synthetic file: read from lower, modify an upper copy, then hide the lower file with a whiteout. The original lower bytes never change.</figcaption>
+</figure>
+
+For an application repeatedly rewriting large lower-layer files, the first write can cost more I/O and space than the logical modification suggests. Subsequent writes to an existing upper copy need not copy the lower file again. This is one reason I distinguish a container's writable-layer I/O from its mounted volume I/O. The figure generator checks a tiny in-memory lookup model of precedence, copying and hiding; it does not implement OverlayFS or measure kernel copy-up performance.
+
+## The parent relationship survives independently of the directory
+
+The snapshotter tracks a key, kind, parent and internal storage ID. A committed snapshot can be reused as a parent, whereas an active snapshot is a mutable preparation or container state. The logical graph and the physical directories have to agree. A parent ID resolved from metadata is not proof that its corresponding fs directory is reachable in the runtime's mount namespace.
+
+In the public containerd overlay snapshotter implementation, snapshot creation prepares a temporary directory and creates a metadata record inside a transaction. In the ordinary ownership-inheritance path it resolves the first parent ID, calls stat on that parent's upper directory, obtains UID/GID and applies ownership to the newly prepared fs directory. If the stat fails, the code wraps the error with the same parent-stat message seen in the incident, before returning the new mount description. The error path cleans up preparation state. The exact implementation can vary with release and ID-mapping configuration; this is a matching public source path, not a claim that I recovered the historical binary or its exact stack trace.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/overlay-04-parent-dependency.svg" target="_blank" rel="noopener noreferrer" aria-label="Open overlay 04 parent dependency diagram">
+    <img src="/figures/journals/overlay-04-parent-dependency.svg" alt="Two synthetic active snapshots depend on one committed parent. Metadata may resolve the parent even when its backing directory is absent in the runtime&#x27;s filesystem view." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Two synthetic active snapshots depend on one committed parent. Metadata may resolve the parent even when its backing directory is absent in the runtime's filesystem view.</figcaption>
+</figure>
+
+The error therefore narrows the investigation more than the generic Pod status does. It indicates that a required path lookup failed. It does not explain why the path was absent: deletion outside the runtime, an incomplete restore, an unavailable backing mount or another inconsistency are possibilities, not established causes. A filesystem path can be missing without the underlying storage device having failed.
+
+A separate small filesystem experiment uses a temporary directory and a dictionary mapping snapshot names to storage IDs. It first verifies that two child records resolve a real parent directory, then removes only the synthetic empty directory and verifies that both lookups raise FileNotFoundError while the metadata remains unchanged. It also checks that an independent parent is still reachable. The experiment reproduces the logical failure condition using ordinary stat calls; it does not start containerd or mount OverlayFS.
+
+## Failure boundaries during container creation
+
+A scheduled Pod can fail at image resolution, download, unpack, active snapshot preparation, root filesystem mounting or process startup. The kubelet status and detailed event are useful together. In this case the parent-stat error identifies a runtime snapshot preparation boundary. I would not investigate application code first, because the observed error does not require that application code ever ran.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/overlay-05-creation-boundary.svg" target="_blank" rel="noopener noreferrer" aria-label="Open overlay 05 creation boundary diagram">
+    <img src="/figures/journals/overlay-05-creation-boundary.svg" alt="Logical container creation stages, with the matching parent-stat path highlighted. CRI implementations may combine or reorder some operations; this is not a captured execution trace." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Logical container creation stages, with the matching parent-stat path highlighted. CRI implementations may combine or reorder some operations; this is not a captured execution trace.</figcaption>
+</figure>
+
+This also explains why a generic image pull is not by itself sufficient recovery evidence. The content blobs may already be cached; unpack may reuse existing committed snapshot metadata. Pull success does not establish that every required directory is present. Even a successful snapshot commit does not prove that a new container can mount the root filesystem and start, or that its persistent volume is attached.
+
+I would first collect the affected image identity, node, detailed CRI error, runtime version, effective snapshotter and read-only snapshot inventory. I would compare the referenced path with the runtime's actual mount view and the backing filesystem's state, checking whether other containers share the parent. The separate [CI image distribution record](/projects/rokaf-private-artifacts-and-ci/) covers registry access; the [control-plane incident record](/projects/rokaf-control-plane-incident-log/) addresses storage availability at a different layer.
+
+## Recovery without confusing image data and application data
+
+An image can be reconstructed from trusted content if the required blobs and configuration are still available. An active writable layer may contain unique state; removing it can discard that state. A PVC-backed volume is managed outside the image snapshot chain, with its own attachment and filesystem lifecycle. Some ephemeral volumes are also separate mounts. These are distinctions in ownership and recovery responsibility, not guarantees that every container writes data in the intended place.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/overlay-06-recovery-boundaries.svg" target="_blank" rel="noopener noreferrer" aria-label="Open overlay 06 recovery boundaries diagram">
+    <img src="/figures/journals/overlay-06-recovery-boundaries.svg" alt="Recovery evidence by data class: cached blobs, committed snapshots, writable layer and persistent volume. A running container alone does not verify the persistent application data." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Recovery evidence by data class: cached blobs, committed snapshots, writable layer and persistent volume. A running container alone does not verify the persistent application data.</figcaption>
+</figure>
+
+Garbage collection follows runtime references and leases, not the names of physical directories viewed in isolation. Containerd's logical remove and snapshotter cleanup operations are coordinated with metadata. Deleting directories manually can leave live references unresolved; creating an empty directory with the missing ID would satisfy a superficial existence check but would not restore the layer contents. I would preserve unique data and a consistent inventory first, then use the supported recovery operations for the installed release during an authorized maintenance window.
+
+My completion criteria would be distinct: expected content identity is available, the snapshot chain is usable, a new root filesystem can be prepared, the application starts, and its intended mounted data is verified. If the missing directory was caused by a missing backing mount, re-unpacking onto the wrong filesystem could make the problem worse. If the runtime's root was moved, the effective mount and configured path would need to agree before repair. None of those checks is documented as completed for March 19.
+
+That separation is the enduring value of the incident. A registry artifact, a logical snapshot record, the directory containing its filesystem changes and the running application each have their own existence and validity conditions. An error at one boundary should narrow the next investigation, not become an unsupported story about every other component.
+
+**Related records:** [Stateful storage and Longhorn recovery](/projects/rokaf-stateful-storage-and-recovery/) · [Storage placement and failure domains](/projects/rokaf-storage-placement-and-failure-domains/) · [Linux memory pressure](/projects/rokaf-memory-pressure-and-service-recovery/).
+
+**References:** [OCI manifest](https://specs.opencontainers.org/image-spec/manifest/) · [OCI configuration and ChainID](https://github.com/opencontainers/image-spec/blob/main/config.md) · [OCI layer changesets](https://specs.opencontainers.org/image-spec/layer/) · [containerd content flow](https://github.com/containerd/containerd/blob/main/docs/content-flow.md) · [overlay snapshotter source](https://github.com/containerd/containerd/blob/main/plugins/snapshots/overlay/overlay.go) · [Linux OverlayFS documentation](https://docs.kernel.org/filesystems/overlayfs.html).
