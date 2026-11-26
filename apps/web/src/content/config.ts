@@ -61,6 +61,9 @@ const projects = defineCollection({
   schema: basePostSchema.extend({
     role: z.string(),
     period: z.string(),
+    // date is the work chronology anchor, not an article publication timestamp.
+    datePrecision: z.enum(["day", "month", "period"]).default("period"),
+    recordedAt: z.coerce.date().optional(),
     status: z.enum(["planned", "building", "active", "archived"]).default("building")
   })
 });

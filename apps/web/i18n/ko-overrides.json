@@ -912,5 +912,15 @@
   "Container Runtime Storage Migration in K3s | Jihwan Park": "K3s Container Runtime 저장 공간 이전 | 박지환",
   "Moving runtime storage without losing snapshot references, distinguishing K3s data-dir, containerd root and state, mount identity and recovery validation.": "K3s data-dir와 containerd Root 및 State, Mount 식별, Snapshot 참조를 보존하는 저장 공간 이전과 복구 검증.",
   "K3s runtime storage placement and migration boundary investigation": "K3s 런타임 저장 공간 배치 및 이전 경계 조사",
-  "Storage": "스토리지"
+  "Storage": "스토리지",
+  "Work reference date": "수행 기준일",
+  "First public record": "최초 공개 원고 기록일",
+  "Article revised": "원고 수정일",
+  "Jun 2026": "2026년 6월",
+  "Mar–Jun 2026": "2026년 3~6월",
+  "Jan–Feb 2026": "2026년 1~2월",
+  "Feb–Jun 2026": "2026년 2~6월",
+  "Mar–Aug 2026": "2026년 3~8월",
+  "Jan–Mar 2026": "2026년 1~3월",
+  "Project dates refer to the work or a documented milestone, not the publication of this retrospective. Where only a month or period is known, no exact day is displayed. The first public record and article revision are recorded separately on each project page.": "프로젝트 날짜는 글을 공개한 시점이 아니라 실제 수행 시점이나 기록으로 확인된 주요 작업일을 뜻한다. 월 또는 기간만 확인되는 경우에는 정확한 일자를 표시하지 않는다. 최초 공개 원고 기록일과 수정일은 각 프로젝트 페이지에 별도로 표시한다."
 }

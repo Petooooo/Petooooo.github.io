@@ -11,6 +11,11 @@ export async function GET(context) {
     ...(await getCollection("research")),
     ...(await getCollection("archive"))
   ].filter(isPublishedEntry).sort(byDateDesc);
+  // A work-date anchor must not backdate a feed item's publication.
+  const feedDate = (entry) => entry.collection === "projects"
+    ? (entry.data.recordedAt ?? entry.data.updated ?? entry.data.date)
+    : entry.data.date;
+  entries.sort((a, b) => feedDate(b).valueOf() - feedDate(a).valueOf());
 
   return rss({
     title: siteConfig.title,
@@ -20,7 +25,7 @@ export async function GET(context) {
     items: entries.map((entry) => ({
       title: entry.data.title,
       description: entry.data.description,
-      pubDate: entry.data.date,
+      pubDate: feedDate(entry),
       link: getCollectionPath(entry).replace(/^\//, "")
     }))
   });

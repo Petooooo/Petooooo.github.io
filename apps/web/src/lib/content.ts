@@ -85,3 +85,10 @@ export function formatDate(date: Date) {
   const day = String(date.getUTCDate()).padStart(2, "0");
   return `${year}.${month}.${day}`;
 }
+
+/** Month/period anchors are for ordering only: never display their synthetic day. */
+export function formatProjectWorkDate(entry: CollectionEntry<"projects">) {
+  if (entry.data.datePrecision === "day") return formatDate(entry.data.date);
+  if (entry.data.datePrecision === "month") return formatDate(entry.data.date).slice(0, 7);
+  return entry.data.period;
+}

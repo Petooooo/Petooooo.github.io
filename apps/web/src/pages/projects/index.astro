@@ -4,7 +4,7 @@ import BaseLayout from "@/layouts/BaseLayout.astro";
 import ProjectCard from "@/components/ProjectCard.astro";
 import SectionHeader from "@/components/SectionHeader.astro";
 import PageHeader from "@/components/PageHeader.astro";
-import { byDateDesc, isPublishedEntry } from "@/lib/content";
+import { byDateAsc, byDateDesc, isPublishedEntry } from "@/lib/content";
 import { withBase } from "@/lib/urls";
 
 const projects = (await getCollection("projects")).filter(isPublishedEntry).sort(byDateDesc);
@@ -28,7 +28,14 @@ const rokafOrder = [
   "rokaf-service-lb-hostport-conflict",
   "rokaf-gpu-scheduling-and-capacity",
   "rokaf-async-workers-and-idempotency",
-  "document-translation-pipeline"
+  "document-translation-pipeline",
+  "rokaf-gitops-domain-tls-standardization",
+  "rokaf-k3s-pod-density-capacity",
+  "linux-container-runtime-storage-migration",
+  "linux-containerd-overlayfs-snapshot-failures",
+  "linux-disk-io-journaling-writeback",
+  "linux-host-memory-accounting-cgroups",
+  "linux-vfs-mount-lifecycle"
 ];
 const investigationOrder = [
   "rokaf-langfuse-v4-migration-field-notes",
@@ -48,13 +55,13 @@ const undergraduateArchiveOrder = [
 ];
 const undergraduateArchive = projects
   .filter((p) => undergraduateArchiveOrder.includes(p.slug))
-  .sort((a, b) => undergraduateArchiveOrder.indexOf(a.slug) - undergraduateArchiveOrder.indexOf(b.slug));
+  .sort(byDateAsc);
 const journal = projects
   .filter((p) => rokafOrder.includes(p.slug))
-  .sort((a, b) => rokafOrder.indexOf(a.slug) - rokafOrder.indexOf(b.slug));
+  .sort(byDateDesc);
 const openInvestigations = projects
   .filter((p) => investigationOrder.includes(p.slug))
-  .sort((a, b) => investigationOrder.indexOf(a.slug) - investigationOrder.indexOf(b.slug));
+  .sort(byDateDesc);
 const highlights = [
   {
     type: "Undergraduate project / memory efficiency",
@@ -104,7 +111,7 @@ const highlights = [
         </article>
       ))}
     </div>
-    <p class="mt-6 text-sm leading-7 text-slate-400">The two highlighted undergraduate projects are based on their original 2024 report and team poster. Earlier implementations appear below in project-period order; all historical write-ups are 2026 retrospectives, not posts published at the time.</p>
+    <p class="mt-6 text-sm leading-7 text-slate-400">Project dates refer to the work or a documented milestone, not the publication of this retrospective. Where only a month or period is known, no exact day is displayed. The first public record and article revision are recorded separately on each project page.</p>
   </section>
 
   <section class="border-t border-white/10 py-12 md:py-16">

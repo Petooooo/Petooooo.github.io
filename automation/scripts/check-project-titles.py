@@ -6,6 +6,7 @@ This intentionally applies only to published Projects, not unpublished drafts,
 research titles, or the independent systems-notes repository.
 """
 from pathlib import Path
+from datetime import date
 import re
 import sys
 
@@ -30,6 +31,21 @@ for path in sorted(PROJECTS.glob("*.mdx")):
     if fields.get("draft") == "true":
         continue
     checked += 1
+    precision = fields.get("datePrecision", "")
+    if precision not in {"day", "month", "period"}:
+        errors.append(f"{path.name}: missing or invalid work-date precision")
+    try:
+        work = date.fromisoformat(fields["date"])
+        recorded = date.fromisoformat(fields["recordedAt"])
+        revised = date.fromisoformat(fields["updated"]) if fields.get("updated") else None
+        if precision in {"month", "period"} and work.day != 1:
+            errors.append(f"{path.name}: approximate work date must use a month-start sorting anchor")
+        if not fields.get("period"):
+            errors.append(f"{path.name}: missing project period")
+        if revised and (recorded > revised or work > revised):
+            errors.append(f"{path.name}: article revision precedes a documented work or record date")
+    except (KeyError, ValueError):
+        errors.append(f"{path.name}: invalid or missing work/record/revision date")
     title = fields.get("title", "")
     if not title:
         errors.append(f"{path.name}: missing title")
@@ -50,3 +66,4 @@ if errors:
         print(" -", error)
     sys.exit(1)
 print(f"Project editorial titles: {checked} published subject-led titles checked.")
+print(f"Project chronology: {checked} published work dates and record dates checked.")
