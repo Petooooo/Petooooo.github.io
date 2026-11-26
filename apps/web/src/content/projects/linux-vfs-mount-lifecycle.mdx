@@ -1,0 +1,126 @@
+---
+title: "Linux VFS and Mount Lifecycle"
+description: "A CSI globalmount cleanup failure, VFS object references, open file lifetimes, mount namespaces, and safe volume teardown boundaries."
+date: "2026-11-26"
+updated: "2026-11-26"
+draft: false
+reviewed: true
+reviewStatus: "reviewed"
+sensitivity: sanitized
+category: "Engineering Investigation"
+area: "Linux Storage & Runtime"
+tags: ["Linux", "VFS", "Mount", "Filesystem", "CSI", "K3s", "Longhorn"]
+type: "troubleshooting"
+role: "Linux mount and CSI volume cleanup investigation"
+period: "Mar 2026"
+status: "building"
+techStack: ["Linux", "VFS", "Kubernetes", "CSI", "Longhorn"]
+---
+
+On March 23, 2026, during a K3s node cleanup, I encountered an error while removing directories below the kubelet data tree. The retained output included a CSI staging directory and several other Pod volume paths.
+
+```text
+rm: cannot remove '.../globalmount': Device or resource busy
+```
+
+The path is shortened to remove internal identifiers. The important detail is the operation: this was an error from `rm`, not a retained failure from an explicit `umount` command. Similar errors appeared around mounted configuration and projected-volume paths. The surrounding investigation also included missing containerd snapshot paths and missing CSI volume metadata. I had restarted K3s and removed a detached PVC, but the retained record does not establish that either action caused these errors or that a subsequent unmount and application recovery succeeded.
+
+The interesting question was why a directory could be visible yet resist removal even during node cleanup. Answering it requires separating names, open references, mount attachments and the data behind them. The [containerd snapshot investigation](/projects/linux-containerd-overlayfs-snapshot-failures/) concerns a missing dependency; here the issue is the lifetime of an existing path.
+
+## VFS objects: a name is not an open file
+
+The Linux VFS provides a common filesystem interface over implementations such as ext4 and tmpfs. It does not make the underlying implementations identical. During pathname resolution, the kernel walks directory entries, crosses mount boundaries where appropriate and resolves an inode. The inode represents a filesystem object and its metadata. A positive dentry associates a name within a parent directory with an inode; negative dentries can also cache failed lookups. More than one name can reference the same inode through hard links.
+
+The superblock represents a filesystem instance. Mount objects attach filesystem trees or subtrees at positions in a namespace. Several mounts may reference the same superblock; the mount root need not be the root of that entire filesystem.
+
+An open file description is represented by a kernel file object. It contains state such as file position and file status flags, and retains a path consisting of a mount and a dentry. A userspace file descriptor is an index into a descriptor table that refers to an open file description. Descriptor flags, such as close-on-exec, belong to the descriptor rather than that shared description. A fresh open of the same pathname normally creates a separate file description. Duplication with dup or inheritance across fork can share the original description and its position.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/vfs-01-object-graph.svg" target="_blank" rel="noopener noreferrer" aria-label="Open vfs 01 object graph diagram">
+    <img src="/figures/journals/vfs-01-object-graph.svg" alt="Two duplicated descriptors share one file description; a separate open has a different position. All three descriptors can ultimately reference the same inode. Mount and dentry form the file&#x27;s path." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Two duplicated descriptors share one file description; a separate open has a different position. All three descriptors can ultimately reference the same inode. Mount and dentry form the file's path.</figcaption>
+</figure>
+
+## File positions and unlink: a local experiment
+
+To make the distinction observable, I wrote a small experiment that operates only on a disposable file containing the six bytes ABCDEF. It opens the file, duplicates the descriptor, and opens the same path independently. A two-byte read through the original returns AB. Reading two more bytes through the duplicate returns CD, while the independent open returns AB. The shared position is now four bytes and the independent position is two. The inode identity is the same, but the file positions are not.
+
+Next I created a second hard link. Removing the first pathname reduced the inode's link count from two to one. Removing the second reduced it to zero, and a fresh open by either name failed. The existing descriptors remained usable: after closing the original descriptor, the duplicate returned EF, and fstat still reported the same inode with zero links. These are actual assertions executed by the companion Python script on a temporary file, not observations from the 2026 incident.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/vfs-02-reference-lifetime.svg" target="_blank" rel="noopener noreferrer" aria-label="Open vfs 02 reference lifetime diagram">
+    <img src="/figures/journals/vfs-02-reference-lifetime.svg" alt="Executed six-byte experiment: positions diverge between independent opens; both names disappear before the remaining open references are closed." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Executed six-byte experiment: positions diverge between independent opens; both names disappear before the remaining open references are closed.</figcaption>
+</figure>
+
+Unlinking a name and releasing the underlying storage are separate events. When the last hard link and all live references disappear, the filesystem can reclaim the unlinked object. A memory mapping can also retain a file reference after the descriptor is closed. Filesystem accounting and eventual block reuse depend on the implementation, so this experiment does not attempt to measure freed disk blocks. It does explain why removing a large log file does not necessarily reduce allocated space immediately if the writer still has it open.
+
+## Mounts add another dimension to pathname resolution
+
+A pathname has meaning within a process's mount namespace and root. A mount changes the tree that pathname resolution sees at the attachment point; the covered directory is not destroyed. A bind mount creates another attachment of an existing subtree rather than copying its files. Two paths can therefore expose the same data while having distinct mount identities.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/vfs-03-mount-namespace.svg" target="_blank" rel="noopener noreferrer" aria-label="Open vfs 03 mount namespace diagram">
+    <img src="/figures/journals/vfs-03-mount-namespace.svg" alt="Conceptual host and workload views of a shared filesystem subtree. Each namespace has its own attachment tree; this is not the operating cluster&#x27;s topology." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Conceptual host and workload views of a shared filesystem subtree. Each namespace has its own attachment tree; this is not the operating cluster's topology.</figcaption>
+</figure>
+
+When a mount namespace is copied, mount events do not necessarily remain isolated. Shared mounts propagate events to peers; slave mounts receive propagation from their master peer group without propagating events back to it; private mounts do not propagate them. The propagation configuration must be checked, not inferred from identical path strings. This is particularly relevant when a containerized CSI plugin must make mounts visible to kubelet on the host.
+
+The kernel exposes the relevant view through /proc/PID/mountinfo. A row contains a mount ID, parent ID, device major/minor, root within the filesystem, mountpoint, per-mount options, optional propagation fields and filesystem details after a separator. The mount root can differ between two bind mounts of the same filesystem. The device number alone cannot identify which mount attachment a path refers to. Mount IDs can be reused after unmount, so the namespace identity and capture time matter as well.
+
+## Directory removal and unmount have different EBUSY conditions
+
+A mountpoint is a directory entry in one tree and an attachment position for another. Removing the directory is not the same as detaching the mounted tree. Linux rmdir can return EBUSY for a mountpoint or the calling process's root. In contrast, ordinary unmount can fail because active references or nested mounts prevent detachment. An open file, working directory or mapping can retain relevant references even if a pathname has already been unlinked. The exact conditions depend on the mount and namespace involved; the same inode being open through an independent mount does not automatically prove that this particular attachment is busy.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/vfs-04-operation-boundaries.svg" target="_blank" rel="noopener noreferrer" aria-label="Open vfs 04 operation boundaries diagram">
+    <img src="/figures/journals/vfs-04-operation-boundaries.svg" alt="Unlink, rmdir, ordinary unmount and lazy detach change different relationships. The original rm error does not prove which process held a mount or that umount was attempted." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Unlink, rmdir, ordinary unmount and lazy detach change different relationships. The original rm error does not prove which process held a mount or that umount was attempted.</figcaption>
+</figure>
+
+A lazy unmount removes an attachment from the namespace immediately while cleanup of remaining references is deferred. It is not a guarantee that a filesystem has been quiesced, that dirty data is durable, or that a remote block device can be detached safely. Force unmount has filesystem-specific semantics and is not a general solution to active references. Recursively deleting paths while a filesystem is still mounted can delete contents of that filesystem, not just the underlying mountpoint. I would therefore diagnose first rather than use a recursive cleanup as a test.
+
+For another incident I would collect a read-only view of the exact target and its subtree, compare the relevant host, kubelet and driver mount namespaces, and inspect the actual holder only after identifying the attachment. Example inspection commands, with placeholders rather than real paths, are:
+
+```bash
+findmnt --mountpoint "$TARGET"
+findmnt -R --mountpoint "$TARGET"
+cat /proc/self/mountinfo
+cat "/proc/$PID/mountinfo"
+readlink "/proc/$PID/ns/mnt"
+```
+
+An ancestor match from a generic target lookup is not proof that TARGET is itself a mountpoint. The exact mountpoint check and mount tree help separate that case. Once the mount is identified, open descriptor, cwd, root and mapping inspection can narrow possible holders. Those inspections need appropriate permissions and the right namespace. I would avoid broad process or mount scans that change state; the commands are a future evidence plan, not a transcript of the cleanup.
+
+## CSI staging, publication and attachment
+
+For a filesystem volume using the CSI staging capability, the node plugin can mount the device at a staging target once on a node. NodePublishVolume exposes the staged volume at the target for a consuming Pod, often through a bind mount. The container runtime subsequently exposes that target in the container's mount namespace. Multiple consumers can share a staging mount where the access mode and driver permit it. A raw block volume has a different presentation, so the diagram models only a staged filesystem volume.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/vfs-05-csi-mount-topology.svg" target="_blank" rel="noopener noreferrer" aria-label="Open vfs 05 csi mount topology diagram">
+    <img src="/figures/journals/vfs-05-csi-mount-topology.svg" alt="One illustrative filesystem volume, staging mount and two Pod targets. The runtime&#x27;s container mount is another view, not another data replica." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>One illustrative filesystem volume, staging mount and two Pod targets. The runtime's container mount is another view, not another data replica.</figcaption>
+</figure>
+
+For drivers implementing controller attachment and node staging, the ordinary successful lifecycle includes ControllerPublishVolume, NodeStageVolume and NodePublishVolume. Teardown reverses these dependencies: the consumer must stop using the volume, its targets must be unpublished, and staging must be undone after the relevant publications have been removed. ControllerUnpublishVolume completes controller-side detachment where that capability is used. Exact orchestration and retry behavior depend on the driver, orchestrator and access mode. A successful RPC does not itself verify application data integrity.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/vfs-06-teardown-evidence.svg" target="_blank" rel="noopener noreferrer" aria-label="Open vfs 06 teardown evidence diagram">
+    <img src="/figures/journals/vfs-06-teardown-evidence.svg" alt="Dependency-aware teardown and its evidence checkpoints. The historical removal error is shown separately from the proposed successful lifecycle." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Dependency-aware teardown and its evidence checkpoints. The historical removal error is shown separately from the proposed successful lifecycle.</figcaption>
+</figure>
+
+The March error fits a boundary between kubelet's desired cleanup and the kernel's actual mount state. But a filename ending in globalmount does not prove a particular mount owner, submount, open reference or driver bug. A missing CSI metadata file is another observation, not proof that the mount has been removed. Longhorn process and attachment state have their own lifecycle, as discussed in the [Longhorn recovery record](/projects/rokaf-stateful-storage-and-recovery/). I would not infer that a volume replica is corrupt or delete storage based on an EBUSY message alone.
+
+My recovery criteria would be a stopped consumer, removal of the correct publication and staging references in the relevant namespaces, successful driver reconciliation, and verification of the intended application data after safe reattachment. The historical record does not demonstrate those checkpoints. The main lesson is that the directory tree is only one observable part of a reference graph: cleanup must respect the objects and owners that keep the storage alive.
+
+**Related records:** [Containerd and OverlayFS snapshot failures](/projects/linux-containerd-overlayfs-snapshot-failures/) · [Longhorn recovery](/projects/rokaf-stateful-storage-and-recovery/) · [Storage placement and failure domains](/projects/rokaf-storage-placement-and-failure-domains/) · [Linux memory pressure](/projects/rokaf-memory-pressure-and-service-recovery/).
+
+**References:** [Linux VFS](https://docs.kernel.org/filesystems/vfs.html) · [open(2)](https://man7.org/linux/man-pages/man2/open.2.html) · [unlink(2)](https://man7.org/linux/man-pages/man2/unlink.2.html) · [rmdir(2)](https://man7.org/linux/man-pages/man2/rmdir.2.html) · [umount(2)](https://man7.org/linux/man-pages/man2/umount.2.html) · [mount namespaces](https://man7.org/linux/man-pages/man7/mount_namespaces.7.html) · [mountinfo](https://man7.org/linux/man-pages/man5/proc_pid_mountinfo.5.html) · [CSI specification](https://github.com/container-storage-interface/spec/blob/master/spec.md) · [Kubernetes CSI driver documentation](https://kubernetes-csi.github.io/docs/developing.html).

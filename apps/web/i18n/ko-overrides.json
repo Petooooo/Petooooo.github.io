@@ -882,5 +882,14 @@
   "containerd": "containerd",
   "OverlayFS": "OverlayFS",
   "OCI": "OCI",
-  "Filesystem": "파일시스템"
+  "Filesystem": "파일시스템",
+  "Linux VFS and Mount Lifecycle": "Linux VFS와 Mount의 생명주기",
+  "Linux VFS and Mount Lifecycle | Jihwan Park": "Linux VFS와 Mount의 생명주기 | 박지환",
+  "A CSI globalmount cleanup failure, VFS object references, open file lifetimes, mount namespaces, and safe volume teardown boundaries.": "CSI globalmount 정리 실패를 통해 살펴본 VFS 참조, 열린 파일의 생명주기, Mount Namespace와 Volume 정리의 경계.",
+  "Linux mount and CSI volume cleanup investigation": "Linux Mount 및 CSI Volume 정리 장애 조사",
+  "VFS": "VFS",
+  "Mount": "Mount",
+  "CSI": "CSI",
+  "Longhorn": "Longhorn",
+  "Kubernetes": "Kubernetes"
 }
