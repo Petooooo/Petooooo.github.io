@@ -75,6 +75,52 @@ MinIO를 처음 운영할 때는 Standalone 인스턴스를 Longhorn 볼륨 위�
 
 원래 데이터를 보존해야 하는지, 다른 정상 사본으로부터 재생성할 수 있는지, 장비 하나가 멈췄을 때 어디에서 서비스를 계속 제공할지는 볼륨을 만들기 전에 결정해야 했다. 기존 Local-path PVC의 경로를 고치며 부딪힌 문제도 결국 그 결정에 연결돼 있었다.
 
+## 접근 방식과 저장 위치는 서로 다른 문제다
+
+Block Storage는 블록 주소로 접근할 수 있는 장치를 제공한다. 그 위의 파일시스템은 파일 경로와 디렉터리, 메타데이터를 관리한다. Network File Service는 공유 파일 이름 공간을 제공하며 Object Storage는 Bucket과 Key를 통해 객체에 접근한다. 이들은 접근 인터페이스의 차이지 데이터 내구성을 보장하는 방식은 아니다. Block Device가 원격에 있을 수도 있고 File Service가 복제될 수도 있으며 Object Storage 내부에서 로컬 디스크를 사용할 수도 있다. Kubernetes의 volumeMode가 Filesystem인지 Block인지도 사용자에게 제공하는 형태를 의미할 뿐 실제 복제 알고리즘을 알려주지는 않는다.
+
+{{figure /figures/journals/placement-01-interfaces.svg | Block, File, Object의 접근 방식과 별도의 데이터 보호 경계.}}
+
+StorageClass에서 WaitForFirstConsumer를 사용하면 첫 Pod의 배치 조건을 고려할 수 있을 때까지 Binding과 Provisioning을 미룰 수 있다. CPU나 Affinity, Topology를 확인하기 전에 로컬 디스크가 정해지는 문제를 줄일 수 있다. 하지만 이미 Bound된 Local PV가 다른 노드로 이동할 수 있게 되는 것은 아니다. 새 Pod도 기존 PV의 노드 조건을 만족해야 한다. Reclaim Policy는 Claim이 해제된 뒤의 처리 방식을 결정하고, Retain 자체가 검증된 백업을 뜻하지는 않는다. 실제 StorageClass와 Provisioner 버전, PV Source 및 Affinity를 함께 확인해야 한다.
+
+{{figure /figures/journals/placement-02-binding.svg | 첫 Pod의 배치 조건을 고려하는 Provisioning과 이후 Scheduling의 가상 예시. Binding 이후에는 기존 PV의 위치 조건이 남는다.}}
+
+로컬 I/O는 원격 저장소로 가는 통신 경로를 줄일 수 있다. 물론 Page Cache와 장치 Queue, 애플리케이션 자체 복제는 여전히 영향을 준다. 네트워크 복제 볼륨은 Engine과 원격 Replica 경로를 추가한다. 로컬 Replica가 있으면 접근성이 좋아질 수 있지만 원격 Replica에 동기적으로 쓰는 비용까지 사라지는 것은 아니다. 실제 Engine과 배치에 따라 읽기 위치도 달라진다. PVC가 Bound인지보다 앱의 읽기·쓰기 경로와 장애 후 복구 경로를 비교해야 했다.
+
+## 복제에 따른 용량 비용과 쓰기 증폭
+
+같은 기준으로 저장한 데이터가 100 GiB이고 DB Replica 두 개가 각각 전체를 보관한다고 가정해 보자. 로컬 저장소에서는 단순 데이터 사본이 200 GiB다. 각 Replica의 볼륨까지 두 개씩 복제한다면 400 GiB가 된다. 데이터 Shard 4개, Parity Shard 2개인 Erasure Set은 이상적인 Coded Payload의 배수가 6/4이므로 입력 100 GiB에 150 GiB가 필요하다. 서로 다른 가용성과 쓰기 확인 조건을 갖는 예시이며 동등한 설계라는 의미는 아니다.
+
+{{figure /figures/journals/placement-03-capacity.svg | 100 GiB를 기준으로 비교한 가상의 사본 및 Coded Payload 용량. 메타데이터, 압축, Snapshot, 예약 공간, Journal 및 임시 데이터는 제외했다.}}
+
+2 × 2는 저장된 사본의 수를 세는 것이지 논리 쓰기 한 번에 장치 쓰기가 몇 번 발생하는지 측정한 값은 아니다. 실제 Write Amplification은 동일 시간 동안 물리 장치에 기록된 바이트 증가분을 앱이 수용한 논리 바이트로 나눠 살펴볼 수 있다. Writeback과 Batching, Journal, Compaction, 복제 로그, Snapshot 및 재구축은 모두 이 비율에 영향을 줄 수 있다. 논리 장치와 그 아래 물리 장치의 카운터를 따로 더하면 중복 계산될 수 있다. [Disk I/O 글](/projects/linux-disk-io-journaling-writeback/)에서도 이 집계 경계를 다뤘다.
+
+장애가 나면 DB와 하위 블록 저장소가 동시에 재구축할 수도 있다. 디스크와 네트워크를 함께 사용하므로 무조건 병렬로 복구하는 것보다 순서나 속도를 조정하는 것이 나을 때도 있다. 반대로 블록 복제가 있다면 디스크 하나의 장애로 비싼 DB Initial Sync를 다시 하지 않아도 될 수 있다. 실제 복구 시간과 쓰기 지연, 여유 공간, 정상 Peer로부터 재생성할 수 있는지에 따라 판단할 문제다. 당시 통제된 환경에서 이전 전후의 처리량을 측정한 기록은 없다.
+
+## 사본 수보다 살아남는 장애 영역
+
+완전한 사본 네 개를 두 가지 방식으로 배치한다고 가정했다. 집중된 구성에서는 DB Member A의 저장소 사본 두 개가 모두 X 노드에 있고 B의 두 사본은 Y에 있다. 분산된 구성에서는 A가 X와 Z, B가 Y와 W에 있다. X가 실패하면 첫 구성에서는 A의 모든 사본을 잃지만 두 번째 구성에서는 각 Member의 사본이 하나 이상 남는다. 두 번째 구성에서 X와 Z가 함께 실패하면 A는 사라진다. 여기서 저장소 사본이 남아 있다는 사실만으로 DB Member가 재기동됐거나 새로운 쓰기를 처리할 수 있다고 말할 수는 없다.
+
+{{figure /figures/journals/placement-04-domains.svg | 사본 수는 같지만 노드 장애 결과가 다른 두 가지 가상 배치. 각 사본은 최신 상태의 완전한 데이터라고 가정했다.}}
+
+작은 열거 모델로 두 배치에서 가능한 모든 노드 장애 조합을 비교한다. 각 Member의 사본이 하나라도 남는지 확인하고, 노드 세 개에 Shard를 두 개씩 배치한 가상의 4+2 Erasure Set도 검사한다. 노드 하나를 잃으면 Shard 두 개가 없어져 이상적인 복원 조건을 만족하지만 노드 두 개를 잃으면 네 개가 없어져 복원할 수 없다. 남은 데이터가 정상이고 누락 위치를 안다는 가정이다. 실제 Erasure Coding이나 Scheduler, Failover 또는 합의 프로토콜을 구현한 실험은 아니다.
+
+공통 전원이나 네트워크 의존성이 있으면 서로 다른 노드도 동시에 잃을 수 있다. Soft Anti-affinity는 자원이 부족할 때 같은 장애 영역의 배치를 허용할 수 있고, 강한 배치 조건은 적절한 대상이 없으면 Provisioning을 막을 수도 있다. 현재 사본 위치와 재구축할 수 있는 대상 위치를 함께 봐야 한다. [RAID와 제어면 복구 글](/projects/rokaf-control-plane-incident-log/)에서 다룬 투표 멤버의 과반수와 로컬 블록 중복성의 차이도 여기에 적용된다.
+
+## 워크로드마다 복구 완료 기준이 다르다
+
+MongoDB Secondary를 Initial Sync하려면 정상 원본과 충분한 자원, 동기화 중 발생한 변경을 따라갈 수 있는 Oplog 이력이 필요하다. Election에 필요한 과반수와 영속 데이터 사본의 수도 같지 않다. Arbiter는 투표하지만 데이터를 보관하지 않는다. 쓰기의 확인 기준은 Write Concern과 Journal 설정에 따라 달라진다.
+
+ClickHouse ReplicatedMergeTree에서는 각 Replica가 Part를 저장하고 Keeper가 조정 메타데이터를 관리한다. 일반적인 복제는 비동기이며 insert_quorum을 적용하면 쓰기 확인 조건이 달라진다. 빈 복제 Queue는 한 시점의 상태다. 실제 Part와 예상 조회 결과, 복제 오류를 함께 확인할 것이다.
+
+MinIO는 전체 정상 디스크 개수보다 각 Erasure Set에서 남은 Shard가 중요하다. 일반적인 K개 데이터·M개 Parity 모델에서 정상 Shard K개로 복원할 수 있다. 공개 MinIO 문서의 쓰기 기준은 K이고 데이터와 Parity 수가 같을 때에는 K+1이다. 실제 동작은 설치 버전과 객체별 Parity, 정상 디스크에 따라 달라진다. 읽기 복원과 새로운 쓰기 허용은 별개의 조건이다. 위의 가상 예시로 당시 MinIO의 실제 Parity나 Write Quorum을 확정하지 않았다.
+
+검색 Index에서는 Primary와 Replica Shard의 배치, In-sync 사본과 원본 데이터의 재수집 가능성이 중요하다. 모니터링 TSDB의 최근 Head와 WAL은 장애 당시 유일한 기록일 수 있어 Cache의 재생성 비용과도 다르다. 이런 설계 예시를 근거로 당시 Elasticsearch 또는 Prometheus의 저장소 이전이 완료됐다고 주장하지는 않는다. [Prometheus WAL 글](/projects/rokaf-observability-and-failure-evidence/)에서 모니터링 증거가 사라지는 문제를 다뤘다.
+
+{{figure /figures/journals/placement-05-recovery.svg | 복구 주체별 확인 기준. 서비스가 동작한다고 과거 데이터 무결성이나 백업 복원까지 검증된 것은 아니다.}}
+
+볼륨을 만들기 전에 허용할 장애 범위와 복구 시점, 복구 시간, 쓰기 확인 조건, 재구축할 여유 공간 및 독립적인 복구 원본을 확인할 것이다. 같은 장애 영역에 둔 백업은 그 영역 전체를 잃는 상황에서 도움이 되지 않는다. 별도 백업도 실제 복원을 검증해야 의미가 있다. 재생성 가능한 Cache와 원본 DB의 복구 요구사항은 다르다. 워크로드마다 저장 공간의 배치와 복제 방식을 결정하는 이유다.
+
 ## 배치 설정 변경과 복구 검증 범위
 
 실제로 확인한 것은 노드별 Local-path 경로 설정을 수정했다는 점, 변경 전 PV가 자동 이전되지 않는다는 제약, Longhorn의 목표 Replica를 낮춘 뒤 표시가 바뀐 상태, ClickHouse 복제 전환 과정의 중간 상태, 분산 MinIO 구성과 데이터 이전 후의 객체 차이였다.
@@ -90,3 +136,9 @@ Local-path Provisioner의 `nodePathMap`을 수정하고 기존 PV가 새 경로�
 - [Local Path Provisioner — Configuration](https://github.com/rancher/local-path-provisioner)
 - [Longhorn — Replica Scheduling](https://longhorn.io/docs/1.13.0/nodes-and-volumes/nodes/scheduling/)
 - [MinIO — Erasure Coding](https://min.io/docs/minio/kubernetes/upstream/operations/concepts/erasure-coding.html)
+
+- [Kubernetes — StorageClasses](https://kubernetes.io/docs/concepts/storage/storage-classes/)
+- [Longhorn — Data locality](https://longhorn.io/docs/1.13.0/high-availability/data-locality/)
+- [MongoDB — Replica set synchronization](https://www.mongodb.com/docs/manual/core/replica-set-sync/)
+- [ClickHouse — ReplicatedMergeTree and Keeper](https://clickhouse.com/blog/clickhouse-cloud-boosts-performance-with-sharedmergetree-and-lightweight-updates)
+- [MinIO — Erasure coding](https://docs.min.io/aistor/operations/core-concepts/erasure-coding/)

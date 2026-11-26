@@ -2,7 +2,7 @@
 title: "Kubernetes Storage Placement and Failure Domains"
 description: "Per-node Local-path PVC settings, Longhorn replica recovery, ClickHouse and MongoDB replication, and distributed MinIO storage responsibilities."
 date: "2026-11-19"
-updated: "2026-11-19"
+updated: "2026-11-26"
 draft: false
 reviewed: true
 reviewStatus: "reviewed"
@@ -107,6 +107,77 @@ I have intentionally excluded node identities, actual directories, disk capaciti
 
 Replication is also not a backup. An accidental deletion or logically corrupt update can propagate through healthy database replicas; erasure coding does not reverse a valid object delete. Protected backups and tested restore points address those additional loss scenarios.
 
+## Storage interfaces and the placement boundary
+
+Block storage exposes addressable blocks; a filesystem on top supplies paths, directory metadata and file operations. A network file service instead presents a shared file namespace. An object service exposes objects through a bucket and key API, not an ordinary POSIX filesystem. These describe access interfaces, not durability guarantees. A block device may be local or network-backed, a file service may be replicated, and an object service may use local disks internally. Kubernetes volumeMode (Filesystem or Block) describes how a compatible volume is presented to the consumer, not the underlying redundancy algorithm.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/placement-01-interfaces.svg" target="_blank" rel="noopener noreferrer" aria-label="Open placement 01 interfaces diagram">
+    <img src="/figures/journals/placement-01-interfaces.svg" alt="Access interfaces and their independent durability boundary. Object APIs, filesystem operations and raw block addressing have different semantics." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Access interfaces and their independent durability boundary. Object APIs, filesystem operations and raw block addressing have different semantics.</figcaption>
+</figure>
+
+With WaitForFirstConsumer, a StorageClass can delay binding and provisioning until the scheduler knows the first consumer's placement constraints. This avoids selecting a local disk before the Pod's CPU, affinity and topology requirements are considered. It does not make an already-bound local PV portable. The scheduler still needs a node compatible with that PV. The reclaim policy controls what happens when the claim is released; a retained PV is not automatically a verified backup. I would inspect the effective StorageClass, provisioner version, PV source and affinity rather than assume that every Local-path configuration behaves identically.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/placement-02-binding.svg" target="_blank" rel="noopener noreferrer" aria-label="Open placement 02 binding diagram">
+    <img src="/figures/journals/placement-02-binding.svg" alt="Illustrative delayed provisioning and later scheduling. After binding, a new Pod must satisfy the existing PV's location constraint. This is not the historical node configuration." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Illustrative delayed provisioning and later scheduling. After binding, a new Pod must satisfy the existing PV's location constraint. This is not the historical node configuration.</figcaption>
+</figure>
+
+The local I/O path can avoid remote storage traffic, although filesystem caching, device queues and application replication still matter. A network-replicated volume adds an engine and remote replica path; a local replica can improve locality without eliminating the remote replicas' synchronous write costs. A read may be satisfied locally or remotely depending on the engine and placement. The relevant comparison is the application's actual read, write and failure-recovery path, not just whether its PVC is bound.
+
+## Capacity cost is not measured write amplification
+
+Suppose one logical dataset has 100 GiB of comparable stored data, and each of two database replicas holds a complete copy. On local storage the idealized data-copy footprint is 200 GiB. If each database replica is on a two-replica block volume, the corresponding footprint is 400 GiB. An erasure set with four data shards and two parity shards has an ideal coded-payload factor of 6/4; 100 GiB of encoded input therefore takes 150 GiB before additional overhead. These examples represent different availability and acknowledgement contracts, not equivalent designs.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/placement-03-capacity.svg" target="_blank" rel="noopener noreferrer" aria-label="Open placement 03 capacity diagram">
+    <img src="/figures/journals/placement-03-capacity.svg" alt="Synthetic steady-state copy and coded-payload footprints, all normalized to 100 GiB. Metadata, compression, snapshots, reserved space, journals and temporary copies are excluded." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Synthetic steady-state copy and coded-payload footprints, all normalized to 100 GiB. Metadata, compression, snapshots, reserved space, journals and temporary copies are excluded.</figcaption>
+</figure>
+
+The 2 × 2 product counts stored copies, not physical writes per logical update. A useful measurement would be the delta of physical device bytes written divided by the logical application bytes accepted over the same interval. Writeback and batching, journal writes, compaction, replication log traffic, snapshot copies and concurrent rebuilding can all change that ratio. Logical device and underlying member-device counters must not be summed as independent physical writes. The [disk I/O investigation](/projects/linux-disk-io-journaling-writeback/) explains the accounting boundary.
+
+For a failure scenario, both a database and its underlying block volume may try to rebuild. They can compete for the same disk and network bandwidth; sequencing or throttling repair may be preferable to maximizing parallelism. Conversely a replicated block volume can avoid an expensive database reinitialization when a host disk fails. The trade-off depends on observed recovery time, write latency, spare capacity and the application's ability to reconstruct from peers. I did not retain a controlled before-and-after throughput comparison for these placement decisions.
+
+## Count surviving domains, not advertised copies
+
+Consider two hypothetical placements of four complete copies. In the concentrated placement, both storage copies of database member A live on node X and both copies of B live on Y. In the spread placement, A has copies on X and Z; B has copies on Y and W. Losing X destroys both copies of A in the first arrangement but leaves at least one copy of each member in the second. Losing X and Z in the spread example removes A. Even in that example a surviving block copy does not mean that a database voter has recovered or that current writes can be acknowledged.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/placement-04-domains.svg" target="_blank" rel="noopener noreferrer" aria-label="Open placement 04 domains diagram">
+    <img src="/figures/journals/placement-04-domains.svg" alt="Two synthetic four-copy layouts with different node-loss outcomes. Each box represents a complete, current copy in the model, not historical inventory." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Two synthetic four-copy layouts with different node-loss outcomes. Each box represents a complete, current copy in the model, not historical inventory.</figcaption>
+</figure>
+
+I use a small enumerator for every subset of failed nodes in these examples. It tests which member still has at least one surviving copy. It also tests an erasure set with six shards, four needed to reconstruct, distributed two per node over three nodes. Losing one of those nodes removes two shards and permits reconstruction in the ideal erasure model; losing two nodes removes four and does not. The model assumes intact surviving data and independent known erasures; it does not implement erasure coding, real scheduling, failover or consensus.
+
+A shared power or network dependency can remove several supposedly separate nodes at once. Soft anti-affinity can permit co-location when capacity is constrained; hard placement constraints can prevent provisioning when no eligible target remains. I would track both current placement and eligible rebuild destinations. The [RAID and control-plane investigation](/projects/rokaf-control-plane-incident-log/) distinguishes the majority of voting members from redundant local blocks.
+
+## Recovery contracts by workload
+
+A MongoDB secondary's initial sync needs a healthy sync source, adequate resources and enough oplog history for changes made during the sync. A majority election threshold is not the same as the number of durable data copies: an arbiter can vote without storing data. Write concern and journaling settings govern the acknowledgement contract.
+
+ClickHouse ReplicatedMergeTree maintains parts per replica and coordination metadata in Keeper; ordinary replication is asynchronous, and insert_quorum changes the acknowledgement requirement. An empty replication queue is a point-in-time observation. I would compare the expected parts, relevant query results and replication errors, not declare complete parity from one queue counter.
+
+For MinIO, the number of surviving shards within each erasure set matters more than the aggregate number of healthy disks. In a conventional K-data/M-parity model with K+M drives, K intact shards reconstruct a payload. The documented MinIO write threshold is K except for equal data/parity where it is K+1; actual behavior depends on release, object parity and available drives. Read reconstruction and successful new writes are distinct. The examples above do not establish the historical MinIO parity or write quorum.
+
+For a search index, the primary/replica shard placement, in-sync copies and availability of the original indexed data determine the recovery strategy. For a monitoring TSDB, the latest Head and WAL may be the only record of the failure; losing them has a different cost from regenerating a cache. I would not assume any particular Elasticsearch or Prometheus migration was completed based on these design examples. The [Prometheus WAL investigation](/projects/rokaf-observability-and-failure-evidence/) illustrates that evidence-loss boundary.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/placement-05-recovery.svg" target="_blank" rel="noopener noreferrer" aria-label="Open placement 05 recovery diagram">
+    <img src="/figures/journals/placement-05-recovery.svg" alt="Recovery-owner decision criteria and distinct verification gates. An available service is not proof of historical data integrity or a tested restore." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Recovery-owner decision criteria and distinct verification gates. An available service is not proof of historical data integrity or a tested restore.</figcaption>
+</figure>
+
+I would record the tolerated failure set, required recovery point and recovery time, acknowledgement semantics, eligible rebuild capacity and independent restore source before provisioning. A backup in the same failure domain is insufficient against loss of that domain; a separate backup is only useful if restoration is tested. A deliberately disposable cache has a different recovery contract from a primary database. This is the practical reason to choose storage placement per workload rather than standardize every PVC on one replication setting.
+
 ## What the recorded work established
 
 **Implemented or observed:** correcting node-specific Local-path provisioning configuration; recognizing that existing bound volumes retain their original placement; Longhorn's change from degraded to healthy after a lower replica target; investigation of stuck replicas and attachment; ClickHouse's replicated-table migration checkpoint; distributed MinIO deployment and dataset transfer with discrepancies identified.
@@ -116,3 +187,9 @@ Replication is also not a backup. An accidental deletion or logically corrupt up
 For the next new PVC, I would establish the recovery owner before picking a StorageClass: is the data replaceable from another application replica, must the storage layer provide another current block copy, or does an object store maintain its own erasure set? That answer also tells me which test is required before calling a failed node's replacement complete.
 
 **Related references:** [Longhorn volume recovery](/projects/rokaf-stateful-storage-and-recovery/) · [MinIO data migration](/projects/rokaf-object-storage-migration/) · [ClickHouse replicated migration](/projects/rokaf-clickhouse-replication-migration/) · [K3s Volumes and Storage](https://docs.k3s.io/add-ons/storage) · [Local Path Provisioner](https://github.com/rancher/local-path-provisioner) · [Longhorn Replica Scheduling](https://longhorn.io/docs/1.13.0/nodes-and-volumes/nodes/scheduling/) · [MinIO Erasure Coding](https://min.io/docs/minio/kubernetes/upstream/operations/concepts/erasure-coding.html).
+
+- [Kubernetes — StorageClasses](https://kubernetes.io/docs/concepts/storage/storage-classes/)
+- [Longhorn — Data locality](https://longhorn.io/docs/1.13.0/high-availability/data-locality/)
+- [MongoDB — Replica set synchronization](https://www.mongodb.com/docs/manual/core/replica-set-sync/)
+- [ClickHouse — ReplicatedMergeTree and Keeper](https://clickhouse.com/blog/clickhouse-cloud-boosts-performance-with-sharedmergetree-and-lightweight-updates)
+- [MinIO — Erasure coding](https://docs.min.io/aistor/operations/core-concepts/erasure-coding/)
