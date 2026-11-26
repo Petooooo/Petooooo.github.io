@@ -88,7 +88,7 @@ kubectl -n kube-system get endpointslices \
 
 이 비교가 없었던 탓에 DNS 이름 해석 실패를 CoreDNS 애플리케이션 장애로 단정할 수도, kube-proxy의 Service 변환 문제로 확정할 수도 없었다.
 
-## iptables 규칙을 누가 관리하는가
+## iptables 규칙의 관리 주체
 
 이 환경에서는 Docker가 사용되던 호스트에 K3s의 containerd 워크로드도 운영됐다. 서로 다른 런타임이지만, 둘 다 같은 호스트의 네트워크 규칙에 영향을 줄 수 있었다. 그때 확인한 Service NAT 규칙만으로는 어느 규칙 작성자가 실제 요청에 영향을 줬는지 알 수 없었다.
 
@@ -127,7 +127,7 @@ failed to apply partial iptables-restore
 
 iptables는 정상 동작 중에도 `/run/xtables.lock`을 사용해 규칙 변경을 조정한다. 그러므로 잠금 파일이 있다는 이유만으로 삭제하는 것은 올바른 복구 방법이 아니다. 잠금 파일 경로를 없앤다고 그 잠금을 잡고 있던 프로세스까지 종료되지도 않는다. `iptables-restore`에는 잠금 획득을 기다리는 `-w` 옵션이 있지만, K3s에 실제 적용하고 검증한 설정 변경은 아니다.
 
-### Lock 파일의 이름을 지운다고 잠금이 풀리는 것은 아니다
+### Lock 파일의 경로와 Inode 잠금
 
 xtables 매뉴얼은 배타적 Lock 파일을 설명한다. 공개 iptables 소스에서는 열린 FD에 flock을 사용한다. 앞서 [VFS 글](/projects/linux-vfs-mount-lifecycle/)에서 확인했듯 파일 이름과 열린 파일 객체는 다르다. Lock을 가진 프로세스가 살아 있는 동안 파일 이름을 지워도 기존 FD가 Inode와 잠금을 유지할 수 있다. 같은 이름을 다시 만들면 다른 Inode와 별개의 잠금 영역이 생길 수 있다. 결국 서로 다른 파일을 잠근 두 Writer가 각각 배타적 권한을 얻었다고 판단하는 문제가 생긴다.
 
@@ -153,7 +153,7 @@ sudo nft list ruleset
 
 실제 패킷이 어느 규칙을 통과하는지 모른 채 전체 iptables 체인을 비우거나 기본 `FORWARD` 정책을 바꾸고, Docker 규칙 관리를 끄거나 CNI를 교체하는 일은 피하려 한다. 다른 서비스까지 중단될 수 있기 때문이다. Docker의 `FORWARD DROP`, nftables Backend 충돌, conntrack 고갈이 **별도 DNS 장애의 원인이었다는 기록은 없다.** 이 구분은 앞선 iptables 기동 장애의 복구 결과와는 다르다.
 
-## 다음 재현에서는 어떤 순서로 비교할까
+## Pod 및 Service 통신 재현 검사
 
 {{figure /figures/journals/cni-service-diagnostic-matrix.svg | Pod IP 직접 연결, ClusterIP 경유 연결, DNS 실제 프로토콜, 노드 간 경로, NAT 카운터와 conntrack 상태를 비교하는 검사표다. 사고 당시의 테스트 결과가 아니라 다음 조사를 위해 구분해야 하는 항목이다.}}
 
@@ -194,7 +194,7 @@ sudo nft list ruleset
 - [K3s 네트워크: Traefik·MetalLB·TLS](/projects/rokaf-networking-and-tls/)
 - [Kubernetes — Virtual IPs and Service Proxies](https://kubernetes.io/docs/reference/networking/virtual-ips/)
 - [Kubernetes — Debug Services](https://kubernetes.io/docs/tasks/debug/debug-application/debug-service/)
-- [K3s — Basic Network Options](https://docs.k3s.io/networking/basic-network-options/)
+- [K3s — Basic Network Options](https://docs.k3s.io/networking/basic-network-options)
 - [Docker — Firewall rules](https://docs.docker.com/engine/network/firewall-iptables/)
 - [Docker — nftables Backend](https://docs.docker.com/engine/network/firewall-nftables/)
 - [iptables — Lock file](https://man7.org/linux/man-pages/man8/iptables.8.html)

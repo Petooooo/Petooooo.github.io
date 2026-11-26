@@ -6,7 +6,7 @@ K3s의 한 노드에서 PVC가 예상하지 않은 디렉터리에 만들어지�
 
 이 사건 이후 Local-path, Longhorn, ClickHouse 복제, MinIO 분산 저장소를 하나의 'PVC 종류'로 생각하지 않게 됐다. **어느 계층이 데이터를 복구할 책임을 갖는지**가 먼저였고, Kubernetes StorageClass는 그 책임을 수행하기 위한 일부였다.
 
-## Local-path 경로를 바꾸고도 기존 PVC가 남았던 이유
+## Local-path 설정과 기존 PV
 
 K3s에 포함된 Local-path Provisioner는 노드의 디렉터리를 기반으로 PV를 만든다. 설정 파일의 `nodePathMap`에서는 노드마다 사용할 디렉터리를 지정할 수 있고, 기본 경로와 예외 경로도 구분할 수 있다. 내가 확인한 것도 바로 이 노드별 경로 설정이었다.
 
@@ -32,7 +32,7 @@ Longhorn에서 장애 영역을 판단하려면 단순히 Replica 개수를 보�
 
 `Healthy` 표시가 바뀌었다고 바로 복구 완료라고 쓰지 않은 이유다. 구체적인 당시 상태와 남은 검증은 [Longhorn Replica 장애와 볼륨 복구](/projects/rokaf-stateful-storage-and-recovery/)에 기록했다.
 
-## ClickHouse는 데이터베이스가 복제 상태를 알고 있었다
+## ClickHouse와 MongoDB의 자체 복제
 
 ClickHouse에서는 다른 선택을 했다. 독립된 ClickHouse Pod를 두 개 만든다고 기존 MergeTree 테이블이 자동으로 복제되는 것은 아니다. 내가 수행했던 Standalone → ReplicatedMergeTree 이전에서는 Keeper가 테이블 복제의 조정 메타데이터를 관리하고, 실제 데이터 Part는 각 Replica가 자기 저장 공간에 가지고 있었다.
 
@@ -42,7 +42,7 @@ ClickHouse에서는 다른 선택을 했다. 독립된 ClickHouse Pod를 두 개
 
 이 관점에서는 **로컬 디스크를 가진 Pod가 다른 노드로 자동 이동하는 능력**보다, 살아남은 ClickHouse Replica가 데이터를 제공하고 교체된 Replica가 다시 따라잡을 수 있는 능력이 중요했다. 다만 이 글에서 구체적인 전체 장애 조치 시험을 완료했다고 주장하지는 않는다. 자세한 작업은 [ClickHouse 이전: Standalone에서 ReplicatedMergeTree로](/projects/rokaf-clickhouse-replication-migration/)에 남겼다.
 
-## MinIO에서는 객체 저장소가 데이터 분산을 맡았다
+## MinIO의 객체 단위 Erasure Coding
 
 MinIO를 처음 운영할 때는 Standalone 인스턴스를 Longhorn 볼륨 위에 올려 사용했다. 이후 분산 MinIO로 옮기면서 여러 저장 멤버가 데이터를 분산 보관하도록 구성했다. 여기서는 객체 단위의 Erasure Coding이 별도의 장애 허용 모델을 제공한다.
 
@@ -85,7 +85,7 @@ StorageClass에서 WaitForFirstConsumer를 사용하면 첫 Pod의 배치 조건
 
 {{figure /figures/journals/placement-02-binding.svg | 첫 Pod의 배치 조건을 고려하는 Provisioning과 이후 Scheduling의 가상 예시. Binding 이후에는 기존 PV의 위치 조건이 남는다.}}
 
-로컬 I/O는 원격 저장소로 가는 통신 경로를 줄일 수 있다. 물론 Page Cache와 장치 Queue, 애플리케이션 자체 복제는 여전히 영향을 준다. 네트워크 복제 볼륨은 Engine과 원격 Replica 경로를 추가한다. 로컬 Replica가 있으면 접근성이 좋아질 수 있지만 원격 Replica에 동기적으로 쓰는 비용까지 사라지는 것은 아니다. 실제 Engine과 배치에 따라 읽기 위치도 달라진다. PVC가 Bound인지보다 앱의 읽기·쓰기 경로와 장애 후 복구 경로를 비교해야 했다.
+로컬 I/O는 원격 저장소로 가는 통신 경로를 줄일 수 있다. 물론 Page Cache와 장치 Queue, 애플리케이션 자체 복제는 여전히 영향을 준다. 네트워크 복제 방식의 Longhorn V1에서는 Engine과 원격 Replica 경로가 추가된다. Best-effort Locality로 워크로드 가까이에 Replica를 둬도 참여 중인 원격 Replica에 동기적으로 쓰는 비용은 남는다. Strict-local은 로컬 Replica 하나만 두는 별도 설정이므로 저장소 계층의 장애 내성도 달라진다. 단순한 지연 시간 개선 옵션처럼 선택할 수는 없다. 실제 Engine과 배치에 따라 읽기 위치도 달라진다. PVC가 Bound인지보다 앱의 읽기·쓰기 경로와 장애 후 복구 경로를 비교해야 했다.
 
 ## 복제에 따른 용량 비용과 쓰기 증폭
 
@@ -93,7 +93,7 @@ StorageClass에서 WaitForFirstConsumer를 사용하면 첫 Pod의 배치 조건
 
 {{figure /figures/journals/placement-03-capacity.svg | 100 GiB를 기준으로 비교한 가상의 사본 및 Coded Payload 용량. 메타데이터, 압축, Snapshot, 예약 공간, Journal 및 임시 데이터는 제외했다.}}
 
-2 × 2는 저장된 사본의 수를 세는 것이지 논리 쓰기 한 번에 장치 쓰기가 몇 번 발생하는지 측정한 값은 아니다. 실제 Write Amplification은 동일 시간 동안 물리 장치에 기록된 바이트 증가분을 앱이 수용한 논리 바이트로 나눠 살펴볼 수 있다. Writeback과 Batching, Journal, Compaction, 복제 로그, Snapshot 및 재구축은 모두 이 비율에 영향을 줄 수 있다. 논리 장치와 그 아래 물리 장치의 카운터를 따로 더하면 중복 계산될 수 있다. [Disk I/O 글](/projects/linux-disk-io-journaling-writeback/)에서도 이 집계 경계를 다뤘다.
+2 × 2는 저장된 사본의 수를 세는 것이지 논리 쓰기 한 번에 장치 쓰기가 몇 번 발생하는지 측정한 값은 아니다. 호스트에서 관측할 수 있는 쓰기 증폭은 같은 시간 동안 하위 Block Device에 전달한 쓰기량을 앱이 수용한 논리 쓰기량으로 나눠 살펴볼 수 있다. 이 값은 SSD 내부의 NAND 쓰기량을 뜻하지 않는다. 그 값에는 별도의 장치 지표가 필요하다. 다른 워크로드의 쓰기도 분리하거나 함께 집계한 범위를 명시해야 한다. Writeback과 Batching, Journal, Compaction, 복제 로그, Snapshot 및 재구축은 모두 이 비율에 영향을 줄 수 있다. 논리 장치와 그 아래 물리 장치의 카운터를 따로 더하면 중복 계산될 수 있다. [Disk I/O 글](/projects/linux-disk-io-journaling-writeback/)에서도 이 집계 경계를 다뤘다.
 
 장애가 나면 DB와 하위 블록 저장소가 동시에 재구축할 수도 있다. 디스크와 네트워크를 함께 사용하므로 무조건 병렬로 복구하는 것보다 순서나 속도를 조정하는 것이 나을 때도 있다. 반대로 블록 복제가 있다면 디스크 하나의 장애로 비싼 DB Initial Sync를 다시 하지 않아도 될 수 있다. 실제 복구 시간과 쓰기 지연, 여유 공간, 정상 Peer로부터 재생성할 수 있는지에 따라 판단할 문제다. 당시 통제된 환경에서 이전 전후의 처리량을 측정한 기록은 없다.
 
@@ -113,7 +113,7 @@ MongoDB Secondary를 Initial Sync하려면 정상 원본과 충분한 자원, �
 
 ClickHouse ReplicatedMergeTree에서는 각 Replica가 Part를 저장하고 Keeper가 조정 메타데이터를 관리한다. 일반적인 복제는 비동기이며 insert_quorum을 적용하면 쓰기 확인 조건이 달라진다. 빈 복제 Queue는 한 시점의 상태다. 실제 Part와 예상 조회 결과, 복제 오류를 함께 확인할 것이다.
 
-MinIO는 전체 정상 디스크 개수보다 각 Erasure Set에서 남은 Shard가 중요하다. 일반적인 K개 데이터·M개 Parity 모델에서 정상 Shard K개로 복원할 수 있다. 공개 MinIO 문서의 쓰기 기준은 K이고 데이터와 Parity 수가 같을 때에는 K+1이다. 실제 동작은 설치 버전과 객체별 Parity, 정상 디스크에 따라 달라진다. 읽기 복원과 새로운 쓰기 허용은 별개의 조건이다. 위의 가상 예시로 당시 MinIO의 실제 Parity나 Write Quorum을 확정하지 않았다.
+MinIO는 전체 정상 디스크 개수보다 각 Erasure Set에서 남은 Shard가 중요하다. 일반적인 K개 데이터·M개 Parity 모델에서 정상 Shard K개로 복원할 수 있다. 현재 MinIO AIStor 문서에서는 쓰기에 K개가 필요하며 데이터와 Parity 수가 같을 때는 K+1개가 필요하다고 설명한다. 당시 설치 버전에서 확인한 값은 아니다. 실제 동작은 버전, 객체별 Parity 및 정상 디스크에 따라 달라진다. 읽기 복원과 새로운 쓰기 허용은 별개의 조건이다. 위의 가상 예시로 당시 MinIO의 실제 Parity나 Write Quorum을 확정하지 않았다.
 
 검색 Index에서는 Primary와 Replica Shard의 배치, In-sync 사본과 원본 데이터의 재수집 가능성이 중요하다. 모니터링 TSDB의 최근 Head와 WAL은 장애 당시 유일한 기록일 수 있어 Cache의 재생성 비용과도 다르다. 이런 설계 예시를 근거로 당시 Elasticsearch 또는 Prometheus의 저장소 이전이 완료됐다고 주장하지는 않는다. [Prometheus WAL 글](/projects/rokaf-observability-and-failure-evidence/)에서 모니터링 증거가 사라지는 문제를 다뤘다.
 
@@ -140,5 +140,5 @@ Local-path Provisioner의 `nodePathMap`을 수정하고 기존 PV가 새 경로�
 - [Kubernetes — StorageClasses](https://kubernetes.io/docs/concepts/storage/storage-classes/)
 - [Longhorn — Data locality](https://longhorn.io/docs/1.13.0/high-availability/data-locality/)
 - [MongoDB — Replica set synchronization](https://www.mongodb.com/docs/manual/core/replica-set-sync/)
-- [ClickHouse — ReplicatedMergeTree and Keeper](https://clickhouse.com/blog/clickhouse-cloud-boosts-performance-with-sharedmergetree-and-lightweight-updates)
+- [ClickHouse — Replicated table engines](https://clickhouse.com/docs/reference/engines/table-engines/mergetree-family/replication)
 - [MinIO — Erasure coding](https://docs.min.io/aistor/operations/core-concepts/erasure-coding/)

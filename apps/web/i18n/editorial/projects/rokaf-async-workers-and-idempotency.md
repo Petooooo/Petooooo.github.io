@@ -53,7 +53,7 @@ Heartbeat 협상, Worker 내부 I/O 처리, 네트워크 Idle Timeout 등 여러
 
 ### TCP Connection과 AMQP Channel
 
-AMQP 0-9-1은 하나의 TCP Connection 위에서 여러 Channel을 운용한다. 각 Channel은 독립적인 프로토콜 상태와 Delivery Tag를 갖는다. 새 Channel에서 받은 Tag 1은 기존 Channel의 Tag 1과 같은 논리 Job을 가리키더라도 다른 Delivery다. 알 수 없는 Tag를 Ack하면 Channel이 프로토콜 오류로 닫힐 수 있다. Connection이 끊기면 그 아래 Channel도 사라지지만 Channel 오류가 항상 TCP 연결 종료로 이어지는 것은 아니다.
+AMQP 0-9-1은 하나의 TCP Connection 위에서 여러 Channel을 운용한다. 각 Channel은 독립적인 프로토콜 상태와 Delivery Tag를 갖는다. 새 Channel에서 받은 Tag 1은 기존 Channel의 Tag 1과 같은 논리 Job을 가리키더라도 다른 Delivery다. 알 수 없는 Tag를 Ack하면 Channel이 프로토콜 오류로 닫힌다. 더 위험한 경우는 숫자가 우연히 같은 경우다. 다른 Channel에도 같은 Tag의 미확인 Delivery가 있다면 그쪽에 보낸 단일 basic.ack는 의도하지 않은 메시지를 확인할 수 있다. Ack 자체에는 논리 Job ID나 원래 Connection Generation이 들어 있지 않으므로 Broker가 원래의 처리 의도를 비교할 수 없다. Connection이 끊기면 그 아래 Channel도 사라지지만 Channel 오류가 항상 TCP 연결 종료로 이어지는 것은 아니다.
 
 {{figure /figures/journals/amqp-02-channels.svg | 한 Connection의 두 Channel과 각자 사용하는 Delivery Tag. 재연결 이후에는 새로운 전달 문맥에서 처리해야 한다.}}
 
@@ -90,10 +90,10 @@ Heartbeat를 길게 설정하는 것은 Connection이 끊기는 빈도에 영향
 
 {{figure /figures/journals/amqp-04-prefetch.svg | Prefetch에 따른 Delivery Credit 예시. Channel이 닫히면 미확인 메시지를 다시 Queue에 둘 수 있지만 로컬 작업은 자동 종료되지 않는다.}}
 
-두 Channel 식별자와 Prefetch 2를 사용하는 작은 메모리 모델로 검증한다. Credit을 채우고 Ack로 하나를 비운 뒤 다른 Channel의 Ack를 거부하고, 종료된 Channel의 Delivery를 다시 Queue로 돌리고, 새 Channel에 새 Tag를 부여하는 과정이다. 원래 Worker는 로컬 Job 참조를 유지할 수 있다. 실제 RabbitMQ 연동 실험이나 재전달 순서, 성능을 검증하는 모델은 아니다.
+작은 메모리 모델에서 Prefetch 2의 Credit을 채우고 Ack로 하나를 비웠다. Channel 종료 후 미확인 메시지는 다시 Queue로 돌아가지만 원래 Worker에 남은 로컬 Job 참조는 그대로다. 앱에서 Channel 식별자를 검사하는 Callback과 단순히 숫자 Tag만 보내는 Ack도 구분했다. 두 Channel에 Tag 1이 있다면 전자는 잘못된 전달을 거부하고, 후자는 의도하지 않은 Job을 확인할 수 있다. [재현 코드](https://github.com/Petooooo/Petooooo.github.io/blob/main/apps/web/scripts/build-rabbitmq-lifecycle-figures.py)에서 두 경우를 검증하며, 실제 Broker에서 재전달 순서나 처리량을 측정한 것은 아니다.
 
 
-## Ack 시점을 앞당기는 것만으로는 부족했다
+## Ack 시점과 영속 Claim
 
 처음의 구조는 처리 완료 후 Ack하는 방식이었다. Worker가 중간에 죽으면 RabbitMQ가 메시지를 다시 배달할 수 있다는 장점이 있다. 하지만 긴 변환 작업 전체를 하나의 AMQP Delivery와 Connection에 의존하게 만든다. 실제 작업은 살아 있는데 Connection만 끊기면 중복 실행을 막기 어렵다.
 
@@ -120,7 +120,7 @@ Job Service가 현재 Stage를 확인하고, Worker가 해당 Stage를 Claim하�
 
 이전 Worker가 뒤늦게 완료 이벤트를 보낸다면 현재 Stage와 Attempt를 확인해 오래된 결과를 무시할 수 있어야 한다. 새로운 Worker가 작업을 다시 시작했는데 과거 Worker가 최종 상태를 덮어쓰면 Lease를 도입한 의미가 없다.
 
-## 메시지는 여러 번 도착해도 Job은 하나여야 했다
+## Job 식별자와 Attempt 소유권
 
 사용자가 요청한 파일 변환 하나를 식별하는 ID는 RabbitMQ Delivery가 다시 발생했다고 바뀌어서는 안 된다. Job ID와 Stage ID는 안정적으로 유지하고, 각 처리 시도를 Attempt로 구분하는 편이 맞았다.
 

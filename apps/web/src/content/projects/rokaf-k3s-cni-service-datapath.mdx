@@ -23,7 +23,7 @@ Those observations looked reassuring but did not explain the failing request. A 
 
 The DNS and Service-IP reachability investigation remained a separate packet-path problem: the records did not preserve a synchronized capture identifying its failing rule. **I also worked through an iptables rule-application failure during K3s startup and recovered a successful rule bootstrap**, as the later regenerated rules and `bootstrap done` log showed. The recovered startup and the still-open DNS investigation should not be mistaken for one incident.
 
-## Two addresses, two packet paths
+## Pod IP routing and Service translation
 
 A destination **Pod IP** identifies an endpoint. In a K3s environment using Flannel, Linux routing and CNI-managed networking determine how packets travel to that Pod. Same-node delivery and cross-node transport may use different paths, depending on the configured Flannel backend.
 
@@ -55,7 +55,7 @@ A typical Linux Pod has its own network namespace, including interface, routing 
 
 Network namespaces do not mean that every Pod has its own independent physical NIC. Nor does a bridge imply that every Ethernet frame is routed by the host. With bridge netfilter enabled, bridged traffic can also encounter IP-layer filtering; the relevant kernel settings and chain family matter. A capture on a Pod interface, host veth or tunnel device answers different questions.
 
-## Flannel UP did not prove the overlay worked
+## Flannel interface and overlay reachability
 
 I did inspect a Flannel interface in the UP state. That confirmed that the local interface existed and was not administratively down. It did not establish that a packet could travel between every pair of nodes.
 
@@ -114,7 +114,7 @@ Connection tracking associates packets with an original-direction and a reply-di
 
 The optional SNAT case is distinct: if a policy requires source masquerading, the backend receives the translated source tuple. The reply must undo that change to recover the client destination, as well as undo DNAT to restore the Service source. The companion generator checks both round trips and rejects an unrelated reply. It is a tuple transformation model, not a live kube-proxy or kernel NAT experiment.
 
-## An ICMP echo was not the DNS request I needed
+## ICMP probes and DNS request paths
 
 During troubleshooting I attempted to ping the DNS Service IP. The result was not a sufficient DNS test. A Service virtual IP is not an ordinary host required to respond to ICMP echo requests; its configuration defines traffic through specific ports and protocols.
 
@@ -132,7 +132,7 @@ Those are read-only inspection examples, not commands copied from a successful i
 
 In the original notes, I had the failed operations and host-state inspection but did not capture that complete side-by-side experiment. A failed Ping and a missing Service-CIDR route did not fill the gap.
 
-## iptables rules had several possible owners
+## Netfilter rule ownership
 
 The Service NAT rules I saw were not the only rules a packet might encounter. Docker had also been used on hosts in the K3s environment, with K3s running its containerd-based workloads. Both runtimes could configure parts of the same host networking stack, even though they did not manage each other's containers.
 
@@ -198,7 +198,7 @@ The experiment demonstrates why deleting the lock file was not a sound general r
 
 This was an actual **rule-bootstrap recovery**, not just an architectural hypothesis: K3s progressed from a failed iptables-restore attempt to regenerated rules and a completed bootstrap. It remains distinct from the intermittent **Pod-to-ClusterIP DNS failure**, for which the available packet-path evidence did not determine a single root cause.
 
-## What I would inspect before changing a rule
+## Evidence before rule changes
 
 For a repeat failure, I would record the effective firewall backend and the relevant chain policies on the affected host at the same time as a real test request. Read-only inspection can start with commands such as:
 
@@ -254,6 +254,6 @@ This incident is also distinct from [the ServiceLB host-port conflict](/projects
 
 If the incident recurred, I would first capture a real query from an affected Pod, compare it with a direct endpoint request, and then examine the effective proxy and host filtering path on the source node. I would repeat the same request from an unaffected location and keep the return traffic in the trace. Until those observations exist, the cause remains open.
 
-**Related records and documentation:** [CoreDNS and MetalLB VIP reachability](/projects/rokaf-dns-vip-open-investigations/) · [K3s networking and TLS](/projects/rokaf-networking-and-tls/) · [Kubernetes — Virtual IPs and Service Proxies](https://kubernetes.io/docs/reference/networking/virtual-ips/) · [Kubernetes — Debug Services](https://kubernetes.io/docs/tasks/debug/debug-application/debug-service/) · [K3s — Basic Network Options](https://docs.k3s.io/networking/basic-network-options/) · [Docker — Firewall rules](https://docs.docker.com/engine/network/firewall-iptables/) · [Docker — nftables backend](https://docs.docker.com/engine/network/firewall-nftables/) · [iptables — Lock file](https://man7.org/linux/man-pages/man8/iptables.8.html) · [iptables-restore — Wait for lock](https://man7.org/linux/man-pages/man8/iptables-restore.8.html).
+**Related records and documentation:** [CoreDNS and MetalLB VIP reachability](/projects/rokaf-dns-vip-open-investigations/) · [K3s networking and TLS](/projects/rokaf-networking-and-tls/) · [Kubernetes — Virtual IPs and Service Proxies](https://kubernetes.io/docs/reference/networking/virtual-ips/) · [Kubernetes — Debug Services](https://kubernetes.io/docs/tasks/debug/debug-application/debug-service/) · [K3s — Basic Network Options](https://docs.k3s.io/networking/basic-network-options) · [Docker — Firewall rules](https://docs.docker.com/engine/network/firewall-iptables/) · [Docker — nftables backend](https://docs.docker.com/engine/network/firewall-nftables/) · [iptables — Lock file](https://man7.org/linux/man-pages/man8/iptables.8.html) · [iptables-restore — Wait for lock](https://man7.org/linux/man-pages/man8/iptables-restore.8.html).
 
 **Mechanism references:** [Linux network namespaces](https://man7.org/linux/man-pages/man7/network_namespaces.7.html) · [Flannel VXLAN implementation](https://github.com/flannel-io/flannel/blob/master/pkg/backend/vxlan/vxlan.go) · [Netfilter hooks](https://wiki.nftables.org/wiki-nftables/index.php/Netfilter_hooks) · [Stateful NAT](https://wiki.nftables.org/wiki-nftables/index.php/Performing_Network_Address_Translation_%28NAT%29) · [Conntrack sysctl](https://docs.kernel.org/6.2/networking/nf_conntrack-sysctl.html) · [iptables locking implementation](https://android.googlesource.com/platform/external/iptables/+/refs/tags/android-12.1.0_r25/iptables/xshared.c) · [flock(2)](https://man7.org/linux/man-pages/man2/flock.2.html).

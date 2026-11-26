@@ -2,7 +2,7 @@
 title: "On-Premises K3s Platform: Design and Operations"
 description: "Independently built and operated an air-gapped K3s platform, including centrally managed GPUs with KAI Scheduler and JupyterHub, storage, CI and service recovery."
 date: "2026-11-15"
-updated: "2026-11-20"
+updated: "2026-11-26"
 draft: false
 reviewed: true
 sensitivity: sanitized
@@ -136,7 +136,18 @@ These questions became especially important during large data migrations and sta
 
 Operating the platform made me comfortable navigating the visible layers of Linux, Kubernetes, storage and networking. It also showed me the limits of treating those layers as black boxes. When a PVC became unavailable, a replica entered read-only state or a node experienced memory pressure, the most useful next question often lay **below the Kubernetes API**.
 
-That is why my next focus is Linux kernel internals, VFS and filesystems, persistent I/O, memory pressure and storage performance. The ROKAF project is the record of the system-level problems that made those topics concrete.
+These investigations now have separate Linux-focused records. They follow the same incidents from the perspective of the underlying mechanism rather than repeat the platform deployment:
+
+| Linux mechanism | Investigation |
+| --- | --- |
+| Container image storage | [OverlayFS and missing parent snapshots](/projects/linux-containerd-overlayfs-snapshot-failures/) |
+| File and mount lifetime | [VFS objects, open files and CSI mounts](/projects/linux-vfs-mount-lifecycle/) |
+| Persistent I/O | [Buffered writes, ext4 journaling and device counters](/projects/linux-disk-io-journaling-writeback/) |
+| Memory attribution | [RSS, PSS and cgroup memory accounting](/projects/linux-host-memory-accounting-cgroups/) |
+| Runtime storage placement | [K3s data-dir, containerd and mount dependencies](/projects/linux-container-runtime-storage-migration/) |
+| Node resource limits | [Pod density and IP allocation](/projects/rokaf-k3s-pod-density-capacity/) |
+
+The [companion figure generators and small experiments](https://github.com/Petooooo/Petooooo.github.io/tree/main/apps/web/scripts) are versioned alongside these records. Their output and scope are described in the corresponding articles; the examples do not require access to the original operating environment.
 
 ## Platform Operations Across System Layers
 
@@ -148,7 +159,7 @@ What appeared to be an application-level failure often depended on a deeper prer
 - A GPU-backed service can stay reachable after node loss while serving at lower capacity.
 - A migration status or timeout should be checked against **actual persisted progress and data state**, not interpreted in isolation.
 
-This work gave me practical responsibility for keeping systems running, but it also revealed what I wanted to understand more deeply: **Linux kernel mechanisms, filesystem behavior, storage persistence, memory and I/O paths**. Those are the questions I plan to study at KAIST.
+The platform records and the Linux investigations serve different purposes: one documents the operational change and its outcome, the other examines the mechanism and what the available evidence can establish.
 
 ## Public documentation boundary
 

@@ -35,7 +35,12 @@ class Broker:
  def ack(self,c,delivery):
   owner,tag,job=delivery
   if c!=owner or c not in self.channels or self.channels[c][1].get(tag)!=job:raise ValueError('stale delivery')
-  del self.channels[c][1][tag]
+  # The application guard above is separate from a raw protocol acknowledgement.
+  return self.wire_ack(c,tag)
+ def wire_ack(self,c,tag):
+  # Single-message Ack model: the wire identifies the channel and its tag, not a job.
+  if c not in self.channels or tag not in self.channels[c][1]:raise ValueError('unknown delivery tag')
+  return self.channels[c][1].pop(tag)
  def close(self,c):
   _,held=self.channels.pop(c);self.ready.extend(held.values())
 b=Broker(['a','b','c']);b.open('old');b.open('other')
@@ -51,34 +56,46 @@ assert job_b[2]=='b' # local reference remains even after broker close
 try:b.ack('new',job_b)
 except ValueError:pass
 else:raise AssertionError('stale ack accepted')
+# A reused numerical tag can silently acknowledge a different outstanding delivery.
+collision=Broker(['job-X','job-Y']);collision.open('left');collision.open('right')
+left=collision.take('left');right=collision.take('right')
+assert left[1]==right[1]==1 and left[2]!=right[2]
+try:collision.ack('right',left)
+except ValueError:pass
+else:raise AssertionError('application guard accepted wrong channel')
+assert collision.wire_ack('right',left[1])=='job-Y'
+assert collision.channels['left'][1][1]=='job-X'
+try:collision.wire_ack('right',1)
+except ValueError:pass
+else:raise AssertionError('unknown tag accepted')
 class Job:
- def __init__(self):self.token=0;self.state='pending';self.artifacts={};self.accepted=None
+ def __init__(self):self.attempt_id=0;self.state='pending';self.artifacts={};self.accepted=None
  def claim(self):
-  assert self.state=='pending';self.token+=1;self.state='claimed';return self.token
- def expire(self,token):
-  if self.state=='claimed' and token==self.token:self.state='pending';return True
+  assert self.state=='pending';self.attempt_id+=1;self.state='claimed';return self.attempt_id
+ def expire(self,attempt_id):
+  if self.state=='claimed' and attempt_id==self.attempt_id:self.state='pending';return True
   return False
- def artifact(self,token):self.artifacts[token]=f'artifact-{token}'
- def complete(self,token):
-  if self.state!='claimed' or token!=self.token or token not in self.artifacts:return False
-  self.accepted=self.artifacts[token];self.state='complete';return True
+ def artifact(self,attempt_id):self.artifacts[attempt_id]=f'artifact-{attempt_id}'
+ def complete(self,attempt_id):
+  if self.state!='claimed' or attempt_id!=self.attempt_id or attempt_id not in self.artifacts:return False
+  self.accepted=self.artifacts[attempt_id];self.state='complete';return True
 # Early acknowledgement without a recovery owner.
 early=Broker(['job']);early.open('a');early.ack('a',early.take('a'));early.close('a')
 assert not early.ready
 # Crash after durable claim, before or after ack; replayed command must not claim again.
 for ack_before_crash in (False,True):
- j=Job();q=Broker(['job']);q.open('a');delivery=q.take('a');token=j.claim()
+ j=Job();q=Broker(['job']);q.open('a');delivery=q.take('a');attempt_id=j.claim()
  if ack_before_crash:q.ack('a',delivery)
  q.close('a');assert bool(q.ready)==(not ack_before_crash) and j.state=='claimed'
- assert j.expire(token);next_token=j.claim();assert next_token!=token
- j.artifact(token);j.artifact(next_token)
- assert not j.complete(token) and j.complete(next_token) and not j.complete(next_token)
+ assert j.expire(attempt_id);next_attempt_id=j.claim();assert next_attempt_id!=attempt_id
+ j.artifact(attempt_id);j.artifact(next_attempt_id)
+ assert not j.complete(attempt_id) and j.complete(next_attempt_id) and not j.complete(next_attempt_id)
  assert j.accepted=='artifact-2'
 # Shovel confirm/ack ambiguity: illustrative source redelivery creates two copies.
 source=Broker(['m']);source.open('s');d=source.take('s');destination=[d[2]]
 source.close('s');source.open('s2');d2=source.take('s2');destination.append(d2[2]);source.ack('s2',d2)
 assert destination==['m','m'] and not source.ready
-print('PASS: 5 heartbeat negotiation examples; delivery credit, wrong-channel and stale Ack rejection; claim-before/after-Ack failure windows, lease replacement, stale completion and duplicate completion; Shovel duplicate window')
+print('PASS: 5 heartbeat negotiation examples; delivery credit, application-guard wrong-channel and stale Ack rejection, raw tag collision; claim-before/after-Ack failure windows, lease replacement, stale completion and duplicate completion; Shovel duplicate window')
 # MODEL_END
 # 01 shovel
 v=t(40,132,'Source broker','Source Broker',21,700)+t(420,132,'Shovel','Shovel',21,700)+t(790,132,'Destination broker','Destination Broker',21,700)

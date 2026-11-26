@@ -87,7 +87,7 @@ I considered heartbeat negotiation, blocked client I/O, network-idle behavior an
 
 ### One TCP connection, several AMQP channels
 
-An AMQP 0-9-1 connection multiplexes channels over a TCP connection. Channels maintain their own protocol state and delivery tags; a tag is meaningful only on the channel that issued the delivery. Tag 1 on a replacement channel is not the original tag 1, even if both refer to the same business job. Acknowledging an unknown tag can close the channel with a protocol error. A connection failure removes all its channels, whereas a channel-level exception need not remove the TCP connection.
+An AMQP 0-9-1 connection multiplexes channels over a TCP connection. Channels maintain their own protocol state and delivery tags; a tag is meaningful only on the channel that issued the delivery. Tag 1 on a replacement channel is not the original tag 1, even if both refer to the same business job. An acknowledgement with an unknown tag closes the channel with a protocol error. A more dangerous case is a numerical tag collision: if a different live channel has an outstanding delivery with the same tag, a single-message basic.ack sent there acknowledges that delivery instead. The wire acknowledgement has no application job ID or original connection generation that the broker could compare. A connection failure removes all its channels, whereas a channel-level exception need not remove the TCP connection.
 
 <figure className="project-concept-figure">
   <a href="/figures/journals/amqp-02-channels.svg" target="_blank" rel="noopener noreferrer" aria-label="Open amqp 02 channels diagram">
@@ -112,7 +112,7 @@ For a Pika BlockingConnection, I would keep the connection's I/O dispatcher runn
 The blocked-connection timeout is yet another boundary: it limits waiting during a broker resource-blocked condition, not the duration of an idle connection or the task itself. The delivery acknowledgement timeout, heartbeat, TCP reset and broker resource alarm need separate evidence. I would align broker connection and channel closure logs with client exceptions, dispatcher progress, resource alarms and the applicable negotiated settings, using the network scope described in the [K3s datapath record](/projects/rokaf-k3s-cni-service-datapath/).
 
 
-## The most damaging consequence was two workers doing one job
+## Redelivery and overlapping workers
 
 A broken AMQP connection has a predictable consequence for an **unacknowledged delivery**: RabbitMQ can requeue and redeliver it. But the worker's processing function need not immediately notice that the transport has gone away.
 
@@ -142,10 +142,10 @@ For a hypothetical consumer with prefetch 2, two deliveries fill its credit. Ack
   <figcaption>A bounded delivery-credit example. Closing the channel returns outstanding messages to the ready pool in the model; local work does not automatically stop.</figcaption>
 </figure>
 
-I tested a small in-memory delivery model using two channel identities and prefetch 2. It fills both credits, releases one with an Ack, rejects an Ack from the wrong channel, requeues outstanding deliveries on close and assigns fresh delivery tags on a replacement channel. It also demonstrates that the original worker can still hold a local job reference. This is a model of the accounting boundary, not a real RabbitMQ integration test, ordering guarantee or throughput benchmark.
+In a small in-memory delivery model, prefetch 2 fills both credits, one Ack releases a credit, and closing the channel requeues outstanding deliveries. A replacement channel starts its own tag sequence while the original worker can still hold a local job reference. I separated a guarded application callback from a raw single-tag acknowledgement: the former checks the delivery's channel identity, while the latter can remove the wrong job when two channels have tag 1 outstanding. The [companion model](https://github.com/Petooooo/Petooooo.github.io/blob/main/apps/web/scripts/build-rabbitmq-lifecycle-figures.py) tests both cases; it does not exercise an actual broker or establish delivery order or throughput.
 
 
-## An acknowledgement can be early, late or simply unrelated to the result
+## Acknowledgement timing and durable claims
 
 The old model kept one RabbitMQ delivery unacknowledged throughout a potentially lengthy conversion. Its advantage was simple: if the consumer truly died before an Ack, the broker could redeliver the task. Its weakness was that the delivery's transport lifetime was tied to a conversion that might take hours. After a connection loss, that model could grant the same logical job to another worker even while the original work continued.
 
@@ -173,7 +173,7 @@ The DB-backed claim must be acquired with concurrency control, not with a casual
   <figcaption>Moving the Ack earlier solves no consistency problem on its own. The durable claim, stale-lease reconciler and idempotency checks are what make that choice recoverable.</figcaption>
 </figure>
 
-## A new processing attempt is not a new document job
+## Job identity and attempt ownership
 
 A RabbitMQ redelivery, a user retry and a recovered stale lease can all refer to the **same logical job**. I needed a stable job ID that did not change with each attempt.
 

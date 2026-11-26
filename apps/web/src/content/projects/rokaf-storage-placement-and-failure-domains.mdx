@@ -25,7 +25,7 @@ The workload was one member of a MongoDB replica set. Because a secondary member
 
 That encounter made the choice between Local-path, Longhorn, database replication and distributed MinIO less abstract. These were not four interchangeable ways to get a PVC. They assigned responsibility for **recovering usable data after a node or disk failure** to different parts of the platform.
 
-## A changed nodePathMap did not move an existing volume
+## Local-path provisioning and existing PVs
 
 K3s includes the Local-path Provisioner. It creates PersistentVolumes backed by node-local directories, using configuration such as `nodePathMap` to determine where new volume directories are provisioned. An operator can specify a default path and different paths for particular nodes.
 
@@ -51,7 +51,7 @@ Longhorn replica scheduling also depends on eligible nodes and disks, free space
 
 I documented those incidents in [Longhorn Replica Failure and Volume Recovery](/projects/rokaf-stateful-storage-and-recovery/). For this broader placement decision, the relevant point was **who was expected to rebuild the failed copy**: Longhorn's storage engine, rather than the application performing its own logical data synchronization.
 
-## ClickHouse and MongoDB understood their own replication
+## Database-managed replication
 
 For a database with a native replication protocol, I had to consider whether another layer of replicated block storage was necessary.
 
@@ -65,7 +65,7 @@ I considered local, independently attached storage for such database replicas be
 
 The detailed observations are in [ClickHouse Migration: Standalone to ReplicatedMergeTree](/projects/rokaf-clickhouse-replication-migration/).
 
-## MinIO was responsible for objects across its own storage members
+## Object-level erasure coding
 
 My first MinIO deployment was standalone, using a Longhorn-backed volume. I later configured distributed MinIO with independently backed storage members and transferred a preexisting object dataset into the new service.
 
@@ -127,7 +127,7 @@ With WaitForFirstConsumer, a StorageClass can delay binding and provisioning unt
   <figcaption>Illustrative delayed provisioning and later scheduling. After binding, a new Pod must satisfy the existing PV's location constraint. This is not the historical node configuration.</figcaption>
 </figure>
 
-The local I/O path can avoid remote storage traffic, although filesystem caching, device queues and application replication still matter. A network-replicated volume adds an engine and remote replica path; a local replica can improve locality without eliminating the remote replicas' synchronous write costs. A read may be satisfied locally or remotely depending on the engine and placement. The relevant comparison is the application's actual read, write and failure-recovery path, not just whether its PVC is bound.
+The local I/O path can avoid remote storage traffic, although filesystem caching, device queues and application replication still matter. A network-replicated Longhorn V1 volume adds an engine and remote replica path. Best-effort locality can place a replica beside the workload while retaining remote copies; the synchronous write path still includes participating remote replicas. Strict-local is a different configuration with only one local replica, so it changes the storage-layer failure guarantee. I would not select it simply as a latency tuning flag. A read may be satisfied locally or remotely depending on the engine and placement. The relevant comparison is the application's actual read, write and failure-recovery path, not just whether its PVC is bound.
 
 ## Capacity cost is not measured write amplification
 
@@ -140,7 +140,7 @@ Suppose one logical dataset has 100 GiB of comparable stored data, and each of t
   <figcaption>Synthetic steady-state copy and coded-payload footprints, all normalized to 100 GiB. Metadata, compression, snapshots, reserved space, journals and temporary copies are excluded.</figcaption>
 </figure>
 
-The 2 × 2 product counts stored copies, not physical writes per logical update. A useful measurement would be the delta of physical device bytes written divided by the logical application bytes accepted over the same interval. Writeback and batching, journal writes, compaction, replication log traffic, snapshot copies and concurrent rebuilding can all change that ratio. Logical device and underlying member-device counters must not be summed as independent physical writes. The [disk I/O investigation](/projects/linux-disk-io-journaling-writeback/) explains the accounting boundary.
+The 2 × 2 product counts stored copies, not physical writes per logical update. A host-side measurement would divide the bytes written at the selected underlying block-device boundary by the logical application bytes accepted over the same interval. It would not measure NAND-programmed bytes inside an SSD; that requires separate device telemetry. The measurement also needs a workload boundary that excludes unrelated writers or accounts for them. Writeback and batching, journal writes, compaction, replication log traffic, snapshot copies and concurrent rebuilding can all change that ratio. Logical device and underlying member-device counters must not be summed as independent physical writes. The [disk I/O investigation](/projects/linux-disk-io-journaling-writeback/) explains the accounting boundary.
 
 For a failure scenario, both a database and its underlying block volume may try to rebuild. They can compete for the same disk and network bandwidth; sequencing or throttling repair may be preferable to maximizing parallelism. Conversely a replicated block volume can avoid an expensive database reinitialization when a host disk fails. The trade-off depends on observed recovery time, write latency, spare capacity and the application's ability to reconstruct from peers. I did not retain a controlled before-and-after throughput comparison for these placement decisions.
 
@@ -165,7 +165,7 @@ A MongoDB secondary's initial sync needs a healthy sync source, adequate resourc
 
 ClickHouse ReplicatedMergeTree maintains parts per replica and coordination metadata in Keeper; ordinary replication is asynchronous, and insert_quorum changes the acknowledgement requirement. An empty replication queue is a point-in-time observation. I would compare the expected parts, relevant query results and replication errors, not declare complete parity from one queue counter.
 
-For MinIO, the number of surviving shards within each erasure set matters more than the aggregate number of healthy disks. In a conventional K-data/M-parity model with K+M drives, K intact shards reconstruct a payload. The documented MinIO write threshold is K except for equal data/parity where it is K+1; actual behavior depends on release, object parity and available drives. Read reconstruction and successful new writes are distinct. The examples above do not establish the historical MinIO parity or write quorum.
+For MinIO, the number of surviving shards within each erasure set matters more than the aggregate number of healthy disks. In a conventional K-data/M-parity model with K+M drives, K intact shards reconstruct a payload. Current MinIO AIStor documentation describes a write threshold of K, or K+1 when data and parity counts are equal. This is a reference model, not a version-specific finding about the earlier deployment; actual behavior depends on release, object parity and available drives. Read reconstruction and successful new writes are distinct. The examples above do not establish the historical MinIO parity or write quorum.
 
 For a search index, the primary/replica shard placement, in-sync copies and availability of the original indexed data determine the recovery strategy. For a monitoring TSDB, the latest Head and WAL may be the only record of the failure; losing them has a different cost from regenerating a cache. I would not assume any particular Elasticsearch or Prometheus migration was completed based on these design examples. The [Prometheus WAL investigation](/projects/rokaf-observability-and-failure-evidence/) illustrates that evidence-loss boundary.
 
@@ -191,5 +191,5 @@ For the next new PVC, I would establish the recovery owner before picking a Stor
 - [Kubernetes — StorageClasses](https://kubernetes.io/docs/concepts/storage/storage-classes/)
 - [Longhorn — Data locality](https://longhorn.io/docs/1.13.0/high-availability/data-locality/)
 - [MongoDB — Replica set synchronization](https://www.mongodb.com/docs/manual/core/replica-set-sync/)
-- [ClickHouse — ReplicatedMergeTree and Keeper](https://clickhouse.com/blog/clickhouse-cloud-boosts-performance-with-sharedmergetree-and-lightweight-updates)
+- [ClickHouse — Replicated table engines](https://clickhouse.com/docs/reference/engines/table-engines/mergetree-family/replication)
 - [MinIO — Erasure coding](https://docs.min.io/aistor/operations/core-concepts/erasure-coding/)

@@ -84,7 +84,18 @@ GPU에서도 비슷한 문제가 있었다. Time-slicing으로 스케줄러에 �
 
 어떤 쓰기가 실제로 디스크에 반영됐는지, 파일시스템이 오류를 만났을 때 무엇을 보장하는지, VFS와 I/O 경로에서 어떤 대기와 재시도가 발생하는지 같은 질문이 자연스럽게 따라왔다.
 
-그래서 이후에는 Linux 커널과 파일시스템, 메모리 관리, 영속 I/O를 더 깊이 공부하려 한다. 운영 경험을 연구 관심사에 억지로 연결하기보다는, **운영 중 끝까지 설명하고 싶었지만 아직 충분히 이해하지 못한 문제들이 그 아래 계층에 있었다**고 표현하는 편이 맞겠다.
+운영 기록에서 다루기 어려웠던 Linux 내부 동작은 다음 글에 따로 정리했다. 같은 장애를 반복해서 소개하기보다 문제가 발생한 계층과 그 동작 원리를 중심으로 살펴봤다.
+
+| 시스템 내부 동작 | 관련 글 |
+| --- | --- |
+| 컨테이너 이미지 저장소 | [OverlayFS와 Parent Snapshot 장애](/projects/linux-containerd-overlayfs-snapshot-failures/) |
+| 파일과 Mount 생명주기 | [VFS 객체, 열린 파일과 CSI Mount](/projects/linux-vfs-mount-lifecycle/) |
+| 영속 I/O | [Buffered Write, ext4 Journal과 I/O 지표](/projects/linux-disk-io-journaling-writeback/) |
+| 메모리 사용량 분석 | [RSS, PSS와 cgroup 메모리 Accounting](/projects/linux-host-memory-accounting-cgroups/) |
+| 런타임 저장 공간 | [K3s data-dir와 containerd 저장 공간 이전](/projects/linux-container-runtime-storage-migration/) |
+| 노드 리소스 제한 | [Pod 밀도와 IP 할당](/projects/rokaf-k3s-pod-density-capacity/) |
+
+그림을 생성하거나 작은 실험을 재현하는 [코드도 함께 보관했다](https://github.com/Petooooo/Petooooo.github.io/tree/main/apps/web/scripts). 각 글의 실험은 당시 운영 환경에 접근하지 않고도 실행할 수 있다.
 
 이 페이지는 폐쇄망 K3s 플랫폼에서 직접 맡았던 설계·배포·운영 범위를 정리한 개요다. 세부 장애 기록에는 실제로 확인한 증상과 조치, 검증하지 못한 부분을 구분해 남겼다.
 
