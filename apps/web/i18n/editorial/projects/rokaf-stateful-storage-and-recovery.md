@@ -42,6 +42,34 @@ Replica 객체를 없애면 목록이 깨끗해질지는 모른다. 하지만 �
 
 남아 있는 기록에서 확인할 수 있는 결과는 분명하다. 파일은 존재했고, Replica는 Stopped였으며, Offline Rebuilding을 켜도 즉시 정상화되지 않았다. **마지막까지 두 개의 Healthy Replica가 복구됐다는 검증 결과는 없다.**
 
+## 데이터 경로와 Process Manager
+
+당시 조사했던 파일 기반 Replica를 이해하기 위해 V1 Data Engine을 기준으로 살펴봤다. 정확한 설치 버전은 남아 있지 않으므로 실제 Instance 배치를 재구성한 것이 아니라 공개 문서의 구조를 설명한 것이다. Manager는 Kubernetes Custom Resource를 기준으로 상태를 조정하고 Instance Manager는 Engine과 Replica 프로세스의 실행 상태를 관리한다. Engine은 Volume Frontend를 제공하고 참여 중인 Replica에 I/O를 전달한다. Replica 프로세스는 자신의 디스크 파일과 Snapshot 메타데이터를 바탕으로 데이터를 제공한다. Instance Manager 자체가 볼륨의 복제본인 것은 아니다.
+
+{{figure /figures/journals/lh-01-engine-path.svg | V1 Engine 모델. 상태 조정 경로와 실제 I/O 경로는 별개다. 두 Replica가 있다고 반드시 서로 독립적인 물리 장애 영역에 배치된 것은 아니다.}}
+
+Engine은 정상적으로 참여하는 Replica에 동기적으로 쓰기를 전달한다. 실패한 Replica는 서비스에서 제외될 수 있고, 남은 구성으로 I/O를 처리할 수 있다면 서비스를 이어갈 수 있다. 블록마다 Raft의 과반수 투표를 하는 구조는 아니다. Frontend와 파일시스템, 저장장치의 Flush 동작도 고려해야 한다. Page Cache에서 write가 반환됐다는 사실만으로 원하는 수의 모든 Replica에 영속 저장됐다고 볼 수는 없다. 이 부분은 [Writeback 글](/projects/linux-disk-io-journaling-writeback/)과 연결된다. 별도의 [제어면 장애 기록](/projects/rokaf-control-plane-incident-log/)에서 다룬 Quorum은 디스크 복제본이 아니라 투표 멤버에 관한 개념이다.
+
+장애를 조사할 때는 Volume의 Robustness와 Attachment 상태, Replica Process 상태를 구분할 필요가 있다. 활성화된 V1 Engine에서 RW, WO, ERR는 Replica의 I/O 참여 방식을 나타낸다. 재구축 중인 WO Replica는 아직 정상 읽기 대상이 아니다. Stopped 프로세스의 디스크 파일이 남을 수도 있고, 정상적으로 Detach된 Healthy Volume에 실행 중인 Engine이 없을 수도 있다. 따라서 UI의 객체 개수보다 설정된 복제 목표, Attach된 Engine의 실제 Mode, Replica Condition 및 Process 상태를 함께 볼 것이다.
+
+{{figure /figures/journals/lh-02-state-dimensions.svg | 서로 다른 상태 항목과 가상의 Engine Mode 예시. Stopped, Detached, Failed는 같은 의미가 아니다.}}
+
+## Snapshot의 의존 관계와 재구축
+
+V1 Replica에는 쓰기가 이뤄지는 Head와 Sparse Snapshot Disk Image의 연결 관계가 있다. 최신 Layer에서 변경되지 않은 블록은 이전 Snapshot에서 읽을 수 있다. Snapshot을 논리적으로 삭제하는 작업과 실제 공간을 반환하는 Purge도 다르다. 기존 파일을 제거하기 전에 필요한 데이터를 남을 Layer에 합쳐야 할 수 있어 추가 공간과 I/O를 사용할 수 있다. 실제 파일 구조와 Backing Image, 메타데이터는 설치된 Engine 버전에 맞춰 해석해야 한다. 파일 크기나 존재 여부만으로 일관된 복구 원본인지 알 수 없다.
+
+{{figure /figures/journals/lh-03-snapshot-chain.svg | 세 블록으로 단순화한 Snapshot Chain. 최신 Layer에 없는 블록은 이전 Layer에서 찾는다. 중간 Layer를 제거하기 전 필요한 데이터를 남겨야 한다.}}
+
+작은 Sparse Block 모델로 이 관계를 검증했다. Base에는 A, B, C가 있고 중간 Layer에서는 B를 B1으로, Head에서는 C를 C2로 바꾼다. 읽기 결과는 A, B1, C2다. 중간 Layer를 그냥 제거하면 B가 원래 값으로 돌아간다. Head에서 덮어쓰지 않은 중간 Layer의 변경을 먼저 합치면 읽기 결과가 보존된다. 이는 개념의 검증이지 Longhorn 파일 형식이나 Purge 구현, 장애 시 영속성을 검증한 것이 아니다.
+
+공개된 V1 Rebuild 절차에서는 대상 Replica를 WO로 추가하고 Snapshot 기준점을 만든다. 필요한 Snapshot 데이터를 동기화하면서 새로운 쓰기도 재구축 과정과 조정한다. 성공적으로 재구축된 뒤에 RW로 전환한다. 버전과 기존 데이터에 따라 전체 전송, Delta 비교, Checksum 기반 Fast Rebuild를 사용할 수 있다. Fast Rebuild는 지원되는 Checksum 정보를 활용하며 모든 블록을 새로 검증하는 것과 다르다. 당시 Stopped 상태였던 Replica에서 이 과정이 완료됐다는 결과는 확인하지 못했다.
+
+Offline Rebuilding은 Detach된 Degraded Volume을 유지보수 목적으로 Attach해 복제본을 재구축하고 다시 Detach할 수 있게 한다. 정상 원본과 적절한 대상이 필요하고 현재 문서에서는 Faulted Volume을 지원하지 않는다. 구체적인 조건과 기능 지원은 버전과 Engine에 따라 달라진다. 당시 설정을 켰다고 이 조건이 충족됐다는 뜻은 아니었다.
+
+{{figure /figures/journals/lh-04-rebuild.svg | V1 Rebuild의 단순화된 절차. Offline Rebuild의 임시 Attach와 WO에서 RW로 전환되는 조건을 포함했다. 당시 실제 진행률은 아니다.}}
+
+용량을 판단할 때에는 시간과 실제 전송량도 생각해야 한다. 예를 들어 가상의 4 TiB 데이터를 100 MiB/s로 계속 전송한다면 전송에만 약 11.65시간, 50 MiB/s라면 약 23.30시간이 걸린다. 실제 장애 볼륨의 예상 복구 시간이 아니다. Sparse Block과 Snapshot 이력, 새 쓰기, 압축, 기존 데이터의 재사용과 I/O 경합에 따라 실제 전송량과 속도는 달라진다. 클러스터 전체에 여유 공간이 있어도 스케줄링 조건과 여유 공간 기준을 만족하는 대상 디스크가 없을 수 있다.
+
 ## 노드가 돌아온다고 데이터까지 돌아오는 것은 아니다
 
 비슷한 시기에 다른 노드에서는 Kubernetes의 Condition이 모두 Unknown으로 바뀌었다. 상태 메시지에는 `Kubelet stopped posting node status`가 나왔다. 그런데 K3s Agent의 Journal은 그만큼 명확한 이상을 보여주지 않았다.
@@ -75,6 +103,16 @@ Pod가 스케줄링되지 않는 문제라고만 생각했다면 이 로그까�
 그렇다고 포트 충돌, Busy Mount와 1월의 `stopping` 오류가 모두 같은 근본 원인이었다고 말할 수는 없다. 서로 다른 시점의 관측을 비슷한 유형이라는 이유로 하나의 사건으로 만들어서는 안 된다.
 
 당시 Instance Manager를 재시작하는 방안도 검토했다. 하지만 실제로 재시작한 뒤 Attach와 Replica 재구축, 전체 데이터 검증이 성공했다는 최종 결과는 남아 있지 않다. 검토한 해결책과 확인된 복구 결과를 구분해야 한다.
+
+### Detach가 끝나려면 실제 사용 관계도 정리돼야 한다
+
+일반적인 단일 Writer의 CSI 파일시스템 Volume에서 사용자를 종료하고 Publication을 해제하고 Unstage한 뒤 Controller Attachment를 정리하는 과정은 서로 다른 작업이다. Longhorn에는 별도로 VolumeAttachment Ticket을 조정하는 과정도 있다. CSI 외에 유지보수 작업을 하는 다른 Controller도 Attach를 요청할 수 있다. Kubernetes VolumeAttachment 객체와 Longhorn Custom Resource는 서로 다른 기록이며 실제 순서는 설치 버전과 Access Mode에 따라 달라진다.
+
+당시 Unregister 오류는 Process Manager가 아직 stopping인 Instance를 등록 해제하지 못했다는 증거다. Signal이 전달됐는지, 자식 프로세스가 끝났는지, I/O에서 지연됐는지, 같은 프로세스가 포트를 사용했는지까지 알려주지는 않는다. 이후 Port 충돌과 Busy Directory도 별도의 관측이다. [VFS 글](/projects/linux-vfs-mount-lifecycle/)에서는 Mountpoint 제거 오류와 명시적인 Unmount 실패를 구분했다.
+
+{{figure /figures/journals/lh-05-detach-gates.svg | Writer 종료, CSI Publication·Staging, Attachment 요청, Engine·Replica 종료 및 재연결 후 데이터 확인을 나눴다. 실제 복구 기록은 아니다.}}
+
+강제 조치를 검토하기 전에 Attachment 요청과 관련 CSI Event, Process 상태와 로그, 해당 Namespace의 장치·Mount 식별자, Socket 사용 주체에 관한 증거를 보존할 것이다. API에서 객체가 사라졌다고 이전 Writer가 차단됐다는 뜻은 아니다. Instance Manager를 재시작하면 그곳에서 관리하는 다른 Volume에도 영향을 줄 수 있다. Ticket 제거와 Manager 재시작은 이전 사용자가 장치에 더 이상 접근하지 않는다는 확인을 대신할 수 없다. 당시에는 이 전체 과정을 확인한 기록이 남아 있지 않다.
 
 ## PVC가 Bound여도 사용자는 파일을 못 열 수 있다
 
@@ -129,3 +167,7 @@ Longhorn의 Replica 목표를 **2개에서 1개로 낮추자 볼륨이 Healthy�
 - [Longhorn — Replica Rebuilding](https://longhorn.io/docs/1.13.0/advanced-resources/rebuilding/)
 - [Longhorn — Volume Attachments](https://longhorn.io/docs/1.13.0/advanced-resources/volumeattachment/)
 - [Longhorn — Volume Recovery](https://longhorn.io/docs/1.13.0/high-availability/recover-volume/)
+
+- [Longhorn — Concepts](https://longhorn.io/docs/1.13.0/concepts/)
+- [Longhorn — Settings (snapshot purge and rebuild)](https://longhorn.io/docs/1.13.0/references/settings/)
+- [Longhorn — Metrics](https://longhorn.io/docs/1.13.0/monitoring/metrics/)

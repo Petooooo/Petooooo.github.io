@@ -2,7 +2,7 @@
 title: "Longhorn Replica Failure and Volume Recovery"
 description: "Longhorn degraded replicas, attachment state, volume recovery and the limits of lowering replica count."
 date: "2026-11-18"
-updated: "2026-11-19"
+updated: "2026-11-26"
 draft: false
 reviewed: true
 reviewStatus: "reviewed"
@@ -63,6 +63,54 @@ At another point I tried to delete a replica and Longhorn refused, warning that 
 
 My preserved notes do not show a completed rebuild, a valid second copy and a successful byte-for-byte comparison after this operation. What I can confirm is that the file remained, the replica was still Stopped, the offline rebuild setting did not visibly change it, and a deletion guard protected potentially valuable data.
 
+## The data plane and the process manager
+
+The V1 data engine provides a useful model for the file-based replicas discussed here. I have not retained the exact installed engine release, so the following is an explanation of the documented architecture, not a reconstructed instance inventory. The manager reconciles Kubernetes custom resources; the instance manager supervises engine and replica processes. The engine exposes the volume frontend and coordinates I/O to participating replicas. A replica process serves the data represented by its own disk files and snapshot metadata. An instance manager is not itself a copy of the volume.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/lh-01-engine-path.svg" target="_blank" rel="noopener noreferrer" aria-label="Open lh 01 engine path diagram">
+    <img src="/figures/journals/lh-01-engine-path.svg" alt="V1 engine model: control-plane reconciliation and the data path are separate. Two replica processes represent two candidate copies, not necessarily independent physical failure domains." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>V1 engine model: control-plane reconciliation and the data path are separate. Two replica processes represent two candidate copies, not necessarily independent physical failure domains.</figcaption>
+</figure>
+
+The engine replicates writes synchronously to its participating healthy replicas. Failed replicas can be excluded from service; the remaining set can continue if the engine can serve I/O. This is not a Raft majority vote per block. The frontend, filesystem and storage flush contracts still matter: an application write returning from the page cache is not evidence that every intended replica has durably stored the data. The [writeback investigation](/projects/linux-disk-io-journaling-writeback/) explains that boundary. In a separate [control-plane record](/projects/rokaf-control-plane-incident-log/), quorum describes voting members rather than replica disks.
+
+Three state dimensions are useful when investigating a failure. Volume robustness describes the controller's assessment of usable redundancy; attachment state describes whether and where the volume is presented; replica process state describes the lifecycle of an instance. For an active V1 engine, the per-replica modes RW, WO and ERR describe its data-plane participation. A rebuilding WO replica is not yet a valid read source. A stopped process can retain its disk files, and a healthy detached volume need not have a running engine. I would therefore compare the desired replica count, the actual engine mode map when attached, replica conditions and current process state rather than count objects in the UI.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/lh-02-state-dimensions.svg" target="_blank" rel="noopener noreferrer" aria-label="Open lh 02 state dimensions diagram">
+    <img src="/figures/journals/lh-02-state-dimensions.svg" alt="Independent state dimensions and an illustrative engine mode map. A stopped process, a detached volume and a failed replica are not interchangeable descriptions." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Independent state dimensions and an illustrative engine mode map. A stopped process, a detached volume and a failed replica are not interchangeable descriptions.</figcaption>
+</figure>
+
+## Snapshot dependencies and the rebuilding window
+
+A V1 replica maintains a writable head and a chain of sparse snapshot disk images. An older snapshot can provide a block that was not changed in newer layers. Deleting a snapshot logically and reclaiming its allocated data are distinct operations: purge may have to coalesce data into a surviving layer before the old file can be removed. That can require extra temporary space and I/O. The exact on-disk layout, backing images and metadata must be interpreted with the matching engine version. File size or a file's mere presence does not identify a consistent recovery source.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/lh-03-snapshot-chain.svg" target="_blank" rel="noopener noreferrer" aria-label="Open lh 03 snapshot chain diagram">
+    <img src="/figures/journals/lh-03-snapshot-chain.svg" alt="Conceptual three-block snapshot chain. A lookup walks toward older data when a newer layer has no entry. Coalescing preserves visible blocks before an intermediate layer can disappear." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Conceptual three-block snapshot chain. A lookup walks toward older data when a newer layer has no entry. Coalescing preserves visible blocks before an intermediate layer can disappear.</figcaption>
+</figure>
+
+I tested the dependency principle with a tiny in-memory sparse-block model. A base holds A, B and C; an intermediate layer changes B to B1; the head changes C to C2. The visible result is A, B1, C2. Dropping the intermediate layer without preserving its contribution changes the visible B back to B. Merging its unshadowed changes into the head preserves the result. The model verifies those outcomes, not Longhorn's file format, purge code or crash safety.
+
+In the documented V1 rebuilding process, the engine adds a target in WO mode and establishes a snapshot reference point. The source and destination synchronize required snapshot data while new writes are coordinated with the rebuilding replica. The target becomes RW only after the rebuild completes successfully. Depending on version and available data, full transfer, delta comparison or checksum-based fast rebuilding can reduce transfer work. Fast rebuilding relies on the supported checksum metadata and is not a fresh audit of every block. The original stopped replica did not demonstrate any of these completed checkpoints.
+
+Offline rebuilding can attach a detached degraded volume for maintenance, rebuild it and detach it again. It requires a usable source and an eligible destination; the current documentation excludes faulted volumes. Availability of the option and its precise checks depend on release and engine. Turning the setting on did not establish those prerequisites in the original incident.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/lh-04-rebuild.svg" target="_blank" rel="noopener noreferrer" aria-label="Open lh 04 rebuild diagram">
+    <img src="/figures/journals/lh-04-rebuild.svg" alt="A simplified documented V1 rebuild sequence, including the temporary offline attachment and WO-to-RW boundary. No measured historical rebuild progress is implied." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>A simplified documented V1 rebuild sequence, including the temporary offline attachment and WO-to-RW boundary. No measured historical rebuild progress is implied.</figcaption>
+</figure>
+
+A capacity calculation illustrates why I did not regard free disk space as sufficient evidence. If a hypothetical rebuild must transfer 4 TiB at a sustained 100 MiB/s, the transfer alone takes about 11.65 hours. At 50 MiB/s it takes about 23.30 hours. Those are idealized transfer times, not predictions for the original volume. Sparse blocks, snapshot history, new writes, compression, local reuse and contention can change the actual bytes and effective rate. Admission must also account for scheduling constraints and free-space thresholds; nominal cluster-wide capacity does not guarantee a suitable target.
+
 ## Node Ready and volume Ready answered different questions
 
 During a separate node-health incident, Kubernetes marked a node's conditions `Unknown` with `Kubelet stopped posting node status`. The K3s agent journal did not expose an equally obvious error, and important Longhorn replica data still physically occupied the node's disk.
@@ -97,6 +145,21 @@ In later troubleshooting I also encountered a force-detach followed by a **port-
 Similarly, missing containerd snapshot paths or CSI metadata files in a separate node incident were not proof of Longhorn block corruption. It mattered to preserve those boundaries in the write-up.
 
 For the instance-manager `stopping` log, I do not have a final trace demonstrating a clean reattach, restored two-replica set and application-wide data verification. An instance-manager restart was discussed as a possible intervention; a suggestion is not a recorded successful result.
+
+### Ownership must converge before detachment is complete
+
+For an ordinary single-writer CSI filesystem volume, stopping the consumer, removing its publication, unstaging and releasing controller attachment are distinct actions. Longhorn also reconciles its own VolumeAttachment tickets; CSI is one requester, and other controllers can request attachment for maintenance. The Kubernetes VolumeAttachment object and Longhorn's custom resource are different records. The installed version and access mode determine the actual sequence.
+
+The historical unregister error tells me that the process manager rejected a state transition while the instance was still stopping. It does not show whether a signal was delivered, a child process exited, an I/O request stalled or a port was held by that same process. The later port conflict and busy directory are separate observations. The [VFS record](/projects/linux-vfs-mount-lifecycle/) distinguishes a mountpoint removal error from an explicit unmount failure.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/lh-05-detach-gates.svg" target="_blank" rel="noopener noreferrer" aria-label="Open lh 05 detach gates diagram">
+    <img src="/figures/journals/lh-05-detach-gates.svg" alt="Separate teardown evidence: writer quiescence, CSI publication/staging, attachment requests, engine and replica process exits, and safe data access after reattachment. Not an actual recovery trace." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Separate teardown evidence: writer quiescence, CSI publication/staging, attachment requests, engine and replica process exits, and safe data access after reattachment. Not an actual recovery trace.</figcaption>
+</figure>
+
+I would preserve the attachment requests and matching CSI events, process state and logs, the device and mount identities in the relevant namespaces, and any socket owner evidence before considering a forced transition. The absence of an object in the API does not prove that an old writer is fenced. An instance-manager restart can affect other volumes supervised by it. Neither removing a ticket nor restarting a manager is a substitute for verifying that the old owner no longer has access. No such full verification trace survives for this incident.
 
 ## What should be checked before touching a volume?
 
@@ -146,3 +209,7 @@ After lowering Longhorn's desired replica count from two to one, the volume retu
 - [Longhorn — Volume Attachments](https://longhorn.io/docs/1.13.0/advanced-resources/volumeattachment/)
 - [Longhorn — Volume Recovery](https://longhorn.io/docs/1.13.0/high-availability/recover-volume/)
 - [Longhorn — StorageClass Parameters](https://longhorn.io/docs/1.13.0/references/storage-class-parameters/)
+
+- [Longhorn — Concepts](https://longhorn.io/docs/1.13.0/concepts/)
+- [Longhorn — Settings (snapshot purge and rebuild)](https://longhorn.io/docs/1.13.0/references/settings/)
+- [Longhorn — Metrics](https://longhorn.io/docs/1.13.0/monitoring/metrics/)
