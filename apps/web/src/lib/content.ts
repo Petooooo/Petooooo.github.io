@@ -86,9 +86,38 @@ export function formatDate(date: Date) {
   return `${year}.${month}.${day}`;
 }
 
-/** Month/period anchors are for ordering only: never display their synthetic day. */
+const monthNames = [
+  "January", "February", "March", "April", "May", "June", "July",
+  "August", "September", "October", "November", "December"
+];
+
+export function formatMonth(date: Date) {
+  return `${monthNames[date.getUTCMonth()]} ${date.getUTCFullYear()}`;
+}
+
+/** Normalize display only; never invent months or days for a year-level period. */
+export function formatDisplayPeriod(period: string) {
+  const parts = period.trim().split(/\s*[–—]\s*|\s+-\s+/);
+  if (parts.length > 2) return period;
+  const monthPart = /^([A-Za-z]+)(?:\s+(\d{4}))?$/;
+  const endYear = parts.length === 2 ? parts[1].match(/\b(\d{4})$/)?.[1] : undefined;
+  function expand(value: string, inheritedYear?: string) {
+    const match = value.match(monthPart);
+    if (!match) return value;
+    const name = monthNames.find((m) =>
+      m.toLowerCase() === match[1].toLowerCase() ||
+      m.slice(0, 3).toLowerCase() === match[1].toLowerCase() ||
+      (m === "September" && match[1].toLowerCase() === "sept")
+    );
+    const year = match[2] ?? inheritedYear;
+    return name && year ? `${name} ${year}` : value;
+  }
+  return parts.map((part, i) => expand(part, i === 0 ? endYear : undefined)).join(" – ");
+}
+
+/** Exact reference days belong on article details, not listing cards. */
 export function formatProjectWorkDate(entry: CollectionEntry<"projects">) {
   if (entry.data.datePrecision === "day") return formatDate(entry.data.date);
-  if (entry.data.datePrecision === "month") return formatDate(entry.data.date).slice(0, 7);
-  return entry.data.period;
+  if (entry.data.datePrecision === "month") return formatMonth(entry.data.date);
+  return formatDisplayPeriod(entry.data.period);
 }

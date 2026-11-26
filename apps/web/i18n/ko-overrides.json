@@ -922,5 +922,6 @@
   "Feb–Jun 2026": "2026년 2~6월",
   "Mar–Aug 2026": "2026년 3~8월",
   "Jan–Mar 2026": "2026년 1~3월",
-  "Project dates refer to the work or a documented milestone, not the publication of this retrospective. Where only a month or period is known, no exact day is displayed. The first public record and article revision are recorded separately on each project page.": "프로젝트 날짜는 글을 공개한 시점이 아니라 실제 수행 시점이나 기록으로 확인된 주요 작업일을 뜻한다. 월 또는 기간만 확인되는 경우에는 정확한 일자를 표시하지 않는다. 최초 공개 원고 기록일과 수정일은 각 프로젝트 페이지에 별도로 표시한다."
+  "Project cards show the period of the work. Exact dates, when known, and publication history are available on the individual project pages.": "프로젝트 목록에는 실제 수행 기간만 표시한다. 정확한 날짜와 공개·수정 기록은 각 프로젝트 상세 페이지에서 확인할 수 있다.",
+  "Independently built & operated": "직접 구축·운영"
 }

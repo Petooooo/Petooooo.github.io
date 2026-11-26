@@ -3,7 +3,7 @@ import { getCollection } from "astro:content";
 import BaseLayout from "@/layouts/BaseLayout.astro";
 import ContentCard from "@/components/ContentCard.astro";
 import SectionHeader from "@/components/SectionHeader.astro";
-import { byDateDesc, getCollectionUrl, isPublishedEntry } from "@/lib/content";
+import { byDateDesc, formatDisplayPeriod, getCollectionUrl, isPublishedEntry } from "@/lib/content";
 import { withBase } from "@/lib/urls";
 
 const notes = (await getCollection("notes")).filter(isPublishedEntry);
@@ -112,7 +112,7 @@ const toolGroups = [
       {experience.map((item) => (
         <a href={withBase(item.href)} class="group grid gap-2 py-6 transition-colors hover:bg-white/[0.025] md:grid-cols-[11rem_minmax(0,1fr)] md:gap-8 md:py-7">
           <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-            <p class="font-mono text-xs leading-6 text-slate-500">{item.period}</p>
+            <p data-list-period class="font-mono text-xs uppercase leading-6 tracking-[0.04em] text-slate-500">{formatDisplayPeriod(item.period)}</p>
           </div>
           <div class="min-w-0">
             <p class="font-mono text-xs uppercase tracking-[0.08em] text-slate-500">{item.type}</p>

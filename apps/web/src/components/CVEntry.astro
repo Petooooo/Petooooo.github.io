@@ -1,5 +1,6 @@
 ---
 import { withBase } from "@/lib/urls";
+import { formatDisplayPeriod } from "@/lib/content";
 
 interface Props {
   href?: string;
@@ -15,10 +16,10 @@ const { period, title, subtitle, detail, highlights = [], emphasis = false, href
 ---
 <div class="grid gap-2 border-t border-white/10 py-6 md:grid-cols-[11rem_minmax(0,1fr)] md:gap-8 md:py-7">
   <div class="pt-1">
-    <span class:list={[
-      "font-mono text-xs leading-6 tracking-[0.04em]",
+    <span data-list-period class:list={[
+      "font-mono text-xs leading-6 uppercase tracking-[0.04em]",
       emphasis ? "text-signal" : "text-slate-500"
-    ]}>{period}</span>
+    ]}>{formatDisplayPeriod(period)}</span>
   </div>
   <div class="min-w-0">
     <h3 class="text-lg font-semibold leading-7 text-white md:text-xl">

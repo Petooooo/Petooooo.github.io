@@ -112,7 +112,51 @@ def english_text(s: str) -> bool:
         return False
     return True
 
+# Canonical display periods use full English month names and a spaced en dash.
+# Translate only complete date labels, never fragments of prose or technical text.
+DISPLAY_MONTHS = {
+    name: number for number, name in enumerate((
+        "January", "February", "March", "April", "May", "June",
+        "July", "August", "September", "October", "November", "December"
+    ), 1)
+}
+
+def local_display_period(source: str) -> str | None:
+    parts = source.split(" – ")
+    if len(parts) > 2:
+        return None
+
+    def parse(value: str) -> tuple[int, int | None] | None:
+        match = re.fullmatch(r"([A-Za-z]+) (\d{4})", value)
+        if match and match[1] in DISPLAY_MONTHS:
+            return (int(match[2]), DISPLAY_MONTHS[match[1]])
+        if re.fullmatch(r"(?:19|20)\d{2}", value):
+            return (int(value), None)
+        return None
+
+    def label(value: tuple[int, int | None]) -> str:
+        year, month = value
+        return f"{year}년 {month}월" if month is not None else f"{year}년"
+
+    first = parse(parts[0])
+    if first is None:
+        return None
+    if len(parts) == 1:
+        # Standalone bare years also occur in article prose; preserve those.
+        return label(first) if first[1] is not None else None
+    if parts[1] == "Present":
+        return label(first) + " – 현재"
+    last = parse(parts[1])
+    if last is None:
+        return None
+    if first[0] == last[0] and first[1] is not None and last[1] is not None:
+        return f"{first[0]}년 {first[1]}~{last[1]}월"
+    return label(first) + " – " + label(last)
+
 def local_string(source: str, catalog: dict[str, str], missing: set[str]) -> str:
+    period = local_display_period(source)
+    if period is not None:
+        return period
     if not english_text(source):
         return source
     target = catalog.get(source, "").strip()
