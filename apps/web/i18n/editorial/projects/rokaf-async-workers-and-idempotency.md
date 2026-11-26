@@ -18,6 +18,17 @@ Shovel이 Running 상태인 것을 확인했고, 오래된 Queue의 메시지 �
 
 Shovel이 정상 동작했다는 사실과, 이후 Consumer가 몇 시간 동안 안정적으로 작업한다는 사실은 서로 다른 질문이었다.
 
+### Shovel의 Confirm과 Consumer Ack는 다른 확인이다
+
+AMQP 0-9-1에서 Publisher는 Exchange로 메시지를 보내고 Routing 규칙에 따라 Queue에 메시지가 도착한다. Publisher Confirm은 Broker가 발행을 처리한 결과이고 Consumer Ack는 이미 전달한 메시지를 처리했다는 확인이다. 어느 쪽도 실제 업무 트랜잭션의 완료를 뜻하지 않는다. Queue에 Routing되지 않은 발행도 Confirm을 받을 수 있으므로 Return과 Routing 결과를 함께 확인해야 한다. 영속성은 Queue 유형과 내구성 설정, 메시지 속성에 따라 달라진다.
+
+Shovel의 on-confirm에서는 Destination의 Confirm이 먼저이고 Source Ack가 나중이다. 그 사이에 Source 연결을 잃으면 이미 Destination에 도착한 메시지가 Source에서 재전달될 수 있다. 이전을 재시도할 때 Destination에 중복 메시지가 생길 수 있는 이유다. on-publish는 더 일찍 확인하고 no-ack에는 수동 Source Ack 경계가 없다. 각 방식의 복구 보장과 비용은 다르다.
+
+{{figure /figures/journals/amqp-01-shovel.svg | Destination Confirm과 Source Ack의 별도 경계. 두 확인 사이에서 연결이 끊기면 Destination에 메시지가 중복될 수 있다.}}
+
+당시 Queue 수치의 변화는 이전을 확인하는 데 도움이 됐지만 처리 중인 메시지와 동시에 동작하는 Consumer 때문에 두 Queue의 수는 계속 변할 수 있다. 보다 정확히 확인하려면 메시지 ID와 Payload Hash를 대조하고 동시에 발생한 발행·소비를 반영한 뒤 Routing과 실제 처리 결과를 확인해야 한다. 당시 이 전체 검증을 수행한 기록은 없다.
+
+
 ## AMQP Heartbeat와 연결 종료
 
 Shovel 이전을 마친 뒤에는 `Connection reset by peer`가 계속 문제가 됐다.
@@ -40,6 +51,23 @@ Broker 로그를 살펴보다가 다음 문구를 확인했다.
 
 Heartbeat 협상, Worker 내부 I/O 처리, 네트워크 Idle Timeout 등 여러 가능성을 살펴봤지만 3월 연결 끊김의 정확한 근본 원인이나 영구적인 해결 결과는 기록으로 확인할 수 없다.
 
+### TCP Connection과 AMQP Channel
+
+AMQP 0-9-1은 하나의 TCP Connection 위에서 여러 Channel을 운용한다. 각 Channel은 독립적인 프로토콜 상태와 Delivery Tag를 갖는다. 새 Channel에서 받은 Tag 1은 기존 Channel의 Tag 1과 같은 논리 Job을 가리키더라도 다른 Delivery다. 알 수 없는 Tag를 Ack하면 Channel이 프로토콜 오류로 닫힐 수 있다. Connection이 끊기면 그 아래 Channel도 사라지지만 Channel 오류가 항상 TCP 연결 종료로 이어지는 것은 아니다.
+
+{{figure /figures/journals/amqp-02-channels.svg | 한 Connection의 두 Channel과 각자 사용하는 Delivery Tag. 재연결 이후에는 새로운 전달 문맥에서 처리해야 한다.}}
+
+Heartbeat Timeout은 연결의 활동 여부를 확인하는 값이지 변환 작업 시간을 제한하는 값이 아니다. RabbitMQ에서 유지보수하는 Client의 공개 협상 알고리즘에서는 두 값이 모두 0이 아니면 작은 값을 선택하고 한쪽이 0이면 큰 값을 사용한다. 양쪽이 모두 0이면 Heartbeat를 비활성화한다. 이 방식에서 서버 86400초, Client 60초라면 결과는 60초다. 다만 Pika는 서버 제안값을 명시적으로 덮어쓸 수도 있으므로 당시 Client 버전과 실제 설정을 확인해야 한다. 이 예시로 당시 협상 결과를 확정할 수는 없다.
+
+협상 Timeout이 60초라면 다른 통신이 없을 때 약 30초마다 Heartbeat Frame을 주고받는다. 일반 AMQP Traffic도 연결 활동으로 간주된다. 연결 실패 감지 시점은 근사적인 것이며 작업의 실행 기한이 아니다. 당시 로그는 Broker가 연결을 닫은 이유를 알려주지만 I/O Loop 지연인지 네트워크 단절인지 스케줄링 지연인지까지 알려주지는 않는다.
+
+{{figure /figures/journals/amqp-03-heartbeat.svg | Heartbeat 간격과 Delivery 경과 시간을 구분한 가상 예시. 당시 패킷 캡처나 Pika의 협상 결과는 남아 있지 않다.}}
+
+Pika BlockingConnection에서는 긴 변환을 별도 실행 문맥에 두고 Connection의 I/O Dispatcher는 계속 동작시키는 편이 좋다. Worker Thread가 직접 Channel에 Ack하지 않고 add_callback_threadsafe로 원래 Connection에 작업을 전달한다. Dispatcher가 실행 중이어야 Callback도 처리된다. 이미 끊어진 연결의 Callback이 새 Channel에서 재사용된 Tag에 Ack해서는 안 된다. 논리 Job의 식별자는 Connection Generation과 별개다.
+
+blocked_connection_timeout은 Broker의 자원 부족에 따른 Blocked 상태에서 대기하는 시간을 제한하는 또 다른 설정이다. 연결의 Idle 시간이나 작업 시간 제한과 다르다. Delivery Ack Timeout, Heartbeat, TCP Reset, Broker 자원 경고를 각각 조사해야 한다. Broker의 연결·Channel 종료 로그와 Client 예외, Dispatcher 진행 상태 및 협상값을 같은 시각에 대조할 것이다. [K3s 네트워크 Datapath 글](/projects/rokaf-k3s-cni-service-datapath/)에서 다룬 통신 경로도 함께 확인할 필요가 있다.
+
+
 ## 메시지 재전달과 중복 처리
 
 연결이 끊기는 문제 자체도 불편했지만, 더 위험한 상황은 그 이후에 나타났다.
@@ -53,6 +81,17 @@ RabbitMQ는 Consumer와 연결이 사라지면 Ack되지 않은 Delivery를 다�
 여기서 문제는 CPU가 낭비되는 데 그치지 않는다. 두 Worker가 각각 결과 파일을 생성해 MinIO에 저장하거나 DB의 작업 상태를 갱신할 수도 있다. 뒤늦게 끝난 첫 번째 Worker가 두 번째 Worker의 완료 상태를 덮어쓰는 상황도 생각해야 한다.
 
 Heartbeat를 길게 설정하는 것은 Connection이 끊기는 빈도에 영향을 줄 수 있어도 **결과를 저장한 직후 Ack 전에 Worker가 죽는 실패 구간**을 없애지는 못한다. Broker 연결이 안정적인지와 사용자 요청 하나에 결과가 하나만 남는지는 다른 문제였다.
+
+### Prefetch와 미확인 메시지
+
+수동 Ack를 사용하는 경우 Prefetch는 아직 Ack되지 않은 Delivery 수에 제한을 둔다. RabbitMQ는 일반적으로 Global이 아닌 Prefetch를 Consumer별로 적용하며 Channel 전체에 별도 제한을 둘 수도 있다. 값 0은 일반적으로 프로토콜 차원의 제한이 없다는 뜻이지만 Broker와 Queue 유형에 따른 제약은 별개다. 이것은 실행 중인 계산 Thread 수를 제한하는 기능이 아니다. Worker가 여러 메시지를 받아 놓고 그중 하나만 처리할 수도 있다.
+
+가령 Prefetch가 2라면 두 Delivery가 도착한 뒤에는 한 메시지를 Ack해야 다음 메시지를 받을 수 있다. 두 Delivery를 보유한 채 Channel이 닫히면 둘 다 다시 Queue로 돌아갈 수 있다. 실제 변환까지 중단됐다는 의미는 아니다. 작업 시간이 짧을 때 Prefetch를 늘리면 처리량에 도움이 될 수 있지만 긴 작업에서는 느린 Consumer에 일이 몰리고 실패 시 재전달해야 할 메시지가 늘어날 수 있다. Prefetch 1로 제한해도 기존 Worker가 계속 실행하는 동안 다른 Worker가 Redelivery를 가져가는 문제는 막지 못한다.
+
+{{figure /figures/journals/amqp-04-prefetch.svg | Prefetch에 따른 Delivery Credit 예시. Channel이 닫히면 미확인 메시지를 다시 Queue에 둘 수 있지만 로컬 작업은 자동 종료되지 않는다.}}
+
+두 Channel 식별자와 Prefetch 2를 사용하는 작은 메모리 모델로 검증한다. Credit을 채우고 Ack로 하나를 비운 뒤 다른 Channel의 Ack를 거부하고, 종료된 Channel의 Delivery를 다시 Queue로 돌리고, 새 Channel에 새 Tag를 부여하는 과정이다. 원래 Worker는 로컬 Job 참조를 유지할 수 있다. 실제 RabbitMQ 연동 실험이나 재전달 순서, 성능을 검증하는 모델은 아니다.
+
 
 ## Ack 시점을 앞당기는 것만으로는 부족했다
 
@@ -93,6 +132,15 @@ Worker가 파일을 MinIO에 저장한 직후 완료 이벤트를 보내기 전�
 
 Retry와 Backoff, 최대 시도 횟수, 실패 상태도 같은 맥락이다. 6월 로컬 테스트에서는 Claim과 Stale Lease, Retry·Backoff, 논리적인 Dead-letter 상태를 다뤘다. 하지만 RabbitMQ의 **물리적인 DLX/DLQ 구성은 Helm 설치 과정에서 Queue 선언 충돌이 발생해 모든 환경에서 기본 활성화된 것은 아니었다.** DB에서 실패 상태를 관리하는 것과 RabbitMQ에 실제 DLQ가 설치된 것은 구분해야 한다.
 
+### Lease가 만료돼도 기존 Worker는 살아 있을 수 있다
+
+Lease 만료는 복구를 진행할 수 있다는 뜻이지 기존 Worker를 종료하는 Signal은 아니다. DB의 조건부 갱신에서 Stage와 Attempt Token을 비교해 완료 이벤트를 받아들일 수 있다. 과거 Worker에 접근 권한이 남아 있다는 이유로 이미 확정된 결과를 덮어쓸 수 있어서는 안 된다. DB 밖의 Side Effect에도 별도 경계가 필요하다. 예를 들어 Attempt별로 변경하지 않는 산출물을 생성하고 현재 Attempt만 해당 산출물의 식별자를 공개하도록 조건부 갱신할 수 있다. 당시 파이프라인의 모든 외부 쓰기를 이런 방식으로 차단했다는 의미는 아니다.
+
+{{figure /figures/journals/amqp-05-fencing.svg | Attempt Token 검증 예시. Lease 만료 후 B가 Claim해도 A는 계산을 계속할 수 있다. 다만 오래된 완료 이벤트는 거부한다. 외부 산출물도 별도 소유권 검증이 필요하다.}}
+
+실패 구간은 작은 모델로 확인할 수 있다. 무조건 먼저 Ack하면 작업을 잃을 수 있고, Claim을 먼저 저장하면 연결이 사라져도 영속 상태가 남는다. Lease가 만료되면 새 Attempt로 교체하고 이전 Attempt의 완료는 거부한다. 완료된 Stage가 다시 진행되지 않는지도 검증한다. 원자적인 메모리 내 상태 갱신을 가정한 모델이며 실제 분산 트랜잭션이나 Object Store의 쓰기 차단, Broker 동작을 검증한 것은 아니다.
+
+
 ## Claim·Lease·Retry 테스트 결과
 
 6월에 진행한 Worker 재설계는 개념적인 제안에서 끝나지 않았다. 남아 있는 작업 기록에는 Claim, 중복 명령, 오래된 이벤트 처리, Lease 만료 조정, 제한된 재시도에 대한 테스트가 있다.
@@ -128,3 +176,8 @@ Worker가 변환을 계속하는데 같은 메시지가 다시 Ready 상태로 �
 - [RabbitMQ — Consumer Ack Timeout](https://www.rabbitmq.com/docs/consumers)
 - [RabbitMQ — Shovel](https://www.rabbitmq.com/docs/shovel)
 - [RabbitMQ — Shovel의 Ack 모드](https://www.rabbitmq.com/docs/shovel-dynamic)
+
+- [RabbitMQ — Channels](https://www.rabbitmq.com/docs/channels)
+- [RabbitMQ — Consumer prefetch](https://www.rabbitmq.com/docs/consumer-prefetch)
+- [RabbitMQ — Publishers](https://www.rabbitmq.com/docs/publishers)
+- [Pika — Blocking connection adapter](https://pika.readthedocs.io/en/stable/modules/adapters/blocking.html)

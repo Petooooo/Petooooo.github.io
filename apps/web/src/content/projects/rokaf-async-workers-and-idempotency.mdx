@@ -2,7 +2,7 @@
 title: "RabbitMQ Redelivery and Worker Idempotency"
 description: "RabbitMQ Shovel migration, connection-loss redelivery, overlapping workers and durable job-claim design."
 date: "2026-11-18"
-updated: "2026-11-19"
+updated: "2026-11-26"
 draft: false
 reviewed: true
 reviewStatus: "reviewed"
@@ -47,6 +47,22 @@ A useful distinction emerged:
 
 Shovel and the worker failure were related operationally because both involved RabbitMQ, but their success criteria were different.
 
+### The transfer boundary is not a consumer acknowledgement
+
+An AMQP 0-9-1 publisher sends a message to an exchange; routing rules determine the queue or queues that receive it. A publisher confirm concerns the broker's handling of a publication, whereas a consumer acknowledgement concerns an already delivered message. Neither reports the execution of a downstream business transaction. An unroutable publication may still receive a positive confirm, so routing and returns must also be considered. Persistence depends on queue type, durability and message properties.
+
+With Shovel in on-confirm mode, destination confirmation precedes acknowledgement at the source. If the destination has accepted the message and Shovel loses its source connection before the source receives the Ack, the source may deliver the message again. Retrying the transfer can therefore produce a duplicate on the destination. On-publish acknowledges earlier, and no-ack provides no manual source acknowledgement boundary; the different modes trade recovery protection against work and latency.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/amqp-01-shovel.svg" target="_blank" rel="noopener noreferrer" aria-label="Open amqp 01 shovel diagram">
+    <img src="/figures/journals/amqp-01-shovel.svg" alt="An illustrative transfer with a destination confirm and a separate source Ack. The disconnect between those boundaries can produce another destination copy." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>An illustrative transfer with a destination confirm and a separate source Ack. The disconnect between those boundaries can produce another destination copy.</figcaption>
+</figure>
+
+The observed source and destination queue counts were useful operational evidence, but in-flight messages and active consumers can change both totals. A stronger migration check would reconcile stable message identities and payload hashes, accounting for messages published or consumed concurrently, then verify destination routing and consumer outcomes. I did not perform that complete audit in the retained March record.
+
+
 ## The reset was not coming through the web proxy
 
 In March I was investigating intermittent `Connection reset by peer` during document-processing work. The affected worker called RabbitMQ through the Kubernetes service name from another Pod. This path did not go through the Nginx or Traefik HTTP reverse-proxy chain I used for web applications.
@@ -69,6 +85,33 @@ There was another setting in the investigation: `consumer_timeout` appeared to b
 
 I considered heartbeat negotiation, blocked client I/O, network-idle behavior and service-level connection handling as hypotheses. I could not establish one final network root cause or a proven permanent fix for the March resets.
 
+### One TCP connection, several AMQP channels
+
+An AMQP 0-9-1 connection multiplexes channels over a TCP connection. Channels maintain their own protocol state and delivery tags; a tag is meaningful only on the channel that issued the delivery. Tag 1 on a replacement channel is not the original tag 1, even if both refer to the same business job. Acknowledging an unknown tag can close the channel with a protocol error. A connection failure removes all its channels, whereas a channel-level exception need not remove the TCP connection.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/amqp-02-channels.svg" target="_blank" rel="noopener noreferrer" aria-label="Open amqp 02 channels diagram">
+    <img src="/figures/journals/amqp-02-channels.svg" alt="Two channels on one connection, with channel-scoped delivery tags. Reconnection establishes a new delivery context; an old Ack cannot be transferred to it." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Two channels on one connection, with channel-scoped delivery tags. Reconnection establishes a new delivery context; an old Ack cannot be transferred to it.</figcaption>
+</figure>
+
+The heartbeat timeout monitors connection activity, not the duration of the conversion. For RabbitMQ-maintained clients using the documented negotiation algorithm, two nonzero suggestions select the smaller value; if either is zero, the larger is selected. Both zero disables heartbeats. A server suggestion of 86400 seconds and client suggestion of 60 seconds would select 60 under this algorithm. The Pika version and effective setting must be checked separately: Pika can explicitly override the server proposal. I cannot infer the actual historical negotiated value from this example.
+
+With a 60-second negotiated timeout, heartbeat frames are normally sent about every 30 seconds when other traffic is absent. Ordinary AMQP traffic also counts as activity. Failure detection is approximate, not a deterministic deadline for a task's execution. The broker's missed-heartbeat log establishes its reason for closing that connection; it does not distinguish event-loop starvation from a network interruption or scheduling delay.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/amqp-03-heartbeat.svg" target="_blank" rel="noopener noreferrer" aria-label="Open amqp 03 heartbeat diagram">
+    <img src="/figures/journals/amqp-03-heartbeat.svg" alt="Hypothetical heartbeat intervals and separate delivery age. The recorded 60-second log is not a packet capture; Pika's effective negotiation was not retained." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Hypothetical heartbeat intervals and separate delivery age. The recorded 60-second log is not a packet capture; Pika's effective negotiation was not retained.</figcaption>
+</figure>
+
+For a Pika BlockingConnection, I would keep the connection's I/O dispatcher running while long work executes elsewhere. A worker thread should schedule its acknowledgement back onto the original connection via add_callback_threadsafe rather than call the channel directly. The dispatcher must actually run to execute that callback. If the connection is lost, a callback from that old delivery must not acknowledge a reused tag on the new channel. The job identity is independent of the connection generation.
+
+The blocked-connection timeout is yet another boundary: it limits waiting during a broker resource-blocked condition, not the duration of an idle connection or the task itself. The delivery acknowledgement timeout, heartbeat, TCP reset and broker resource alarm need separate evidence. I would align broker connection and channel closure logs with client exceptions, dispatcher progress, resource alarms and the applicable negotiated settings, using the network scope described in the [K3s datapath record](/projects/rokaf-k3s-cni-service-datapath/).
+
+
 ## The most damaging consequence was two workers doing one job
 
 A broken AMQP connection has a predictable consequence for an **unacknowledged delivery**: RabbitMQ can requeue and redeliver it. But the worker's processing function need not immediately notice that the transport has gone away.
@@ -85,6 +128,22 @@ This was a more important reliability problem than a dashboard's connection coun
 </figure>
 
 A larger heartbeat timeout would not by itself make two simultaneous workers safe. Even perfect heartbeat handling cannot eliminate crashes between committing a side effect and acknowledging a delivery. That race must be handled at the application layer.
+
+### Delivery credit and the cost of holding a message
+
+With manual Ack, prefetch bounds the number of outstanding unacknowledged deliveries. RabbitMQ normally applies the non-global prefetch limit per consumer, with a separate channel-wide limit possible. A zero count generally means no protocol-level limit, subject to broker and queue constraints. This is a delivery-credit limit, not a count of active computation threads. A process may buffer several deliveries while executing only one.
+
+For a hypothetical consumer with prefetch 2, two deliveries fill its credit. Acknowledging one makes one more delivery possible. If the channel closes while two are outstanding, both can be requeued; neither necessarily corresponds to a stopped computation. Increasing prefetch can improve utilization for short work, but with long tasks it can hold more work at a failed or slow consumer and enlarge the requeue burst. Prefetch 1 restricts outstanding deliveries but cannot prevent a second worker from executing a redelivery while the first keeps running.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/amqp-04-prefetch.svg" target="_blank" rel="noopener noreferrer" aria-label="Open amqp 04 prefetch diagram">
+    <img src="/figures/journals/amqp-04-prefetch.svg" alt="A bounded delivery-credit example. Closing the channel returns outstanding messages to the ready pool in the model; local work does not automatically stop." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>A bounded delivery-credit example. Closing the channel returns outstanding messages to the ready pool in the model; local work does not automatically stop.</figcaption>
+</figure>
+
+I tested a small in-memory delivery model using two channel identities and prefetch 2. It fills both credits, releases one with an Ack, rejects an Ack from the wrong channel, requeues outstanding deliveries on close and assigns fresh delivery tags on a replacement channel. It also demonstrates that the original worker can still hold a local job reference. This is a model of the accounting boundary, not a real RabbitMQ integration test, ordering guarantee or throughput benchmark.
+
 
 ## An acknowledgement can be early, late or simply unrelated to the result
 
@@ -128,6 +187,20 @@ The same distinction applied to retries and dead-letter handling. The later loca
 
 I kept stage ownership in the central job service instead of asking each format worker to select and publish its own next processing stage. That made it easier to reject duplicate or out-of-order events; it also made reconciliation a necessary part of the system.
 
+### A lease needs an enforcement boundary
+
+Lease expiry is permission for recovery to proceed, not a signal that kills the former worker. A conditional update can compare the expected stage and attempt token before accepting completion. A stale worker must not be able to overwrite an already accepted result merely because it still holds a credential. The same rule must extend to side effects outside the job database: for example, an attempt-specific immutable artifact followed by a conditional publication of its identity can avoid an old worker overwriting the selected artifact. These are design choices, not claims that every external write in the original pipeline was fenced.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/amqp-05-fencing.svg" target="_blank" rel="noopener noreferrer" aria-label="Open amqp 05 fencing diagram">
+    <img src="/figures/journals/amqp-05-fencing.svg" alt="An illustrative attempt-token check. Expiry permits attempt B to claim the stage; A can continue computing but its stale completion is rejected. An external artifact needs its own ownership boundary." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>An illustrative attempt-token check. Expiry permits attempt B to claim the stage; A can continue computing but its stale completion is rejected. An external artifact needs its own ownership boundary.</figcaption>
+</figure>
+
+The companion model enumerates failure windows around an unconditional early Ack, a durable claim followed by Ack, artifact creation, lease expiry and completion. It checks that the bare early Ack can lose work, that the claim survives a lost transport delivery, that an expired attempt can be replaced and that its later completion is rejected. It also checks that an already-completed stage does not advance twice. The model assumes atomic in-memory state transitions; it is not evidence of distributed transaction isolation, object-store fencing or a live broker test.
+
+
 ## Claim, Lease and Retry Tests
 
 The June work had more than a diagram behind it. Retained development notes describe local tests covering durable claims, stale leases, bounded retry and duplicate/stale-event handling. Controlled route-level tests exercised PDF, DOCX and HWPX processing paths, and an isolated Helm rehearsal brought up the necessary service dependencies.
@@ -167,3 +240,8 @@ The redesign moved **ownership of a long-running document job** out of the AMQP 
 - [RabbitMQ — Consumer delivery acknowledgement timeout](https://www.rabbitmq.com/docs/consumers)
 - [RabbitMQ — Shovel](https://www.rabbitmq.com/docs/shovel)
 - [RabbitMQ — Dynamic Shovel acknowledgement modes](https://www.rabbitmq.com/docs/shovel-dynamic)
+
+- [RabbitMQ — Channels](https://www.rabbitmq.com/docs/channels)
+- [RabbitMQ — Consumer prefetch](https://www.rabbitmq.com/docs/consumer-prefetch)
+- [RabbitMQ — Publishers](https://www.rabbitmq.com/docs/publishers)
+- [Pika — Blocking connection adapter](https://pika.readthedocs.io/en/stable/modules/adapters/blocking.html)

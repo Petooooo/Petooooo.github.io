@@ -1,7 +1,7 @@
 {
   "bit-shift-cnn-accelerator-zynq": "f70ccb39e44c33e426c4c83cda38bce15d2585240ecebecc41d12357ddb142cd",
   "independent-on-premises-k3s-platform-engineering": "7d45e8d5b629beb4713eadaf5510e3becde60d61a9a32d25217696596cc7a76f",
-  "rokaf-async-workers-and-idempotency": "7558d5dd905afa6d50b7dac66858c2f3199234be77d36331ed234ec224c4403e",
+  "rokaf-async-workers-and-idempotency": "68eaaee105a96a9551f0e8471994c578620566fff6f186565c9364a752fd8bcd",
   "rokaf-chat-attachments-object-storage": "1e882ca2caeeaecb25b86cfc051b4c59135ed6ff4f3c624fb86d096a569d67ce",
   "rokaf-clickhouse-replication-migration": "2e30e06627899201082179d0e10e40114bb6d33d8c2de14dae012690ae8d6635",
   "rokaf-control-plane-incident-log": "e609cccc60169a0a8ec1bc7528db752c5301d41987c699f18b0a69969c513ae3",
