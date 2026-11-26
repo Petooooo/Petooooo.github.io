@@ -22,7 +22,7 @@
   "rokaf-service-lb-hostport-conflict": "6b2d5bd5a4daae723e960462086d3927ed7787ed87fbae71724d68c74caa3600",
   "rokaf-stateful-storage-and-recovery": "2f744a7c382887fc03f48774a4276cf5a6e11b9be6e686e6e4e05665854f7eec",
   "tflite-micro-lifecycle-memory-planning": "68bf11bb564ca389d9b3218371567b27c4df14c4410bc39d69a8ca53cf2e1a85",
-  "rokaf-memory-pressure-and-service-recovery": "f0652feb8caf2c12765e778ba469933a29a38192dfc87d5f0b96d9f1bd4d005a",
+  "rokaf-memory-pressure-and-service-recovery": "a6056905e3b987421c8a6e4e881c3201173a864fb831d4cac9b604d50e2f374e",
   "rokaf-storage-placement-and-failure-domains": "f59e15f3204afc9d5649190186d2742ad7e3a2d99761dcd5bfa20a0e58c02a47",
   "rokaf-k3s-cni-service-datapath": "e132b7eb612f18a9367e680509a1e16f0b1d123d7709264bf40fd909a1a85a7a",
   "document-translation-pipeline": "19ceed6a4eb7460a0036bdcf35e66d6bb9e47ff6e72e5eac9aef074217624f29",

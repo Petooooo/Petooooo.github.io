@@ -2,7 +2,7 @@
 title: "Linux Memory Pressure and earlyoom Service Failures"
 description: "K3s host memory exhaustion, earlyoom 1.9.0 systemd exit code 16, and a later process kill that did not identify the cause of a host-wide memory spike."
 date: "2026-11-19"
-updated: "2026-11-19"
+updated: "2026-11-26"
 draft: false
 reviewed: true
 reviewStatus: "reviewed"
@@ -35,6 +35,41 @@ Other host checks also showed swap close to fully occupied. Swap *occupancy* and
 
 The recorded March result is therefore narrow: **the machine became extremely slow as memory utilization approached its limit, and I rebooted it**. The original consumer, kernel OOM activity, and extent of reclaim pressure were not conclusively established.
 
+### Physical pages and reclaimable memory
+
+An address range reserved by a process is not necessarily backed by physical RAM. Accessing a previously untouched anonymous mapping may cause a page fault that allocates a physical page. A file mapping, by contrast, can reference an existing page-cache page; multiple mappings can refer to the same physical page. That distinction matters because removing a mapping, dropping a clean cached page and reclaiming a dirty anonymous page are different operations.
+
+A clean file-backed page can generally be discarded and loaded again from its backing file. A dirty file-backed page may require writeback. An anonymous page containing private data needs a way to preserve that data if it is evicted, commonly swap when available. Locked, pinned or otherwise unreclaimable pages restrict these choices. MemAvailable is an estimate of memory that can be made available without swapping, not a count of pages that are free immediately.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/memory-01-page-ownership.svg" target="_blank" rel="noopener noreferrer" aria-label="Open memory 01 page ownership diagram">
+    <img src="/figures/journals/memory-01-page-ownership.svg" alt="Conceptual page references and reclaim choices; the arrows describe possible backing relationships, not measured physical addresses." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Conceptual page references and reclaim choices; the arrows describe possible backing relationships, not measured physical addresses.</figcaption>
+</figure>
+
+### Reclaim and allocation latency
+
+The page allocator has per-zone watermarks, not a single host-wide utilization threshold. In the usual reclaim-capable allocation path, low free-page reserves can wake kswapd to reclaim in the background; under greater pressure the allocating task may need to perform direct reclaim. Reclaim can recover pages and allow the original allocation to continue. If reclaim or compaction cannot satisfy the request, the outcome depends on the allocation flags, order, allowed nodes and memory-control-group constraints. Some requests fail without invoking the OOM killer.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/memory-02-reclaim-path.svg" target="_blank" rel="noopener noreferrer" aria-label="Open memory 02 reclaim path diagram">
+    <img src="/figures/journals/memory-02-reclaim-path.svg" alt="Simplified reclaim-capable allocation. The low and minimum watermarks are zone-local and the diagram omits allocator-specific retry and compaction details." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Simplified reclaim-capable allocation. The low and minimum watermarks are zone-local and the diagram omits allocator-specific retry and compaction details.</figcaption>
+</figure>
+
+Direct reclaim matters to response time: a thread that was supposed to do application work can spend time scanning pages and waiting for reclaim-related progress instead. If a workload repeatedly touches pages that have just been evicted, faults and eviction can form a feedback loop. Swap occupancy is a stock; swap-in and swap-out are flows. A large stock with negligible traffic may simply represent cold pages left in swap. A smaller stock with frequent refaults can be much more disruptive.
+
+For this reason I would correlate changes in pswpin, pswpout, pgscan_direct, pgsteal and major faults with memory PSI and storage latency, rather than diagnose thrashing from used swap alone. PSI some measures intervals with at least one stalled task, whereas memory full describes intervals in which all non-idle tasks in the measured scope are stalled. Neither metric identifies the memory owner. The March record did not retain these measurements, so reclaim latency remains a plausible mechanism, not a proven cause.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/memory-03-pressure-signals.svg" target="_blank" rel="noopener noreferrer" aria-label="Open memory 03 pressure signals diagram">
+    <img src="/figures/journals/memory-03-pressure-signals.svg" alt="Two synthetic swap observations with equal occupancy but different traffic and stall fractions. They are counterexamples to inferring thrashing from occupancy, not measurements from the host." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Two synthetic swap observations with equal occupancy but different traffic and stall fractions. They are counterexamples to inferring thrashing from occupancy, not measurements from the host.</figcaption>
+</figure>
+
 ## earlyoom 1.9.0 started manually but failed under systemd
 
 I compiled earlyoom 1.9.0 from source for the host. The extracted source had no Git metadata, and the build environment lacked `pandoc`; the logs nevertheless showed that the executable was compiled.
@@ -60,11 +95,52 @@ I do not have a preserved final unit and long-running service test proving that 
   <figcaption>Separate recorded episodes; not a single incident timeline, a memory benchmark or a claim that earlyoom permanently resolved the host-wide pressure.</figcaption>
 </figure>
 
+### Separating argument parsing from process launch
+
+The versioned main.c parses the swap threshold tuple before entering its polling loop. A malformed -s tuple reaches fatal(16, ...); the -S parsing path also has a swap-argument error exit. This is an application exit, not a kernel OOM kill. A missing executable is different: systemd fails before the program can parse an argument. The stop-operation message is not even evidence that the start command used the same path.
+
+In a service review, I would first inspect the merged unit and its effective ExecStart, ExecStop, MainPID, ExecMainCode and ExecMainStatus with systemctl cat/show, then compare the configured path with the installed executable. For a running process, /proc/PID/cmdline exposes the actual NUL-separated argument vector. A replacement ExecStart normally requires clearing the inherited list first with an empty assignment; environment-file arguments follow systemd's expansion rules rather than a general shell's. Reloading the unit manager and verifying a new invocation are distinct from editing a file. None of these inspection steps should be mistaken for a recorded final configuration.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/memory-04-service-startup.svg" target="_blank" rel="noopener noreferrer" aria-label="Open memory 04 service startup diagram">
+    <img src="/figures/journals/memory-04-service-startup.svg" alt="The executable lookup and argument parser are independent failure gates. Both errors were observed; the exact effective argv and final durable repair were not retained." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>The executable lookup and argument parser are independent failure gates. Both errors were observed; the exact effective argv and final durable repair were not retained.</figcaption>
+</figure>
+
 ## A running earlyoom process was not a guarantee against stalls
 
-By default, earlyoom checks **available memory and free swap together** against configured thresholds. When both fall below the configured limits, it may send `SIGTERM`; at lower thresholds it can escalate to `SIGKILL`. It is a userspace monitor with its own victim-selection logic, separate from the kernel's OOM killer and memory-cgroup limit enforcement.
+By default, earlyoom checks **available memory and free swap together** against configured thresholds. When both fall at or below the configured limits, it may send `SIGTERM`; when both lower limits are met it can instead send `SIGKILL`. It is a userspace monitor with its own victim-selection logic, separate from the kernel's OOM killer and memory-cgroup limit enforcement.
 
 That makes the effective unit configuration important. Seeing a service named earlyoom is not the same as verifying that it is running continuously with the intended thresholds. The real `ExecStart`, effective environment, swap options and actual signal logs matter. The `-r` flag changes how often periodic memory reports are printed; it does not set the frequency of the low-memory checks themselves.
+
+### Thresholds and the actual versioned decision loop
+
+There is a subtle version detail here. In earlyoom 1.9.0 the memory percentage is computed using user memory total, defined as MemAvailable plus AnonPages, not MemTotal. Free swap is expressed relative to SwapTotal, with zero swap handled as zero percent free. In an illustrative snapshot with 2 GiB available, 18 GiB anonymous pages and 32 GiB total RAM, the earlyoom memory percentage is 10%, whereas dividing by MemTotal gives 6.25%. These are not historical host values.
+
+The default configuration is 10% for both termination limits and 5% for both kill limits. The implementation compares each pair inclusively and evaluates the SIGKILL condition first. A sample at 4% available memory and 8% free swap therefore selects SIGTERM, while 4% and 4% selects SIGKILL directly. The daemon does not necessarily send TERM before KILL. When one resource is above its termination threshold, this default test sends neither signal. The -m/-s percentage options and -M/-S KiB options are not interchangeable strings; the size options are converted to percentages at startup and combined with explicit percentage limits as documented in the versioned manual.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/memory-05-earlyoom-thresholds.svg" target="_blank" rel="noopener noreferrer" aria-label="Open memory 05 earlyoom thresholds diagram">
+    <img src="/figures/journals/memory-05-earlyoom-thresholds.svg" alt="Default v1.9.0 decision regions and example points; inclusive boundary conditions and six synthetic checks are implemented in the figure generator. No processes were signalled." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Default v1.9.0 decision regions and example points; inclusive boundary conditions and six synthetic checks are implemented in the figure generator. No processes were signalled.</figcaption>
+</figure>
+
+The polling loop samples /proc/meminfo, decides a signal, selects a candidate and samples memory again to avoid an unnecessary kill if pressure has already subsided. The code clamps adaptive sleep to 100–1000 ms; this is not a real-time guarantee under scheduling delay or heavy reclaim. The report interval controls ordinary periodic output, not detection. A userspace daemon also needs enough CPU time, memory and permission to perform its work. Killing a process may not immediately return the expected amount of memory.
+
+### Three different enforcement scopes
+
+Host-level kernel OOM, memory-cgroup OOM and earlyoom do not mean the same thing. Kernel allocation failure can trigger an OOM decision within the allocation's allowed scope. On cgroup v2, memory.high applies reclaim/throttling pressure, while memory.max is a hard limit that may invoke a cgroup-local OOM when charge and reclaim cannot satisfy it. A cgroup can therefore experience OOM while the host still has free memory. earlyoom instead observes its visible host memory counters and chooses a visible eligible process under its own policy.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/memory-06-oom-scopes.svg" target="_blank" rel="noopener noreferrer" aria-label="Open memory 06 oom scopes diagram">
+    <img src="/figures/journals/memory-06-oom-scopes.svg" alt="Three simplified enforcement paths, with their different decision inputs and evidence. A kill by one path is not proof of a kill by another." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Three simplified enforcement paths, with their different decision inputs and evidence. A kill by one path is not proof of a kill by another.</figcaption>
+</figure>
+
+An earlyoom log of a signal attempt, a kernel OOM record, a cgroup oom/oom_kill counter increment and Kubernetes OOMKilled status are different evidence. A Kubernetes eviction can be a separate kubelet action. To distinguish those paths I would compare timestamps and process identities with the specific cgroup's event deltas, not infer the mechanism from a generic exit status such as 137 alone.
 
 In July I searched the surviving logs for earlyoom `SIGTERM` or `SIGKILL` entries and kernel OOM events, but the search returned no matching records. That established only the absence of those messages **in the retained and searched interval**. It did not prove that the host never experienced memory pressure or that the daemon had prevented every incident.
 
@@ -77,6 +153,8 @@ I did find an earlyoom victim record. The selected process had a reported **`VmR
 By default, earlyoom evaluates processes using an **OOM score**, not simply by sorting every process by RSS. Its `--sort-by-rss` option changes that choice. The RSS value logged for one selected process is not a record of every anonymous page, shared-memory allocation, page-cache entry, kernel allocation or other process and container on the machine.
 
 A K3s container chart also does not necessarily account for all consumers on a Linux host. Host processes, other container runtimes, shared memory and kernel memory can sit outside the chart's selected series. To narrow the discrepancy I needed time-aligned host metrics such as `AnonPages`, `Shmem`, `Cached`, `Slab` and `SUnreclaim`, plus the relevant cgroup's `memory.current`, `memory.stat` and `memory.events`. The latter counters would help distinguish reclaim pressure or cgroup OOM activity from an earlyoom userspace kill.
+
+A second distinction is accounting versus selection. RSS counts resident mappings and can count a shared page in several processes; PSS apportions shared pages. Neither a process RSS nor the sum of selected Pod working-set series is an exhaustive host accounting identity. A process selected for a high OOM score might be eligible and relatively expendable even if another allocation domain holds more memory. The 608 MiB value is a point observation of a candidate, not a measurement of the memory reclaimed after termination. A synchronized snapshot of process residency, cgroup charges, slab and shared memory would be necessary before attributing the difference.
 
 Those measurements were avenues for investigation, not a completed attribution. The evidence supports **a host-wide spike, an earlyoom process selection, and a mismatch with the sampled Pod metrics**. It does not identify the actual source of the host's extra memory consumption.
 
@@ -92,8 +170,14 @@ The difficulty in these cases was not finding a single command to reduce memory 
 | Effective earlyoom systemd unit | Actual executable, thresholds, restart behavior | Verified final configuration and stability |
 | Kernel and earlyoom journals | Kernel OOM events and userspace process kills | Pre-reboot history and complete event chain |
 
+A useful capture would include a timestamp, boot ID and node-local scope with each sample. Host meminfo fields overlap in places, so I would not sum Cached, Shmem and every cgroup counter into a pretend physical-memory total. For cgroup v2, memory.events is hierarchical and memory.events.local is local; their deltas need the same cgroup identity across samples. memory.stat distinguishes anon, file and kernel categories with subsidiary fields, some of which also overlap. Recording the hierarchy avoids summing a parent and its children twice.
+
+Persistent journald storage (subject to the host's retention policy and disk budget) would preserve more context across a reboot than volatile-only logs. A periodic lightweight snapshot or remote collection adds evidence even if the machine can no longer answer an interactive query. I would verify that a previous boot is actually queryable and that sample timestamps can be aligned before calling this capture design reliable.
+
 I would rather preserve compact periodic measurements and the service's effective configuration than generate artificial pressure on a production host just to reproduce an OOM.
 
 In March I encountered **host memory saturation, severe slowdown and a reboot**; during earlyoom 1.9.0 setup I traced a systemd exit status `16` and an executable-path problem while manual execution worked. A later log search in July found no retained kill, and August logs recorded an earlyoom victim during another host-memory spike. The initiating process or cgroup behind that spike remains unidentified, making time-aligned host and cgroup memory capture the next priority.
 
 **Related records and references:** [Prometheus WAL and exporter incidents](/projects/rokaf-observability-and-failure-evidence/) · [K3s control-plane incidents](/projects/rokaf-control-plane-incident-log/) · [earlyoom 1.9.0 manual](https://sources.debian.org/src/earlyoom/1.9.0-1/MANPAGE.md) · [earlyoom 1.9.0 setup notes](https://sources.debian.org/src/earlyoom/1.9.0-1/README.md) · [Linux kernel cgroup v2 memory documentation](https://www.kernel.org/doc/html/latest/admin-guide/cgroup-v2.html).
+
+**Mechanism references:** [earlyoom 1.9.0 main.c](https://sources.debian.org/src/earlyoom/1.9.0-1/main.c/) · [Linux memory management concepts](https://docs.kernel.org/admin-guide/mm/concepts.html) · [Physical memory and watermarks](https://docs.kernel.org/mm/physical_memory.html) · [Pressure stall information](https://docs.kernel.org/accounting/psi.html) · [systemd.service](https://www.freedesktop.org/software/systemd/man/latest/systemd.service.html) · [systemd.exec](https://www.freedesktop.org/software/systemd/man/latest/systemd.exec.html) · [journald storage](https://www.freedesktop.org/software/systemd/man/257/systemd-journald%40.service.html).
