@@ -2,7 +2,7 @@
 title: "K3s Control Plane: etcd and Read-Only Disk Incidents"
 description: "Incident notes on etcd instability, read-only disk symptoms and partial service recovery, separating observed states from unproven storage-to-control-plane causes."
 date: "2026-11-15"
-updated: "2026-11-19"
+updated: "2026-11-26"
 draft: false
 reviewed: true
 sensitivity: sanitized
@@ -47,6 +47,90 @@ To establish that connection I would need the filesystem and mount state, releva
   <figcaption>The dashed relationships are plausible failure paths requiring correlated evidence, not an incident timeline or a proven root cause. No internal nodes, member counts or operational recovery commands are shown.</figcaption>
 </figure>
 
+## March 10: a storage incident and a consensus incident
+
+On March 10, 2026, I reported disk and RAID failures affecting multiple server nodes, difficulty starting K3s and suspected damage to stored etcd snapshots. The recovery discussion then reached a message indicating that managed etcd membership had previously been reset. That message is evidence of a reset marker, not of a successful snapshot restoration, a healthy reconstituted cluster or a complete data audit. I do not have the original array-level status output, the RAID level, device error counters or a final member-by-member inventory. The private topology and device identifiers are omitted.
+
+I wanted to distinguish two forms of redundancy. RAID can keep a local logical block device usable after certain member-device failures. Raft can keep a replicated state machine available after certain voting-member failures. A RAID disk is not a Raft voter, and a server with redundant disks still has a single vote if it is one voting member. Shared storage, power or other dependencies can defeat the assumption that failures are independent.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/raid-01-layer-boundaries.svg" target="_blank" rel="noopener noreferrer" aria-label="Open raid 01 layer boundaries diagram">
+    <img src="/figures/journals/raid-01-layer-boundaries.svg" alt="The local storage path and cluster consensus path are separate dependencies. A failure can propagate between them, but the historical causal links are not verified." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>The local storage path and cluster consensus path are separate dependencies. A failure can propagate between them, but the historical causal links are not verified.</figcaption>
+</figure>
+
+## Linux MD: logical blocks and redundancy
+
+Linux software RAID exposes an MD block device above its component devices. A filesystem on that device addresses logical blocks rather than choosing a disk for each write. The mapping is determined by the RAID level and layout. RAID1 mirrors data; RAID5 distributes data and single parity across members; RAID6 adds a second independent parity scheme. RAID0 stripes without redundancy. The ability to continue after a failure depends on the layout, which members are missing and whether the remaining data is readable and consistent. RAID10 tolerance also depends on which copies have failed.
+
+For illustration, consider two-way mirroring and a three-member single-parity stripe. If two data blocks are A and B, the parity block is A XOR B. With one known missing block, the remaining two blocks reconstruct it. Losing two blocks leaves insufficient information. An XOR check alone cannot identify which of three present blocks is incorrect. I implemented that small model with deterministic 4096-byte buffers and checked all three single-block loss positions, rejection of two missing blocks and detection of an altered block. This is algebra, not a Linux MD rebuild or a benchmark. RAID5 has additional consistency and write-hole considerations, and actual RAID6 uses a different coding scheme.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/raid-02-redundancy.svg" target="_blank" rel="noopener noreferrer" aria-label="Open raid 02 redundancy diagram">
+    <img src="/figures/journals/raid-02-redundancy.svg" alt="Synthetic mirror and single-parity examples. The XOR tests verify reconstruction with one known missing block; no historical RAID level is asserted." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Synthetic mirror and single-parity examples. The XOR tests verify reconstruction with one known missing block; no historical RAID level is asserted.</figcaption>
+</figure>
+
+A degraded array can remain writable. In Linux MD, the degraded counter describes missing active members; sync_action describes operations such as recover (building a replacement), resync (re-establishing redundancy) and check (checking consistency). An idle synchronization state alone does not mean the array has its expected number of healthy members. Rebuild or resync also consumes device bandwidth, potentially increasing latency for foreground writes. An array returning to its expected member count does not by itself validate the filesystem or the application contents.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/raid-03-md-state.svg" target="_blank" rel="noopener noreferrer" aria-label="Open raid 03 md state diagram">
+    <img src="/figures/journals/raid-03-md-state.svg" alt="Independent observations of array membership and synchronization activity. A completed rebuild is a block-layer checkpoint, not an application-integrity assertion." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Independent observations of array membership and synchronization activity. A completed rebuild is a block-layer checkpoint, not an application-integrity assertion.</figcaption>
+</figure>
+
+The evidence I would retain includes the kernel's block I/O messages, /proc/mdstat, read-only array detail and the matching MD sysfs attributes. I would identify the actual device stack before interpreting a counter: the logical MD device and its member devices are related, not independent sources of workload throughput. I would not initiate repair, assemble an uncertain array forcibly or change membership just to gather evidence. A surviving member may contain the only remaining copy of relevant data.
+
+## Filesystem state above the array
+
+A disk can fail requests, the logical array can expose errors, and a filesystem can react according to its own error policy. For ext4, errors=remount-ro is one supported policy. A read-only mount may also be an intentional mount configuration. Mount-level and superblock-level write permissions are not identical, and a read-only application replica need not have a read-only Linux mount.
+
+An unsuccessful write with EIO is not the same as EROFS, ENOSPC or EACCES. The errno narrows the operation's failure category, but the storage source and relevant kernel messages are still needed. A successful buffered write is also not proof of durable completion; delayed errors can emerge during synchronization. The [JBD2 and writeback investigation](/projects/linux-disk-io-journaling-writeback/) explains that distinction in more detail.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/raid-04-filesystem.svg" target="_blank" rel="noopener noreferrer" aria-label="Open raid 04 filesystem diagram">
+    <img src="/figures/journals/raid-04-filesystem.svg" alt="Possible paths from block-device failures to filesystem and application symptoms, with error categories kept separate. These are not reconstructed incident events." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Possible paths from block-device failures to filesystem and application symptoms, with error categories kept separate. These are not reconstructed incident events.</figcaption>
+</figure>
+
+A filesystem check or repair must follow its own offline and storage-consistency requirements; it cannot establish that a member database is logically consistent. Conversely, a database corruption alarm does not locate a physical disk defect. I would preserve the relevant logs and a supported recoverable copy before any destructive repair.
+
+## Raft quorum is not disk redundancy
+
+An etcd write is proposed through the leader, replicated as Raft log entries, committed under the consensus rules and applied to the state machine. The Raft log must be persisted in accordance with the protocol before acknowledging dependent messages. A slow or failing WAL sync can therefore affect proposal progress even if the member process remains alive. Election and heartbeat behavior also depends on scheduling and network latency. The backend commit and WAL sync metrics observe different parts of the storage path.
+
+For a stable voting configuration of N members, the majority is floor(N/2) + 1. Three voters require two, four require three, and five require three. The corresponding maximum unavailable voters while retaining a majority are one, one and two. This arithmetic is necessary but not sufficient for new writes: the remaining voters must be mutually reachable as needed, establish leadership and make durable progress. Learners do not count as voters, and membership changes must follow consensus rules.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/raid-05-quorum.svg" target="_blank" rel="noopener noreferrer" aria-label="Open raid 05 quorum diagram">
+    <img src="/figures/journals/raid-05-quorum.svg" alt="Illustrative three-, four- and five-voter majority thresholds, plus the proposal-to-apply boundary. These are examples, not the private cluster&#x27;s member count." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Illustrative three-, four- and five-voter majority thresholds, plus the proposal-to-apply boundary. These are examples, not the private cluster's member count.</figcaption>
+</figure>
+
+The companion model exhaustively enumerates reachable-voter subsets for these three sizes (56 subsets in total) and checks the majority predicate and failure margin. It does not simulate elections, log replication, network partitions or membership changes. It explains why adding a fourth voter to a three-voter cluster does not improve the number of failures it can tolerate. This is also why K3s recommends an odd number of embedded-etcd servers.
+
+## Recovery from a surviving member versus a snapshot
+
+A temporarily unavailable member is different from a permanently lost majority. If quorum remains healthy, restoring or replacing a failed member can be a membership-management problem rather than a full disaster restore. If quorum is lost permanently, recovery from a trusted snapshot or supported surviving-state procedure establishes a new membership context. The choice depends on what is actually available, its consistency and the installed version.
+
+A membership reset is not automatically a restore from a known-good backup. The March reset-marker message did not establish the restored revision or the health of rejoined members. A snapshot should be checked for its provenance, supported integrity verification and revision; for Kubernetes, restoring older revisions also requires attention to watcher caches and version-supported recovery behavior. K3s backups include the server token needed to recover encrypted bootstrap data. An etcd snapshot captures Kubernetes datastore state, not the contents of every application PVC.
+
+<figure className="project-concept-figure">
+  <a href="/figures/journals/raid-06-recovery-gates.svg" target="_blank" rel="noopener noreferrer" aria-label="Open raid 06 recovery gates diagram">
+    <img src="/figures/journals/raid-06-recovery-gates.svg" alt="Distinct recovery gates: block device, filesystem, etcd membership and revision, Kubernetes reconciliation and application data. The gates are a proposed validation plan." loading="lazy" decoding="async" />
+  </a>
+  <figcaption>Distinct recovery gates: block device, filesystem, etcd membership and revision, Kubernetes reconciliation and application data. The gates are a proposed validation plan.</figcaption>
+</figure>
+
+A read-only investigation would compare timestamps from kernel and MD status, the actual filesystem serving the datastore, etcd endpoint status and health, alarms, WAL sync and backend commit latency, and API request errors. On an authorized restored environment I would additionally verify expected objects, revision semantics, controller reconciliation and application-specific data. I would keep the old state and backup provenance until the intended recovery scope is verified, not reuse conflicting old member databases indiscriminately.
+
+The partial recovery described in the original notes remains valuable, but the RAID rebuild outcome and final March etcd integrity are unresolved. These are different from the separate node reboot and return to Ready below.
+
 ## Another node came back Ready without proving data recovery
 
 There was also a separate Longhorn-related incident worth keeping distinct. A node's Kubernetes conditions became Unknown and its status included `Kubelet stopped posting node status`. The K3s agent logs did not provide an equally clear explanation. After checking the condition and rebooting the node, I observed it return to `Ready`.
@@ -84,3 +168,5 @@ I had also learned from Longhorn that a Node reporting Ready and a stateful Repl
 I investigated **etcd instability, suspected corruption and read-only disk symptoms** during K3s control-plane incidents, and recovered usable access in some cases. In a separate episode, a node returned from Unknown to Ready after reboot. The common initiating fault across these events remains unresolved; establishing that link would require time-aligned host I/O, filesystem, etcd member and API-request evidence.
 
 **Related records:** [Longhorn replica failure and volume recovery](/projects/rokaf-stateful-storage-and-recovery/) · [On-premises K3s platform operations](/projects/independent-on-premises-k3s-platform-engineering/) · [CoreDNS and MetalLB VIP reachability](/projects/rokaf-dns-vip-open-investigations/).
+
+**Mechanism references:** [Linux MD documentation](https://docs.kernel.org/admin-guide/md.html) · [ext4 error policies](https://docs.kernel.org/admin-guide/ext4.html) · [etcd FAQ](https://etcd.io/docs/v3.5/faq/) · [etcd performance](https://etcd.io/docs/v3.5/op-guide/performance/) · [etcd disaster recovery](https://etcd.io/docs/v3.5/op-guide/recovery/) · [K3s embedded etcd HA](https://docs.k3s.io/installation/ha-embedded/) · [K3s snapshot and restore](https://docs.k3s.io/cli/etcd-snapshot) · [K3s backup requirements](https://docs.k3s.io/datastore/backup-restore).
